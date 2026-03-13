@@ -5,6 +5,7 @@ import com.automanim.model.Narrative;
 import com.automanim.model.PipelineKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
+import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,6 +17,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,41 +90,17 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                 + "\nAll class names, method names, and variable names must use ASCII identifiers only."
                 + "\nDo not use Chinese, pinyin, mojibake, or any non-ASCII text in Python identifiers.";
 
-        String code = null;
-        String sceneName = expectedSceneName;
-
+        String code;
+        String sceneName;
         try {
-            JsonNode rawResponse = aiClient.chatWithToolsRaw(
-                    userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM, MANIM_CODE_TOOL);
-            toolCalls++;
-
-            JsonNode toolData = JsonUtils.extractToolCallPayload(rawResponse);
-            if (toolData != null && toolData.has("code")) {
-                code = toolData.get("code").asText();
-                if (toolData.has("scene_name")) {
-                    sceneName = toolData.get("scene_name").asText();
-                }
-            }
-
-            if (code == null || code.isBlank()) {
-                String textContent = JsonUtils.extractTextFromResponse(rawResponse);
-                if (textContent != null) {
-                    code = JsonUtils.extractCodeBlock(textContent);
-                }
-            }
-        } catch (Exception e) {
-            log.debug("  Tool calling failed, falling back to plain chat: {}", e.getMessage());
-        }
-
-        if (code == null || code.isBlank()) {
-            try {
-                String response = aiClient.chat(userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM);
-                toolCalls++;
-                code = JsonUtils.extractCodeBlock(response);
-            } catch (Exception e) {
-                log.error("  Code generation failed: {}", e.getMessage());
-                code = "";
-            }
+            CodeDraft draft = requestCodeAsync(userPrompt, expectedSceneName).join();
+            code = draft.code;
+            sceneName = draft.sceneName;
+        } catch (CompletionException e) {
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
+            log.error("  Code generation failed: {}", cause.getMessage());
+            code = "";
+            sceneName = expectedSceneName;
         }
 
         sceneName = extractSceneName(code, sceneName);
@@ -151,6 +130,48 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
 
         log.info("Code generated: {} lines, scene={}", result.codeLineCount(), sceneName);
         return result;
+    }
+
+    private CompletableFuture<CodeDraft> requestCodeAsync(String userPrompt, String expectedSceneName) {
+        return aiClient.chatWithToolsRawAsync(userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM, MANIM_CODE_TOOL)
+                .thenApply(rawResponse -> {
+                    toolCalls++;
+
+                    JsonNode toolData = JsonUtils.extractToolCallPayload(rawResponse);
+                    String code = null;
+                    String sceneName = expectedSceneName;
+
+                    if (toolData != null && toolData.has("code")) {
+                        code = toolData.get("code").asText();
+                        if (toolData.has("scene_name")) {
+                            sceneName = toolData.get("scene_name").asText();
+                        }
+                    }
+
+                    if (code == null || code.isBlank()) {
+                        String textContent = JsonUtils.extractTextFromResponse(rawResponse);
+                        if (textContent != null) {
+                            code = JsonUtils.extractCodeBlock(textContent);
+                        }
+                    }
+
+                    return new CodeDraft(code, sceneName);
+                })
+                .exceptionally(error -> {
+                    Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                    log.debug("  Tool calling failed, falling back to plain chat: {}", cause.getMessage());
+                    return null;
+                })
+                .thenCompose(draft -> {
+                    if (draft != null && draft.hasCode()) {
+                        return CompletableFuture.completedFuture(draft);
+                    }
+                    return aiClient.chatAsync(userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM)
+                            .thenApply(response -> {
+                                toolCalls++;
+                                return new CodeDraft(JsonUtils.extractCodeBlock(response), expectedSceneName);
+                            });
+                });
     }
 
     @Override
@@ -231,12 +252,27 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                     + " use ASCII English identifiers only.",
                     code, violationList);
 
-            String response = aiClient.chat(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM);
+            String response = aiClient.chatAsync(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM).join();
             toolCalls++;
             return JsonUtils.extractCodeBlock(response);
-        } catch (Exception e) {
-            log.debug("  AI fix attempt failed: {}", e.getMessage());
+        } catch (CompletionException e) {
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
+            log.debug("  AI fix attempt failed: {}", cause.getMessage());
             return null;
+        }
+    }
+
+    private static final class CodeDraft {
+        private final String code;
+        private final String sceneName;
+
+        private CodeDraft(String code, String sceneName) {
+            this.code = code;
+            this.sceneName = sceneName;
+        }
+
+        private boolean hasCode() {
+            return code != null && !code.isBlank();
         }
     }
 }

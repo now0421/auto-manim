@@ -1,8 +1,10 @@
 package com.automanim.service;
 
+import com.automanim.util.ConcurrencyUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Abstraction for AI chat completion APIs.
@@ -22,22 +24,23 @@ public interface AiClient {
     }
 
     /**
-     * Chat with function/tool calling support.
-     * Returns the raw API response as a JsonNode so callers can extract
-     * both tool call payloads and text content.
-     *
-     * @param userMessage   the user message
-     * @param systemPrompt  the system instruction
-     * @param toolsJson     JSON array describing available tools (OpenAI format)
-     * @return the raw API response JSON (choices[].message with tool_calls or content)
+     * Send a chat message with function/tool calling support and get the raw
+     * API response asynchronously.
      */
-    JsonNode chatWithToolsRaw(String userMessage, String systemPrompt, String toolsJson);
+    CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
+                                                      String systemPrompt,
+                                                      String toolsJson);
 
-    /**
-     * Chat with tools, returning text only (for backward compatibility).
-     */
-    default String chatWithTools(String userMessage, String systemPrompt, String toolsJson) {
-        return chat(userMessage, systemPrompt);
+    default JsonNode chatWithToolsRaw(String userMessage, String systemPrompt, String toolsJson) {
+        try {
+            return chatWithToolsRawAsync(userMessage, systemPrompt, toolsJson).join();
+        } catch (CompletionException e) {
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new RuntimeException("AI chat with tools failed: " + cause.getMessage(), cause);
+        }
     }
 
     /**

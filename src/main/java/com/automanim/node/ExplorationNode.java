@@ -6,6 +6,8 @@ import com.automanim.model.KnowledgeNode;
 import com.automanim.model.PipelineKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
+import com.automanim.util.ConceptUtils;
+import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -30,7 +32,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 
 /**
  * Stage 0: Concept Exploration - builds an explicit prerequisite DAG.
@@ -54,7 +55,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     private final Map<String, CompletableFuture<List<String>>> prereqCache = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<Boolean>> foundationCache = new ConcurrentHashMap<>();
 
-    private AsyncLimiter aiCallLimiter;
+    private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
 
     public ExplorationNode() {
         super(1, 0);
@@ -79,7 +80,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 concept, maxDepth, minDepth, maxConcurrent);
 
         this.targetConcept = concept;
-        this.aiCallLimiter = new AsyncLimiter(maxConcurrent);
+        this.aiCallLimiter = new ConcurrencyUtils.AsyncLimiter(maxConcurrent);
         apiCalls.set(0);
         cacheHits.set(0);
         prereqCache.clear();
@@ -114,7 +115,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
 
     private KnowledgeGraph buildGraph(String concept) {
         String rootConcept = concept == null ? "" : concept.trim();
-        String rootId = normalize(rootConcept);
+        String rootId = ConceptUtils.normalizeConcept(rootConcept);
         ExplorationState state = new ExplorationState(rootId, rootConcept);
 
         state.nodeIndex.put(rootId, new KnowledgeNode(rootId, rootConcept, 0, false));
@@ -123,7 +124,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         try {
             return state.completion.join();
         } catch (CompletionException e) {
-            Throwable cause = unwrapCompletionException(e);
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
             throw new RuntimeException("Exploration failed: " + cause.getMessage(), cause);
         }
     }
@@ -223,7 +224,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         }
 
         String trimmedConcept = prereqConcept.trim();
-        String prereqId = normalize(trimmedConcept);
+        String prereqId = ConceptUtils.normalizeConcept(trimmedConcept);
         int childDepth = result.depth() + 1;
 
         if (prereqId.isBlank()) {
@@ -293,7 +294,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     }
 
     private CompletableFuture<Boolean> getCachedFoundationAsync(String concept) {
-        String key = normalize(concept);
+        String key = ConceptUtils.normalizeConcept(concept);
         CompletableFuture<Boolean> existing = foundationCache.get(key);
         if (existing != null) {
             cacheHits.incrementAndGet();
@@ -332,14 +333,14 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                     return normalized.startsWith("yes") || normalized.startsWith("y");
                 })
                 .exceptionally(error -> {
-                    Throwable cause = unwrapCompletionException(error);
+                    Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
                     log.warn("Foundation check failed for '{}': {}", concept, cause.getMessage());
                     return false;
                 });
     }
 
     private CompletableFuture<List<String>> getCachedPrerequisitesAsync(String concept) {
-        String key = normalize(concept);
+        String key = ConceptUtils.normalizeConcept(concept);
         CompletableFuture<List<String>> existing = prereqCache.get(key);
         if (existing != null) {
             cacheHits.incrementAndGet();
@@ -382,7 +383,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                         if (prereq == null || prereq.isBlank()) {
                             continue;
                         }
-                        String normalized = normalize(prereq);
+                        String normalized = ConceptUtils.normalizeConcept(prereq);
                         if (seen.add(normalized)) {
                             cleaned.add(prereq.trim());
                         }
@@ -393,7 +394,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                     return cleaned;
                 })
                 .exceptionally(error -> {
-                    Throwable cause = unwrapCompletionException(error);
+                    Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
                     log.warn("Prerequisites extraction failed for '{}': {}", concept, cause.getMessage());
                     return Collections.emptyList();
                 });
@@ -483,20 +484,8 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     }
 
     private void failExploration(ExplorationState state, Throwable error) {
-        Throwable cause = unwrapCompletionException(error);
+        Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
         state.completion.completeExceptionally(cause);
-    }
-
-    private Throwable unwrapCompletionException(Throwable error) {
-        Throwable current = error;
-        while (current instanceof CompletionException && current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current;
-    }
-
-    private String normalize(String concept) {
-        return concept == null ? "" : concept.toLowerCase(Locale.ROOT).trim();
     }
 
     private static final class ExplorationState {
@@ -604,73 +593,4 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         }
     }
 
-    private static final class AsyncLimiter {
-        private final int maxInFlight;
-        private final ArrayDeque<Runnable> queue = new ArrayDeque<>();
-        private int inFlight = 0;
-
-        private AsyncLimiter(int maxInFlight) {
-            this.maxInFlight = Math.max(1, maxInFlight);
-        }
-
-        private <T> CompletableFuture<T> submit(Supplier<CompletableFuture<T>> taskFactory) {
-            CompletableFuture<T> result = new CompletableFuture<>();
-            Runnable startTask = () -> runTask(taskFactory, result);
-
-            boolean runNow;
-            synchronized (this) {
-                if (inFlight < maxInFlight) {
-                    inFlight++;
-                    runNow = true;
-                } else {
-                    queue.addLast(startTask);
-                    runNow = false;
-                }
-            }
-
-            if (runNow) {
-                startTask.run();
-            }
-
-            return result;
-        }
-
-        private <T> void runTask(Supplier<CompletableFuture<T>> taskFactory, CompletableFuture<T> result) {
-            CompletableFuture<T> taskFuture;
-            try {
-                taskFuture = taskFactory.get();
-            } catch (Throwable error) {
-                releaseSlot();
-                result.completeExceptionally(error);
-                return;
-            }
-
-            taskFuture.whenComplete((value, error) -> {
-                try {
-                    if (error != null) {
-                        result.completeExceptionally(error);
-                    } else {
-                        result.complete(value);
-                    }
-                } finally {
-                    releaseSlot();
-                }
-            });
-        }
-
-        private void releaseSlot() {
-            Runnable nextTask = null;
-            synchronized (this) {
-                inFlight--;
-                if (!queue.isEmpty()) {
-                    nextTask = queue.removeFirst();
-                    inFlight++;
-                }
-            }
-
-            if (nextTask != null) {
-                nextTask.run();
-            }
-        }
-    }
 }

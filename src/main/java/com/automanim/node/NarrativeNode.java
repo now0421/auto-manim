@@ -6,6 +6,7 @@ import com.automanim.model.Narrative;
 import com.automanim.model.PipelineKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
+import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -17,6 +18,8 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Stage 1c: Narrative Composition - composes an animation script
@@ -75,36 +78,19 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         String context = buildTruncatedContext(ordered);
         String userPrompt = PromptTemplates.narrativeUserPrompt(graph.getTargetConcept(), context);
 
-        String narrativeText = null;
         int sceneCount = Math.max(1, conceptOrder.size());
         int totalDuration = sceneCount * 30;
+        String narrativeText;
 
         try {
-            try {
-                JsonNode rawResponse = aiClient.chatWithToolsRaw(
-                        userPrompt, PromptTemplates.NARRATIVE_SYSTEM, NARRATIVE_TOOL);
-                toolCalls++;
-
-                JsonNode toolData = JsonUtils.extractToolCallPayload(rawResponse);
-                if (toolData != null && toolData.has("narrative")) {
-                    narrativeText = toolData.get("narrative").asText();
-                    if (toolData.has("scene_count")) {
-                        sceneCount = toolData.get("scene_count").asInt(sceneCount);
-                    }
-                    if (toolData.has("estimated_duration")) {
-                        totalDuration = toolData.get("estimated_duration").asInt(totalDuration);
-                    }
-                } else {
-                    narrativeText = JsonUtils.extractTextFromResponse(rawResponse);
-                }
-            } catch (Exception e) {
-                log.debug("  Tool calling failed, falling back to plain chat: {}", e.getMessage());
-                narrativeText = aiClient.chat(userPrompt, PromptTemplates.NARRATIVE_SYSTEM);
-                toolCalls++;
-            }
-        } catch (Exception e) {
-            log.error("Narrative composition failed: {}", e.getMessage());
-            narrativeText = "Narrative generation failed: " + e.getMessage();
+            NarrativeDraft draft = requestNarrativeAsync(userPrompt, sceneCount, totalDuration).join();
+            narrativeText = draft.narrativeText;
+            sceneCount = draft.sceneCount;
+            totalDuration = draft.totalDuration;
+        } catch (CompletionException e) {
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
+            log.error("Narrative composition failed: {}", cause.getMessage());
+            narrativeText = "Narrative generation failed: " + cause.getMessage();
         }
 
         if (narrativeText == null || narrativeText.isBlank()) {
@@ -122,6 +108,48 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         log.info("Narrative composed: {} words, {} scenes, ~{}s total",
                 narrative.wordCount(), sceneCount, totalDuration);
         return narrative;
+    }
+
+    private CompletableFuture<NarrativeDraft> requestNarrativeAsync(String userPrompt,
+                                                                    int defaultSceneCount,
+                                                                    int defaultTotalDuration) {
+        return aiClient.chatWithToolsRawAsync(userPrompt, PromptTemplates.NARRATIVE_SYSTEM, NARRATIVE_TOOL)
+                .thenApply(rawResponse -> {
+                    toolCalls++;
+                    JsonNode toolData = JsonUtils.extractToolCallPayload(rawResponse);
+                    if (toolData != null && toolData.has("narrative")) {
+                        return new NarrativeDraft(
+                                toolData.get("narrative").asText(),
+                                toolData.has("scene_count")
+                                        ? toolData.get("scene_count").asInt(defaultSceneCount)
+                                        : defaultSceneCount,
+                                toolData.has("estimated_duration")
+                                        ? toolData.get("estimated_duration").asInt(defaultTotalDuration)
+                                        : defaultTotalDuration
+                        );
+                    }
+
+                    String text = JsonUtils.extractTextFromResponse(rawResponse);
+                    if (text != null && !text.isBlank()) {
+                        return new NarrativeDraft(text, defaultSceneCount, defaultTotalDuration);
+                    }
+                    return null;
+                })
+                .exceptionally(error -> {
+                    Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                    log.debug("  Tool calling failed, falling back to plain chat: {}", cause.getMessage());
+                    return null;
+                })
+                .thenCompose(draft -> {
+                    if (draft != null && draft.hasContent()) {
+                        return CompletableFuture.completedFuture(draft);
+                    }
+                    return aiClient.chatAsync(userPrompt, PromptTemplates.NARRATIVE_SYSTEM)
+                            .thenApply(response -> {
+                                toolCalls++;
+                                return new NarrativeDraft(response, defaultSceneCount, defaultTotalDuration);
+                            });
+                });
     }
 
     @Override
@@ -204,5 +232,21 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         }
 
         return sb.toString();
+    }
+
+    private static final class NarrativeDraft {
+        private final String narrativeText;
+        private final int sceneCount;
+        private final int totalDuration;
+
+        private NarrativeDraft(String narrativeText, int sceneCount, int totalDuration) {
+            this.narrativeText = narrativeText;
+            this.sceneCount = sceneCount;
+            this.totalDuration = totalDuration;
+        }
+
+        private boolean hasContent() {
+            return narrativeText != null && !narrativeText.isBlank();
+        }
     }
 }

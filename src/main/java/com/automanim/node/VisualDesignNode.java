@@ -6,7 +6,8 @@ import com.automanim.model.KnowledgeNode;
 import com.automanim.model.PipelineKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
-import com.automanim.util.JsonUtils;
+import com.automanim.util.AiRequestUtils;
+import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
@@ -15,22 +16,22 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stage 1b: Visual Design - adds visual specifications to each node.
  *
- * Depth levels processed root-first (depth 0, then 1, then 2, ...):
- * - Nearest parent nodes are fully finalized before any child begins.
- * - Children at the same depth may run in parallel since they only read
- *   already-finalized parent specs.
+ * Depth levels are processed foundation-first (deepest concepts to depth 0):
+ * - Basic concepts establish reusable motifs before advanced concepts are designed.
+ * - Nodes at the same depth run concurrently because they only depend on deeper,
+ *   already-finalized prerequisite specs plus the shared global style guide.
  */
 public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeGraph, String> {
 
@@ -64,6 +65,8 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     private boolean parallelEnabled = true;
     private int maxConcurrent = 4;
     private final List<String> globalColorPalette = java.util.Collections.synchronizedList(new ArrayList<>());
+    private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
+    private String globalStyleGuide = "";
     private KnowledgeGraph graph;
 
     public VisualDesignNode() {
@@ -83,48 +86,20 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
 
     @Override
     public KnowledgeGraph exec(KnowledgeGraph graph) {
-        log.info("=== Stage 1b: Visual Design (parallel={}) ===", parallelEnabled);
+        int concurrency = parallelEnabled ? maxConcurrent : 1;
+        log.info("=== Stage 1b: Visual Design (parallel={}, concurrency={}) ===",
+                parallelEnabled, concurrency);
         toolCalls.set(0);
         globalColorPalette.clear();
+        aiCallLimiter = new ConcurrencyUtils.AsyncLimiter(concurrency);
         this.graph = graph;
-
-        Map<Integer, List<KnowledgeNode>> levels = graph.groupByDepth();
-        List<Integer> depths = new ArrayList<>(levels.keySet());
-        java.util.Collections.sort(depths); // root-first: nearest parent spec finalized before children
-
-        ExecutorService executor = parallelEnabled
-                ? Executors.newFixedThreadPool(maxConcurrent) : null;
+        this.globalStyleGuide = buildGlobalStyleGuide(graph);
 
         try {
-            for (int depth : depths) {
-                List<KnowledgeNode> nodes = levels.get(depth);
-                log.info("  Designing depth {} ({} nodes{})", depth, nodes.size(),
-                        parallelEnabled && nodes.size() > 1 ? ", parallel" : "");
-
-                if (parallelEnabled && nodes.size() > 1 && executor != null) {
-                    List<Future<?>> futures = new ArrayList<>();
-                    for (KnowledgeNode node : nodes) {
-                        futures.add(executor.submit(() -> designNode(node)));
-                    }
-                    for (Future<?> f : futures) {
-                        try {
-                            f.get();
-                        } catch (Exception e) {
-                            log.warn("  Parallel visual design error: {}", e.getMessage());
-                        }
-                    }
-                } else {
-                    for (KnowledgeNode node : nodes) {
-                        designNode(node);
-                    }
-                }
-            }
+            return designGraph(graph);
         } finally {
-            if (executor != null) executor.shutdown();
+            aiCallLimiter = null;
         }
-
-        log.info("Visual design complete: {} API calls, palette: {}", toolCalls.get(), globalColorPalette);
-        return graph;
     }
 
     @Override
@@ -140,17 +115,46 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         return null;
     }
 
-    private void designNode(KnowledgeNode node) {
+    private KnowledgeGraph designGraph(KnowledgeGraph graph) {
+        Map<Integer, List<KnowledgeNode>> levels = graph.groupByDepth();
+        List<Integer> depths = new ArrayList<>(levels.keySet());
+        depths.sort(Collections.reverseOrder());
+
+        try {
+            for (int depth : depths) {
+                List<KnowledgeNode> nodes = levels.get(depth);
+                log.info("  Designing depth {} ({} nodes{})", depth, nodes.size(),
+                        parallelEnabled && nodes.size() > 1 ? ", parallel" : "");
+                waitForDepth(nodes);
+            }
+        } catch (CompletionException e) {
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
+            throw new RuntimeException("Visual design failed: " + cause.getMessage(), cause);
+        }
+
+        log.info("Visual design complete: {} API calls, palette: {}", toolCalls.get(), globalColorPalette);
+        return graph;
+    }
+
+    private void waitForDepth(List<KnowledgeNode> nodes) {
+        List<CompletableFuture<Void>> tasks = new ArrayList<>();
+        for (KnowledgeNode node : nodes) {
+            tasks.add(designNodeAsync(node));
+        }
+        CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
+    }
+
+    private CompletableFuture<Void> designNodeAsync(KnowledgeNode node) {
         Map<String, Object> existingSpec = node.getVisualSpec();
         if (existingSpec != null && existingSpec.containsKey("visual_description")) {
             log.debug("  Skipping already-designed node: {}", node.getConcept());
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         String equationsInfo = node.getEquations() != null && !node.getEquations().isEmpty()
                 ? String.join(", ", node.getEquations()) : "none";
 
-        String parentSpecContext = buildParentSpecContext(node);
+        String prerequisiteSpecContext = buildPrerequisiteSpecContext(node);
 
         String paletteContext = globalColorPalette.isEmpty()
                 ? "No colors have been assigned yet."
@@ -158,72 +162,92 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                   + ". Prefer harmonious contrast and avoid unnecessary repetition.";
 
         String userPrompt = String.format(
-                "Concept: %s\nDepth: %d\nFoundation concept: %s\nRelevant equations: %s\n\n%s\n%s",
+                "Concept: %s\nDepth: %d\nFoundation concept: %s\nRelevant equations: %s\n\n"
+                + "Global style guide:\n%s\n\n%s\n%s",
                 node.getConcept(), node.getMinDepth(), node.isFoundation(),
-                equationsInfo, parentSpecContext, paletteContext);
+                equationsInfo, globalStyleGuide, prerequisiteSpecContext, paletteContext);
 
-        try {
-            JsonNode data = null;
-            try {
-                JsonNode rawResponse = aiClient.chatWithToolsRaw(
-                        userPrompt, PromptTemplates.VISUAL_DESIGN_SYSTEM, VISUAL_DESIGN_TOOL);
-                toolCalls.incrementAndGet();
-                data = JsonUtils.extractToolCallPayload(rawResponse);
-
-                if (data == null) {
-                    String textContent = JsonUtils.extractTextFromResponse(rawResponse);
-                    if (textContent != null && !textContent.isBlank()) {
-                        data = JsonUtils.parseTree(JsonUtils.extractJsonObject(textContent));
+        return aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
+                        aiClient,
+                        log,
+                        node.getConcept(),
+                        userPrompt,
+                        PromptTemplates.VISUAL_DESIGN_SYSTEM,
+                        VISUAL_DESIGN_TOOL,
+                        () -> toolCalls.incrementAndGet()
+                ))
+                .thenAccept(data -> {
+                    if (data != null) {
+                        applyVisualSpec(node, data);
+                        log.debug("  Visual spec set for: {}", node.getConcept());
                     }
-                }
-            } catch (Exception e) {
-                log.debug("  Tool calling failed for '{}', falling back to plain chat", node.getConcept());
-                String response = aiClient.chat(userPrompt, PromptTemplates.VISUAL_DESIGN_SYSTEM);
-                toolCalls.incrementAndGet();
-                data = JsonUtils.parseTree(JsonUtils.extractJsonObject(response));
-            }
-
-            if (data != null) {
-                applyVisualSpec(node, data);
-                log.debug("  Visual spec set for: {}", node.getConcept());
-            }
-        } catch (Exception e) {
-            log.warn("  Visual design failed for '{}': {}", node.getConcept(), e.getMessage());
-        }
+                })
+                .exceptionally(error -> {
+                    Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                    log.warn("  Visual design failed for '{}': {}", node.getConcept(), cause.getMessage());
+                    return null;
+                });
     }
 
     /**
-     * Uses the nearest parent set in the DAG.
-     * Those parents are guaranteed to be at an earlier depth, so their
-     * visual specs are finalized before this node is processed.
+     * Designs from foundations upward, so direct prerequisites are finalized
+     * before their dependent concept is designed.
      */
-    private String buildParentSpecContext(KnowledgeNode node) {
-        List<KnowledgeNode> parents = graph.getNearestParents(node.getId());
-        if (parents.isEmpty()) {
-            return "This is the root concept. Establish the overall visual theme for the animation.";
+    private String buildPrerequisiteSpecContext(KnowledgeNode node) {
+        List<KnowledgeNode> prerequisites = getNearestPrerequisites(node);
+        if (prerequisites.isEmpty()) {
+            return "This is a foundation concept. Keep the scene concrete, intuitive, and reusable later.";
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Nearest parent concepts:\n");
-        for (KnowledgeNode parent : parents) {
-            Map<String, Object> parentSpec = parent.getVisualSpec();
-            sb.append(String.format("- %s%n", parent.getConcept()));
-            if (parentSpec == null || parentSpec.isEmpty()) {
+        sb.append("Already-designed prerequisite concepts:\n");
+        for (KnowledgeNode prerequisite : prerequisites) {
+            Map<String, Object> prerequisiteSpec = prerequisite.getVisualSpec();
+            sb.append(String.format("- %s%n", prerequisite.getConcept()));
+            if (prerequisiteSpec == null || prerequisiteSpec.isEmpty()) {
                 sb.append("  No visual spec available yet.\n");
                 continue;
             }
-            if (parentSpec.containsKey("color_scheme")) {
-                sb.append("  Color scheme: ").append(parentSpec.get("color_scheme")).append("\n");
+            if (prerequisiteSpec.containsKey("color_scheme")) {
+                sb.append("  Color scheme: ").append(prerequisiteSpec.get("color_scheme")).append("\n");
             }
-            if (parentSpec.containsKey("layout")) {
-                sb.append("  Layout style: ").append(parentSpec.get("layout")).append("\n");
+            if (prerequisiteSpec.containsKey("layout")) {
+                sb.append("  Layout style: ").append(prerequisiteSpec.get("layout")).append("\n");
             }
-            if (parentSpec.containsKey("visual_description")) {
-                sb.append("  Visual style: ").append(parentSpec.get("visual_description")).append("\n");
+            if (prerequisiteSpec.containsKey("visual_description")) {
+                sb.append("  Visual style: ").append(prerequisiteSpec.get("visual_description")).append("\n");
             }
         }
-        sb.append("Keep the style, palette, rhythm, and visual density consistent with these parents.");
+        sb.append("Reuse motifs from these prerequisites so the full animation feels like one system.");
         return sb.toString();
+    }
+
+    private List<KnowledgeNode> getNearestPrerequisites(KnowledgeNode node) {
+        List<KnowledgeNode> prerequisites = graph.getPrerequisites(node.getId());
+        if (prerequisites.isEmpty()) {
+            return prerequisites;
+        }
+
+        int expectedDepth = node.getMinDepth() + 1;
+        List<KnowledgeNode> nearest = new ArrayList<>();
+        for (KnowledgeNode prerequisite : prerequisites) {
+            if (prerequisite.getMinDepth() == expectedDepth) {
+                nearest.add(prerequisite);
+            }
+        }
+
+        return nearest.isEmpty() ? prerequisites : nearest;
+    }
+
+    private String buildGlobalStyleGuide(KnowledgeGraph graph) {
+        return String.format(
+                "Treat every scene as part of one coherent animation about %s. "
+                + "Start with concrete, approachable visuals for foundational ideas, then "
+                + "gradually increase abstraction toward the final concept. "
+                + "Keep layout grammar, motion rhythm, recurring shapes, and overall palette "
+                + "consistent across all nodes.",
+                graph.getTargetConcept()
+        );
     }
 
     private void applyVisualSpec(KnowledgeNode node, JsonNode data) {

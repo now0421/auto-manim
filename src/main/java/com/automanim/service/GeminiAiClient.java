@@ -1,5 +1,6 @@
 package com.automanim.service;
 
+import com.automanim.util.ConcurrencyUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -44,7 +45,7 @@ public class GeminiAiClient implements AiClient {
         try {
             return chatAsync(userMessage, systemPrompt).join();
         } catch (CompletionException e) {
-            Throwable cause = unwrapCompletionException(e);
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
             if (cause instanceof RuntimeException) {
                 throw (RuntimeException) cause;
             }
@@ -106,7 +107,7 @@ public class GeminiAiClient implements AiClient {
                         if (error == null) {
                             return result;
                         }
-                        Throwable cause = unwrapCompletionException(error);
+                        Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
                         log.error("Gemini chat failed: {}", cause.getMessage(), cause);
                         throw new CompletionException(new RuntimeException(
                                 "AI chat failed: " + cause.getMessage(), cause
@@ -121,16 +122,10 @@ public class GeminiAiClient implements AiClient {
     }
 
     @Override
-    public JsonNode chatWithToolsRaw(String userMessage, String systemPrompt, String toolsJson) {
-        // Gemini doesn't use OpenAI-format tool calling; fall back to plain chat
-        // and wrap the result in a synthetic choices structure for consistency
-        String text = chat(userMessage, systemPrompt);
-        ObjectNode fake = mapper.createObjectNode();
-        ArrayNode choices = fake.putArray("choices");
-        ObjectNode choice = choices.addObject();
-        ObjectNode message = choice.putObject("message");
-        message.put("content", text);
-        return fake;
+    public CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
+                                                             String systemPrompt,
+                                                             String toolsJson) {
+        return chatAsync(userMessage, systemPrompt).thenApply(this::wrapTextResponse);
     }
 
     @Override
@@ -149,11 +144,12 @@ public class GeminiAiClient implements AiClient {
         return (val != null && !val.isBlank()) ? val : defaultVal;
     }
 
-    private static Throwable unwrapCompletionException(Throwable error) {
-        Throwable current = error;
-        while (current instanceof CompletionException && current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current;
+    private JsonNode wrapTextResponse(String text) {
+        ObjectNode fake = mapper.createObjectNode();
+        ArrayNode choices = fake.putArray("choices");
+        ObjectNode choice = choices.addObject();
+        ObjectNode message = choice.putObject("message");
+        message.put("content", text);
+        return fake;
     }
 }

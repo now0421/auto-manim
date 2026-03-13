@@ -1,5 +1,6 @@
 package com.automanim.service;
 
+import com.automanim.util.ConcurrencyUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -62,7 +63,7 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         try {
             return chatAsync(userMessage, systemPrompt).join();
         } catch (CompletionException e) {
-            Throwable cause = unwrapCompletionException(e);
+            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
             if (cause instanceof RuntimeException) {
                 throw (RuntimeException) cause;
             }
@@ -78,7 +79,7 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
                 if (error == null) {
                     return result;
                 }
-                Throwable cause = unwrapCompletionException(error);
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
                 log.error("{} chat failed: {}", providerName, cause.getMessage(), cause);
                 throw new CompletionException(new RuntimeException(
                         "AI chat failed: " + cause.getMessage(), cause
@@ -93,30 +94,29 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
     }
 
     @Override
-    public JsonNode chatWithToolsRaw(String userMessage, String systemPrompt, String toolsJson) {
+    public CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
+                                                             String systemPrompt,
+                                                             String toolsJson) {
         try {
             ArrayNode tools = toolsJson != null
                     ? (ArrayNode) MAPPER.readTree(toolsJson)
                     : null;
             ObjectNode body = buildRequestBody(userMessage, systemPrompt, tools);
-            return sendRawRequest(body);
+            return sendRawRequestAsync(body).handle((result, error) -> {
+                if (error == null) {
+                    return result;
+                }
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                log.error("{} chat (with tools) failed: {}", providerName, cause.getMessage(), cause);
+                throw new CompletionException(new RuntimeException(
+                        "AI chat with tools failed: " + cause.getMessage(), cause
+                ));
+            });
         } catch (Exception e) {
             log.error("{} chat (with tools) failed: {}", providerName, e.getMessage(), e);
-            throw new RuntimeException("AI chat with tools failed: " + e.getMessage(), e);
-        }
-    }
-
-    @Override
-    public String chatWithTools(String userMessage, String systemPrompt, String toolsJson) {
-        try {
-            ArrayNode tools = toolsJson != null
-                    ? (ArrayNode) MAPPER.readTree(toolsJson)
-                    : null;
-            ObjectNode body = buildRequestBody(userMessage, systemPrompt, tools);
-            return sendRequestWithRetry(body);
-        } catch (Exception e) {
-            log.error("{} chat (with tools) failed: {}", providerName, e.getMessage(), e);
-            throw new RuntimeException("AI chat failed: " + e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat with tools failed: " + e.getMessage(), e
+            ));
         }
     }
 
@@ -148,29 +148,6 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         return body;
     }
 
-    private JsonNode sendRawRequest(ObjectNode body) throws Exception {
-        String url = baseUrl.replaceAll("/+$", "") + "/chat/completions";
-        String jsonBody = MAPPER.writeValueAsString(body);
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .timeout(Duration.ofMinutes(5))
-                .build();
-
-        log.debug("{} request: model={}", providerName, model);
-        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new RuntimeException(providerName + " API returned HTTP " + response.statusCode()
-                    + ": " + response.body());
-        }
-
-        return MAPPER.readTree(response.body());
-    }
-
     private CompletableFuture<JsonNode> sendRawRequestAsync(ObjectNode body) throws Exception {
         String url = baseUrl.replaceAll("/+$", "") + "/chat/completions";
         String jsonBody = MAPPER.writeValueAsString(body);
@@ -198,33 +175,6 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
                         throw new CompletionException(e);
                     }
                 });
-    }
-
-    private String sendRequestWithRetry(ObjectNode body) throws Exception {
-        for (int attempt = 0; attempt <= EMPTY_RESPONSE_RETRIES; attempt++) {
-            JsonNode root = sendRawRequest(body);
-            String content = extractTextContent(root);
-
-            if (content != null && !content.isBlank()) {
-                return content;
-            }
-
-            if (reasoningContentFallback) {
-                String reasoningContent = extractReasoningContent(root);
-                if (reasoningContent != null && !reasoningContent.isBlank()) {
-                    log.info("Using reasoning_content as fallback for {}", providerName);
-                    return reasoningContent;
-                }
-            }
-
-            if (attempt < EMPTY_RESPONSE_RETRIES) {
-                log.warn("Empty response from {} (attempt {}/{}), retrying...",
-                        providerName, attempt + 1, EMPTY_RESPONSE_RETRIES + 1);
-            }
-        }
-
-        throw new RuntimeException(providerName + " API returned empty content after "
-                + (EMPTY_RESPONSE_RETRIES + 1) + " attempts");
     }
 
     private CompletableFuture<String> sendRequestWithRetryAsync(ObjectNode body) {
@@ -300,13 +250,5 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
     protected static String envOrDefault(String key, String defaultVal) {
         String val = System.getenv(key);
         return (val != null && !val.isBlank()) ? val : defaultVal;
-    }
-
-    private Throwable unwrapCompletionException(Throwable error) {
-        Throwable current = error;
-        while (current instanceof CompletionException && current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current;
     }
 }
