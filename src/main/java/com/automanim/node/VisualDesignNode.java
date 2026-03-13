@@ -1,6 +1,7 @@
 package com.automanim.node;
 
 import com.automanim.config.PipelineConfig;
+import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.KnowledgeNode;
 import com.automanim.model.PipelineKeys;
 import com.automanim.service.AiClient;
@@ -14,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,12 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Stage 1b: Visual Design - adds visual specifications to each node.
  *
  * Depth levels processed root-first (depth 0, then 1, then 2, ...):
- * - Parent node's visual spec is fully finalized before any child begins.
- * - Children at the same depth may run in parallel since all share a
- *   completed parent spec (read-only at that point).
- * - The parentMap (built once before processing) provides O(1) child-to-parent lookup.
+ * - Nearest parent nodes are fully finalized before any child begins.
+ * - Children at the same depth may run in parallel since they only read
+ *   already-finalized parent specs.
  */
-public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNode, String> {
+public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeGraph, String> {
 
     private static final Logger log = LoggerFactory.getLogger(VisualDesignNode.class);
 
@@ -64,38 +63,34 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
     private final AtomicInteger toolCalls = new AtomicInteger(0);
     private boolean parallelEnabled = true;
     private int maxConcurrent = 4;
-    private final List<String> globalColorPalette = Collections.synchronizedList(new ArrayList<>());
-
-    // Built once per exec(), maps child-to-parent for correct visual inheritance
-    private Map<KnowledgeNode, KnowledgeNode> parentMap;
+    private final List<String> globalColorPalette = java.util.Collections.synchronizedList(new ArrayList<>());
+    private KnowledgeGraph graph;
 
     public VisualDesignNode() {
         super(1, 0);
     }
 
     @Override
-    public KnowledgeNode prep(Map<String, Object> ctx) {
+    public KnowledgeGraph prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(PipelineKeys.AI_CLIENT);
         PipelineConfig config = (PipelineConfig) ctx.get(PipelineKeys.CONFIG);
         if (config != null) {
             this.parallelEnabled = config.isParallelVisualDesign();
             this.maxConcurrent = config.getMaxConcurrent();
         }
-        return (KnowledgeNode) ctx.get(PipelineKeys.KNOWLEDGE_TREE);
+        return (KnowledgeGraph) ctx.get(PipelineKeys.KNOWLEDGE_GRAPH);
     }
 
     @Override
-    public KnowledgeNode exec(KnowledgeNode tree) {
+    public KnowledgeGraph exec(KnowledgeGraph graph) {
         log.info("=== Stage 1b: Visual Design (parallel={}) ===", parallelEnabled);
         toolCalls.set(0);
         globalColorPalette.clear();
+        this.graph = graph;
 
-        // Build child-to-parent map once for O(1) parent lookup
-        this.parentMap = tree.buildParentMap();
-
-        Map<Integer, List<KnowledgeNode>> levels = tree.groupByDepth();
+        Map<Integer, List<KnowledgeNode>> levels = graph.groupByDepth();
         List<Integer> depths = new ArrayList<>(levels.keySet());
-        Collections.sort(depths); // root-first: parent spec finalized before children
+        java.util.Collections.sort(depths); // root-first: nearest parent spec finalized before children
 
         ExecutorService executor = parallelEnabled
                 ? Executors.newFixedThreadPool(maxConcurrent) : null;
@@ -129,18 +124,18 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
         }
 
         log.info("Visual design complete: {} API calls, palette: {}", toolCalls.get(), globalColorPalette);
-        return tree;
+        return graph;
     }
 
     @Override
-    public String post(Map<String, Object> ctx, KnowledgeNode prepRes, KnowledgeNode tree) {
-        ctx.put(PipelineKeys.KNOWLEDGE_TREE, tree);
+    public String post(Map<String, Object> ctx, KnowledgeGraph prepRes, KnowledgeGraph graph) {
+        ctx.put(PipelineKeys.KNOWLEDGE_GRAPH, graph);
         int prevCalls = (int) ctx.getOrDefault(PipelineKeys.ENRICHMENT_TOOL_CALLS, 0);
         ctx.put(PipelineKeys.ENRICHMENT_TOOL_CALLS, prevCalls + toolCalls.get());
 
         Path outputDir = (Path) ctx.get(PipelineKeys.OUTPUT_DIR);
         if (outputDir != null) {
-            FileOutputService.saveEnrichedTree(outputDir, tree);
+            FileOutputService.saveEnrichedGraph(outputDir, graph);
         }
         return null;
     }
@@ -164,7 +159,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
 
         String userPrompt = String.format(
                 "Concept: %s\nDepth: %d\nFoundation concept: %s\nRelevant equations: %s\n\n%s\n%s",
-                node.getConcept(), node.getDepth(), node.isFoundation(),
+                node.getConcept(), node.getMinDepth(), node.isFoundation(),
                 equationsInfo, parentSpecContext, paletteContext);
 
         try {
@@ -198,34 +193,36 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
     }
 
     /**
-     * Looks up the tree to find this node's parent spec.
-     * The parentMap is built before processing begins, so the parent's spec
-     * is guaranteed to be finalized (parent depth was fully processed first).
+     * Uses the nearest parent set in the DAG.
+     * Those parents are guaranteed to be at an earlier depth, so their
+     * visual specs are finalized before this node is processed.
      */
     private String buildParentSpecContext(KnowledgeNode node) {
-        KnowledgeNode parent = parentMap.get(node);
-        if (parent == null) {
+        List<KnowledgeNode> parents = graph.getNearestParents(node.getId());
+        if (parents.isEmpty()) {
             return "This is the root concept. Establish the overall visual theme for the animation.";
         }
 
-        Map<String, Object> parentSpec = parent.getVisualSpec();
-        if (parentSpec == null || parentSpec.isEmpty()) {
-            return String.format("Parent concept: %s (no visual spec available yet).", parent.getConcept());
-        }
-
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("Parent concept: %s%n", parent.getConcept()));
-        sb.append("Maintain visual continuity with the parent concept:\n");
-        if (parentSpec.containsKey("color_scheme")) {
-            sb.append("  Color scheme: ").append(parentSpec.get("color_scheme")).append("\n");
+        sb.append("Nearest parent concepts:\n");
+        for (KnowledgeNode parent : parents) {
+            Map<String, Object> parentSpec = parent.getVisualSpec();
+            sb.append(String.format("- %s%n", parent.getConcept()));
+            if (parentSpec == null || parentSpec.isEmpty()) {
+                sb.append("  No visual spec available yet.\n");
+                continue;
+            }
+            if (parentSpec.containsKey("color_scheme")) {
+                sb.append("  Color scheme: ").append(parentSpec.get("color_scheme")).append("\n");
+            }
+            if (parentSpec.containsKey("layout")) {
+                sb.append("  Layout style: ").append(parentSpec.get("layout")).append("\n");
+            }
+            if (parentSpec.containsKey("visual_description")) {
+                sb.append("  Visual style: ").append(parentSpec.get("visual_description")).append("\n");
+            }
         }
-        if (parentSpec.containsKey("layout")) {
-            sb.append("  Layout style: ").append(parentSpec.get("layout")).append("\n");
-        }
-        if (parentSpec.containsKey("visual_description")) {
-            sb.append("  Visual style: ").append(parentSpec.get("visual_description")).append("\n");
-        }
-        sb.append("Keep the style, palette, rhythm, and visual density consistent with the parent.");
+        sb.append("Keep the style, palette, rhythm, and visual density consistent with these parents.");
         return sb.toString();
     }
 

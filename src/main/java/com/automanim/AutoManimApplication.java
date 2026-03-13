@@ -2,6 +2,7 @@ package com.automanim;
 
 import com.automanim.config.PipelineConfig;
 import com.automanim.model.CodeResult;
+import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.PipelineKeys;
 import com.automanim.model.RenderResult;
 import com.automanim.service.AiClient;
@@ -17,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -123,11 +125,9 @@ public class AutoManimApplication {
 
         Duration elapsed = Duration.between(start, Instant.now());
 
-        // Summary
-        printSummary(ctx, elapsed);
-        // Add timing to context for summary
-        ctx.put("elapsed_seconds", elapsed.getSeconds());
-        FileOutputService.savePipelineSummary(outputDir, ctx);
+        Map<String, Object> summary = buildSummary(ctx, elapsed);
+        printSummary(summary);
+        FileOutputService.savePipelineSummary(outputDir, summary);
 
         log.info("Pipeline completed in {}", formatDuration(elapsed));
     }
@@ -146,34 +146,65 @@ public class AutoManimApplication {
         }
     }
 
-    private static void printSummary(Map<String, Object> ctx, Duration elapsed) {
+    private static Map<String, Object> buildSummary(Map<String, Object> ctx, Duration elapsed) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        KnowledgeGraph graph = (KnowledgeGraph) ctx.get(PipelineKeys.KNOWLEDGE_GRAPH);
         log.info("");
-        log.info("==================== PIPELINE SUMMARY ====================");
-
         CodeResult codeResult = (CodeResult) ctx.get(PipelineKeys.CODE_RESULT);
         RenderResult renderResult = (RenderResult) ctx.get(PipelineKeys.RENDER_RESULT);
         int apiCalls = (int) ctx.getOrDefault(PipelineKeys.EXPLORATION_API_CALLS, 0);
         apiCalls += (int) ctx.getOrDefault(PipelineKeys.ENRICHMENT_TOOL_CALLS, 0);
 
+        summary.put("concept", ctx.get(PipelineKeys.CONCEPT));
+        summary.put("ai_provider", ((PipelineConfig) ctx.get(PipelineKeys.CONFIG)).getAiProvider());
+        summary.put("elapsed_seconds", elapsed.getSeconds());
+
+        if (graph != null) {
+            summary.put("graph_nodes", graph.countNodes());
+            summary.put("graph_edges", graph.countEdges());
+            summary.put("graph_max_depth", graph.getMaxDepth());
+        }
+
         if (codeResult != null) {
-            log.info("  Code: {} lines, scene={}", codeResult.codeLineCount(), codeResult.getSceneName());
             apiCalls += codeResult.getToolCalls();
+            summary.put("scene_name", codeResult.getSceneName());
+            summary.put("code_lines", codeResult.codeLineCount());
         }
 
         if (renderResult != null) {
-            if (renderResult.isSuccess()) {
-                log.info("  Render: SUCCESS ({} attempts)", renderResult.getAttempts());
-                if (renderResult.getVideoPath() != null) {
-                    log.info("  Video:  {}", renderResult.getVideoPath());
-                }
-            } else {
-                log.info("  Render: FAILED after {} attempts", renderResult.getAttempts());
-            }
             apiCalls += renderResult.getToolCalls();
+            summary.put("render_success", renderResult.isSuccess());
+            summary.put("render_attempts", renderResult.getAttempts());
+            summary.put("video_path", renderResult.getVideoPath());
         }
 
-        log.info("  Total API calls: ~{}", apiCalls);
-        log.info("  Duration: {}", formatDuration(elapsed));
+        summary.put("total_api_calls_estimate", apiCalls);
+        summary.put("duration_human", formatDuration(elapsed));
+        return summary;
+    }
+
+    private static void printSummary(Map<String, Object> summary) {
+        log.info("==================== PIPELINE SUMMARY ====================");
+        if (summary.containsKey("graph_nodes")) {
+            log.info("  Graph: {} nodes, {} edges, max depth {}",
+                    summary.get("graph_nodes"), summary.get("graph_edges"), summary.get("graph_max_depth"));
+        }
+        if (summary.containsKey("code_lines")) {
+            log.info("  Code: {} lines, scene={}",
+                    summary.get("code_lines"), summary.get("scene_name"));
+        }
+        if (summary.containsKey("render_success")) {
+            if (Boolean.TRUE.equals(summary.get("render_success"))) {
+                log.info("  Render: SUCCESS ({} attempts)", summary.get("render_attempts"));
+                if (summary.get("video_path") != null) {
+                    log.info("  Video:  {}", summary.get("video_path"));
+                }
+            } else {
+                log.info("  Render: FAILED after {} attempts", summary.get("render_attempts"));
+            }
+        }
+        log.info("  Total API calls: ~{}", summary.get("total_api_calls_estimate"));
+        log.info("  Duration: {}", summary.get("duration_human"));
         log.info("==========================================================");
     }
 

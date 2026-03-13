@@ -1,8 +1,8 @@
 package com.automanim.service;
 
-import com.automanim.model.KnowledgeNode;
-import com.automanim.model.Narrative;
 import com.automanim.model.CodeResult;
+import com.automanim.model.KnowledgeGraph;
+import com.automanim.model.Narrative;
 import com.automanim.model.RenderResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -10,17 +10,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Handles persisting intermediate pipeline results to disk.
- * Each stage saves its output so the pipeline can be resumed or inspected.
  */
 public class FileOutputService {
 
@@ -28,14 +32,13 @@ public class FileOutputService {
     private static final ObjectMapper mapper = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
 
-    /**
-     * Create a timestamped output directory for a concept.
-     */
     public static Path createOutputDir(Path baseDir, String concept) {
         String safeName = concept.toLowerCase()
                 .replaceAll("[^a-z0-9]+", "_")
                 .replaceAll("^_|_$", "");
-        if (safeName.length() > 50) safeName = safeName.substring(0, 50);
+        if (safeName.length() > 50) {
+            safeName = safeName.substring(0, 50);
+        }
 
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         Path dir = baseDir.resolve(safeName + "_" + timestamp);
@@ -49,13 +52,13 @@ public class FileOutputService {
         return dir;
     }
 
-    public static void saveKnowledgeTree(Path outputDir, KnowledgeNode tree) {
-        writeJson(outputDir.resolve("1_knowledge_tree.json"), tree, "knowledge tree");
-        writeText(outputDir.resolve("1_knowledge_tree_pretty.txt"), tree.printTree(), "knowledge tree (pretty)");
+    public static void saveKnowledgeGraph(Path outputDir, KnowledgeGraph graph) {
+        writeJson(outputDir.resolve("1_knowledge_graph.json"), graph, "knowledge graph");
+        writeText(outputDir.resolve("1_knowledge_graph_pretty.txt"), graph.printGraph(), "knowledge graph (pretty)");
     }
 
-    public static void saveEnrichedTree(Path outputDir, KnowledgeNode tree) {
-        writeJson(outputDir.resolve("2_enriched_tree.json"), tree, "enriched tree");
+    public static void saveEnrichedGraph(Path outputDir, KnowledgeGraph graph) {
+        writeJson(outputDir.resolve("2_enriched_graph.json"), graph, "enriched graph");
     }
 
     public static void saveNarrative(Path outputDir, Narrative narrative) {
@@ -94,10 +97,9 @@ public class FileOutputService {
     }
 
     public static void savePipelineSummary(Path outputDir, Map<String, Object> summary) {
-        writeJson(outputDir.resolve("6_pipeline_summary.json"), summary, "pipeline summary");
+        writeJson(outputDir.resolve("6_pipeline_summary.json"),
+                sanitizeForJson(summary), "pipeline summary");
     }
-
-    // ---- Internal ----
 
     private static void writeJson(Path path, Object data, String description) {
         try {
@@ -115,5 +117,51 @@ public class FileOutputService {
         } catch (IOException e) {
             log.error("Failed to write {}: {}", description, e.getMessage());
         }
+    }
+
+    private static Object sanitizeForJson(Object value) {
+        if (value == null
+                || value instanceof String
+                || value instanceof Number
+                || value instanceof Boolean) {
+            return value;
+        }
+
+        if (value instanceof Path || value instanceof TemporalAccessor || value instanceof Enum<?>) {
+            return value.toString();
+        }
+
+        if (value instanceof Map<?, ?>) {
+            Map<String, Object> sanitized = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                sanitized.put(String.valueOf(entry.getKey()), sanitizeForJson(entry.getValue()));
+            }
+            return sanitized;
+        }
+
+        if (value instanceof Collection<?>) {
+            List<Object> sanitized = new ArrayList<>();
+            for (Object item : (Collection<?>) value) {
+                sanitized.add(sanitizeForJson(item));
+            }
+            return sanitized;
+        }
+
+        if (value.getClass().isArray()) {
+            int length = Array.getLength(value);
+            List<Object> sanitized = new ArrayList<>(length);
+            for (int i = 0; i < length; i++) {
+                sanitized.add(sanitizeForJson(Array.get(value, i)));
+            }
+            return sanitized;
+        }
+
+        String className = value.getClass().getName();
+        if (className.startsWith("com.automanim.model.")) {
+            return value;
+        }
+
+        log.debug("Sanitizing non-JSON-friendly summary value of type {}", className);
+        return value.toString();
     }
 }

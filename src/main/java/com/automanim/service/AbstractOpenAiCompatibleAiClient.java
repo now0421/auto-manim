@@ -11,6 +11,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Shared base for providers exposing an OpenAI-compatible chat completions API.
@@ -58,11 +60,35 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
     @Override
     public String chat(String userMessage, String systemPrompt) {
         try {
+            return chatAsync(userMessage, systemPrompt).join();
+        } catch (CompletionException e) {
+            Throwable cause = unwrapCompletionException(e);
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new RuntimeException("AI chat failed: " + cause.getMessage(), cause);
+        }
+    }
+
+    @Override
+    public CompletableFuture<String> chatAsync(String userMessage, String systemPrompt) {
+        try {
             ObjectNode body = buildRequestBody(userMessage, systemPrompt, null);
-            return sendRequestWithRetry(body);
+            return sendRequestWithRetryAsync(body).handle((result, error) -> {
+                if (error == null) {
+                    return result;
+                }
+                Throwable cause = unwrapCompletionException(error);
+                log.error("{} chat failed: {}", providerName, cause.getMessage(), cause);
+                throw new CompletionException(new RuntimeException(
+                        "AI chat failed: " + cause.getMessage(), cause
+                ));
+            });
         } catch (Exception e) {
             log.error("{} chat failed: {}", providerName, e.getMessage(), e);
-            throw new RuntimeException("AI chat failed: " + e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat failed: " + e.getMessage(), e
+            ));
         }
     }
 
@@ -145,6 +171,35 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         return MAPPER.readTree(response.body());
     }
 
+    private CompletableFuture<JsonNode> sendRawRequestAsync(ObjectNode body) throws Exception {
+        String url = baseUrl.replaceAll("/+$", "") + "/chat/completions";
+        String jsonBody = MAPPER.writeValueAsString(body);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .timeout(Duration.ofMinutes(5))
+                .build();
+
+        log.debug("{} request: model={}", providerName, model);
+        return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() != 200) {
+                        throw new CompletionException(new RuntimeException(
+                                providerName + " API returned HTTP " + response.statusCode()
+                                        + ": " + response.body()
+                        ));
+                    }
+                    try {
+                        return MAPPER.readTree(response.body());
+                    } catch (Exception e) {
+                        throw new CompletionException(e);
+                    }
+                });
+    }
+
     private String sendRequestWithRetry(ObjectNode body) throws Exception {
         for (int attempt = 0; attempt <= EMPTY_RESPONSE_RETRIES; attempt++) {
             JsonNode root = sendRawRequest(body);
@@ -170,6 +225,42 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
 
         throw new RuntimeException(providerName + " API returned empty content after "
                 + (EMPTY_RESPONSE_RETRIES + 1) + " attempts");
+    }
+
+    private CompletableFuture<String> sendRequestWithRetryAsync(ObjectNode body) {
+        return sendRequestWithRetryAsync(body, 0);
+    }
+
+    private CompletableFuture<String> sendRequestWithRetryAsync(ObjectNode body, int attempt) {
+        try {
+            return sendRawRequestAsync(body).thenCompose(root -> {
+                String content = extractTextContent(root);
+                if (content != null && !content.isBlank()) {
+                    return CompletableFuture.completedFuture(content);
+                }
+
+                if (reasoningContentFallback) {
+                    String reasoningContent = extractReasoningContent(root);
+                    if (reasoningContent != null && !reasoningContent.isBlank()) {
+                        log.info("Using reasoning_content as fallback for {}", providerName);
+                        return CompletableFuture.completedFuture(reasoningContent);
+                    }
+                }
+
+                if (attempt < EMPTY_RESPONSE_RETRIES) {
+                    log.warn("Empty response from {} (attempt {}/{}), retrying...",
+                            providerName, attempt + 1, EMPTY_RESPONSE_RETRIES + 1);
+                    return sendRequestWithRetryAsync(body, attempt + 1);
+                }
+
+                return CompletableFuture.failedFuture(new RuntimeException(
+                        providerName + " API returned empty content after "
+                                + (EMPTY_RESPONSE_RETRIES + 1) + " attempts"
+                ));
+            });
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     protected static String extractTextContent(JsonNode root) {
@@ -209,5 +300,13 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
     protected static String envOrDefault(String key, String defaultVal) {
         String val = System.getenv(key);
         return (val != null && !val.isBlank()) ? val : defaultVal;
+    }
+
+    private Throwable unwrapCompletionException(Throwable error) {
+        Throwable current = error;
+        while (current instanceof CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
     }
 }

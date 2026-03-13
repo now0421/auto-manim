@@ -18,7 +18,7 @@ public final class PipelineKeys {
     public static final String CONCEPT = "concept";
 
     // ---- Stage 0: Exploration output ----
-    public static final String KNOWLEDGE_TREE = "knowledgeTree";
+    public static final String KNOWLEDGE_GRAPH = "knowledgeGraph";
     public static final String EXPLORATION_API_CALLS = "explorationApiCalls";
 
     // ---- Stage 1: Enrichment output ----

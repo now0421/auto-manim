@@ -1,5 +1,6 @@
 package com.automanim.node;
 
+import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.KnowledgeNode;
 import com.automanim.model.Narrative;
 import com.automanim.model.PipelineKeys;
@@ -13,18 +14,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Stage 1c: Narrative Composition - composes an animation script
- * from the enriched knowledge tree, with length adapted to concept complexity.
+ * from the enriched knowledge graph, with length adapted to concept complexity.
  */
-public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, String> {
+public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, String> {
 
     private static final Logger log = LoggerFactory.getLogger(NarrativeNode.class);
 
@@ -57,17 +55,17 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, Str
     }
 
     @Override
-    public KnowledgeNode prep(Map<String, Object> ctx) {
+    public KnowledgeGraph prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(PipelineKeys.AI_CLIENT);
-        return (KnowledgeNode) ctx.get(PipelineKeys.KNOWLEDGE_TREE);
+        return (KnowledgeGraph) ctx.get(PipelineKeys.KNOWLEDGE_GRAPH);
     }
 
     @Override
-    public Narrative exec(KnowledgeNode tree) {
+    public Narrative exec(KnowledgeGraph graph) {
         log.info("=== Stage 1c: Narrative Composition ===");
         toolCalls = 0;
 
-        List<KnowledgeNode> ordered = topologicalOrder(tree);
+        List<KnowledgeNode> ordered = graph.topologicalOrder();
         List<String> conceptOrder = ordered.stream()
                 .map(KnowledgeNode::getConcept)
                 .collect(java.util.stream.Collectors.toList());
@@ -75,7 +73,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, Str
         log.info("  Concept order: {}", conceptOrder);
 
         String context = buildTruncatedContext(ordered);
-        String userPrompt = PromptTemplates.narrativeUserPrompt(tree.getConcept(), context);
+        String userPrompt = PromptTemplates.narrativeUserPrompt(graph.getTargetConcept(), context);
 
         String narrativeText = null;
         int sceneCount = Math.max(1, conceptOrder.size());
@@ -114,7 +112,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, Str
         }
 
         Narrative narrative = new Narrative(
-                tree.getConcept(),
+                graph.getTargetConcept(),
                 narrativeText,
                 conceptOrder,
                 totalDuration,
@@ -127,7 +125,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, Str
     }
 
     @Override
-    public String post(Map<String, Object> ctx, KnowledgeNode prepRes, Narrative narrative) {
+    public String post(Map<String, Object> ctx, KnowledgeGraph prepRes, Narrative narrative) {
         ctx.put(PipelineKeys.NARRATIVE, narrative);
 
         int prevCalls = (int) ctx.getOrDefault(PipelineKeys.ENRICHMENT_TOOL_CALLS, 0);
@@ -139,24 +137,6 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, Str
         }
 
         return null;
-    }
-
-    private List<KnowledgeNode> topologicalOrder(KnowledgeNode root) {
-        List<KnowledgeNode> result = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        collectPostOrder(root, result, seen);
-        return result;
-    }
-
-    private void collectPostOrder(KnowledgeNode node, List<KnowledgeNode> result, Set<String> seen) {
-        String key = node.getConcept().toLowerCase();
-        if (seen.contains(key)) return;
-        seen.add(key);
-
-        for (KnowledgeNode prereq : node.getPrerequisites()) {
-            collectPostOrder(prereq, result, seen);
-        }
-        result.add(node);
     }
 
     private String buildTruncatedContext(List<KnowledgeNode> orderedNodes) {
@@ -185,7 +165,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeNode, Narrative, Str
     private String formatNodeContext(int index, KnowledgeNode node) {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format("%n--- Concept %d: %s (depth=%d) ---%n",
-                index, node.getConcept(), node.getDepth()));
+                index, node.getConcept(), node.getMinDepth()));
 
         if (node.getEquations() != null && !node.getEquations().isEmpty()) {
             sb.append("Equations:\n");

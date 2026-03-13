@@ -12,6 +12,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Google Gemini AI client using the Generative Language REST API.
@@ -40,6 +42,19 @@ public class GeminiAiClient implements AiClient {
     @Override
     public String chat(String userMessage, String systemPrompt) {
         try {
+            return chatAsync(userMessage, systemPrompt).join();
+        } catch (CompletionException e) {
+            Throwable cause = unwrapCompletionException(e);
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            throw new RuntimeException("AI chat failed: " + cause.getMessage(), cause);
+        }
+    }
+
+    @Override
+    public CompletableFuture<String> chatAsync(String userMessage, String systemPrompt) {
+        try {
             String url = "https://generativelanguage.googleapis.com/v1beta/models/"
                     + model + ":generateContent?key=" + apiKey;
 
@@ -67,23 +82,41 @@ public class GeminiAiClient implements AiClient {
                     .build();
 
             log.debug("Gemini request: model={}", model);
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() != 200) {
-                throw new RuntimeException("Gemini API returned HTTP " + response.statusCode()
-                        + ": " + response.body());
-            }
-
-            JsonNode root = mapper.readTree(response.body());
-            JsonNode candidates = root.get("candidates");
-            if (candidates == null || candidates.isEmpty()) {
-                throw new RuntimeException("Gemini API returned no candidates");
-            }
-            return candidates.get(0).path("content").path("parts").get(0).path("text").asText("");
-
+            return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenApply(response -> {
+                        if (response.statusCode() != 200) {
+                            throw new CompletionException(new RuntimeException(
+                                    "Gemini API returned HTTP " + response.statusCode()
+                                            + ": " + response.body()
+                            ));
+                        }
+                        try {
+                            JsonNode root = mapper.readTree(response.body());
+                            JsonNode candidates = root.get("candidates");
+                            if (candidates == null || candidates.isEmpty()) {
+                                throw new RuntimeException("Gemini API returned no candidates");
+                            }
+                            return candidates.get(0).path("content").path("parts")
+                                    .get(0).path("text").asText("");
+                        } catch (Exception e) {
+                            throw new CompletionException(e);
+                        }
+                    })
+                    .handle((result, error) -> {
+                        if (error == null) {
+                            return result;
+                        }
+                        Throwable cause = unwrapCompletionException(error);
+                        log.error("Gemini chat failed: {}", cause.getMessage(), cause);
+                        throw new CompletionException(new RuntimeException(
+                                "AI chat failed: " + cause.getMessage(), cause
+                        ));
+                    });
         } catch (Exception e) {
             log.error("Gemini chat failed: {}", e.getMessage(), e);
-            throw new RuntimeException("AI chat failed: " + e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat failed: " + e.getMessage(), e
+            ));
         }
     }
 
@@ -114,5 +147,13 @@ public class GeminiAiClient implements AiClient {
     private static String envOrDefault(String key, String defaultVal) {
         String val = System.getenv(key);
         return (val != null && !val.isBlank()) ? val : defaultVal;
+    }
+
+    private static Throwable unwrapCompletionException(Throwable error) {
+        Throwable current = error;
+        while (current instanceof CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
     }
 }

@@ -2,6 +2,8 @@ package com.automanim.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
  * Abstraction for AI chat completion APIs.
  */
@@ -11,6 +13,13 @@ public interface AiClient {
      * Send a chat message and get a response.
      */
     String chat(String userMessage, String systemPrompt);
+
+    /**
+     * Send a chat message asynchronously and get a future for the response.
+     */
+    default CompletableFuture<String> chatAsync(String userMessage, String systemPrompt) {
+        return CompletableFuture.supplyAsync(() -> chat(userMessage, systemPrompt));
+    }
 
     /**
      * Chat with function/tool calling support.

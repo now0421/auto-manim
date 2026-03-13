@@ -1,6 +1,7 @@
 package com.automanim.node;
 
 import com.automanim.config.PipelineConfig;
+import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.KnowledgeNode;
 import com.automanim.model.PipelineKeys;
 import com.automanim.service.AiClient;
@@ -24,12 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stage 1a: Mathematical Enrichment - adds equations and definitions to each
- * node in the knowledge tree.
+ * node in the knowledge graph.
  *
  * Nodes at the same depth level are enriched in parallel (deepest-first).
  * Each node's enrichment is independent; no cross-node dependency within a level.
  */
-public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNode, String> {
+public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeGraph, String> {
 
     private static final Logger log = LoggerFactory.getLogger(MathEnrichmentNode.class);
 
@@ -64,23 +65,23 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
     }
 
     @Override
-    public KnowledgeNode prep(Map<String, Object> ctx) {
+    public KnowledgeGraph prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(PipelineKeys.AI_CLIENT);
         PipelineConfig config = (PipelineConfig) ctx.get(PipelineKeys.CONFIG);
         if (config != null) {
             this.parallelEnabled = config.isParallelMathEnrichment();
             this.maxConcurrent = config.getMaxConcurrent();
         }
-        return (KnowledgeNode) ctx.get(PipelineKeys.KNOWLEDGE_TREE);
+        return (KnowledgeGraph) ctx.get(PipelineKeys.KNOWLEDGE_GRAPH);
     }
 
     @Override
-    public KnowledgeNode exec(KnowledgeNode tree) {
+    public KnowledgeGraph exec(KnowledgeGraph graph) {
         log.info("=== Stage 1a: Mathematical Enrichment (parallel={}) ===", parallelEnabled);
         toolCalls.set(0);
         cache.clear();
 
-        Map<Integer, List<KnowledgeNode>> levels = tree.groupByDepth();
+        Map<Integer, List<KnowledgeNode>> levels = graph.groupByDepth();
         List<Integer> depths = new ArrayList<>(levels.keySet());
         depths.sort(Collections.reverseOrder());
 
@@ -117,12 +118,12 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
 
         log.info("Mathematical enrichment complete: {} API calls, {} cache entries",
                 toolCalls.get(), cache.size());
-        return tree;
+        return graph;
     }
 
     @Override
-    public String post(Map<String, Object> ctx, KnowledgeNode prepRes, KnowledgeNode tree) {
-        ctx.put(PipelineKeys.KNOWLEDGE_TREE, tree);
+    public String post(Map<String, Object> ctx, KnowledgeGraph prepRes, KnowledgeGraph graph) {
+        ctx.put(PipelineKeys.KNOWLEDGE_GRAPH, graph);
         int prevCalls = (int) ctx.getOrDefault(PipelineKeys.ENRICHMENT_TOOL_CALLS, 0);
         ctx.put(PipelineKeys.ENRICHMENT_TOOL_CALLS, prevCalls + toolCalls.get());
         return null;
@@ -144,7 +145,7 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
         String complexity = node.isFoundation() ? "middle-school level" : "upper-undergraduate level";
         String userPrompt = String.format(
                 "Concept: %s\nDepth: %d\nTarget complexity: %s",
-                node.getConcept(), node.getDepth(), complexity);
+                node.getConcept(), node.getMinDepth(), complexity);
 
         try {
             JsonNode data = null;
