@@ -32,6 +32,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
     private static final int MAX_TRACEBACK_LINES = 30;
     private static final int TRACEBACK_CONTEXT_RADIUS = 4;
     private static final int MAX_STDOUT_ERROR_LINES = 12;
+    private static final int MAX_CONSECUTIVE_SAME_ERROR_ATTEMPTS = 3;
     private static final String TRACEBACK_MARKER = "Traceback (most recent call last)";
     private static final String GENERATED_SCENE_FILE = "scene_render.py";
 
@@ -113,6 +114,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         int toolCalls = 0;
 
         List<String> fixHistory = new ArrayList<>();
+        String previousErrorSignature = null;
+        int consecutiveSameErrorCount = 0;
 
         // Render-fix loop
         for (int i = 0; i <= maxRetries; i++) {
@@ -150,18 +153,25 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
             String focusedError = extractFocusedError(renderResult);
 
-            String errorSignature = focusedError.length() > 200
-                    ? focusedError.substring(0, 200) : focusedError;
-            if (fixHistory.contains(errorSignature)) {
-                log.warn("  Same error seen before (fix history), stopping retries");
+            String errorSignature = summarizeErrorSignature(focusedError);
+            if (errorSignature.equals(previousErrorSignature)) {
+                consecutiveSameErrorCount++;
+            } else {
+                consecutiveSameErrorCount = 1;
+            }
+
+            if (consecutiveSameErrorCount >= MAX_CONSECUTIVE_SAME_ERROR_ATTEMPTS) {
+                log.warn("  Same error repeated {} times in a row, stopping retries",
+                        consecutiveSameErrorCount);
                 break;
             }
             fixHistory.add(errorSignature);
+            previousErrorSignature = errorSignature;
 
             // AI fix
             try {
                 log.info("  Error output sent to LLM:\n{}", focusedError);
-                String fixPrompt = PromptTemplates.renderFixUserPrompt(currentCode, focusedError);
+                String fixPrompt = PromptTemplates.renderFixUserPrompt(currentCode, focusedError, fixHistory);
                 String fixResponse = aiClient.chat(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM);
                 toolCalls++;
 
@@ -347,5 +357,13 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             sb.append(lines[i]).append("\n");
         }
         return sb.toString().strip();
+    }
+
+    private String summarizeErrorSignature(String focusedError) {
+        if (focusedError == null || focusedError.isBlank()) {
+            return "";
+        }
+        String normalized = focusedError.replaceAll("\\s+", " ").trim();
+        return normalized.length() > 200 ? normalized.substring(0, 200) : normalized;
     }
 }
