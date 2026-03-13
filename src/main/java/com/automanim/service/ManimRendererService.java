@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,8 +14,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Executes manim CLI to render Manim Python code into video.
- * This is infrastructure — not a PocketFlow node.
+ * Executes the Manim CLI to render Manim Python code into video.
+ * This is infrastructure, not a PocketFlow node.
  */
 public class ManimRendererService {
 
@@ -22,7 +23,7 @@ public class ManimRendererService {
     private static final long RENDER_TIMEOUT_MINUTES = 10;
 
     /**
-     * Result of a single manim render attempt.
+     * Result of a single Manim render attempt.
      */
     public static class RenderAttemptResult {
         private final boolean success;
@@ -46,37 +47,41 @@ public class ManimRendererService {
     /**
      * Render a Manim scene from code.
      *
-     * @param code       complete Manim Python code
-     * @param sceneName  name of the Scene class to render
-     * @param quality    "low", "medium", or "high"
-     * @param outputDir  directory for output artifacts
+     * @param code complete Manim Python code
+     * @param sceneName name of the Scene class to render
+     * @param quality "low", "medium", or "high"
+     * @param outputDir directory for output artifacts
      * @return render attempt result
      */
     public RenderAttemptResult render(String code, String sceneName, String quality, Path outputDir) {
         try {
             Path normalizedOutputDir = outputDir.toAbsolutePath().normalize();
 
-            // Write code to temp file
             Path codeFile = normalizedOutputDir.resolve("scene_render.py");
-            Files.writeString(codeFile, code);
+            Files.writeString(codeFile, code, StandardCharsets.UTF_8);
 
-            // Build manim command
             List<String> cmd = buildManimCommand(codeFile, sceneName, quality, normalizedOutputDir);
             log.info("Rendering: manim {} (quality={})", sceneName, quality);
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.directory(normalizedOutputDir.toFile());
             pb.redirectErrorStream(false);
+            pb.environment().put("PYTHONUTF8", "1");
+            pb.environment().put("PYTHONIOENCODING", "utf-8");
             Process process = pb.start();
 
-            // Capture stdout and stderr
             String stdout = readStream(process.getInputStream());
             String stderr = readStream(process.getErrorStream());
 
             boolean finished = process.waitFor(RENDER_TIMEOUT_MINUTES, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
-                return new RenderAttemptResult(false, stdout, "Render timed out after " + RENDER_TIMEOUT_MINUTES + " minutes", null);
+                return new RenderAttemptResult(
+                        false,
+                        stdout,
+                        "Render timed out after " + RENDER_TIMEOUT_MINUTES + " minutes",
+                        null
+                );
             }
 
             int exitCode = process.exitValue();
@@ -85,7 +90,6 @@ public class ManimRendererService {
                 return new RenderAttemptResult(false, stdout, stderr, null);
             }
 
-            // Find output video
             String videoPath = findVideoFile(normalizedOutputDir, sceneName);
             log.info("Render successful: {}", videoPath);
             return new RenderAttemptResult(true, stdout, stderr, videoPath);
@@ -126,7 +130,6 @@ public class ManimRendererService {
     }
 
     private String findVideoFile(Path outputDir, String sceneName) {
-        // Manim outputs to media/videos/<filename>/<quality>/<sceneName>.mp4
         Path mediaDir = outputDir.resolve("media").resolve("videos");
         if (!Files.exists(mediaDir)) return null;
 
@@ -145,7 +148,7 @@ public class ManimRendererService {
 
     private String readStream(java.io.InputStream is) throws IOException {
         StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) {
                 sb.append(line).append("\n");

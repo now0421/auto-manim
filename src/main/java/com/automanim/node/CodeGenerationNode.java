@@ -27,19 +27,21 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
 
     private static final Logger log = LoggerFactory.getLogger(CodeGenerationNode.class);
     private static final Pattern SCENE_CLASS = Pattern.compile("class\\s+(\\w+)\\s*\\(.*?Scene.*?\\)");
+    private static final Pattern NON_ASCII_IDENTIFIER = Pattern.compile(
+            "(?:class|def)\\s+[^\\x00-\\x7F]+|self\\.[^\\x00-\\x7F]+|\\b[^\\x00-\\x7F_][^\\s(=:,]*");
 
     private static final String MANIM_CODE_TOOL = "["
             + "{"
             + "  \"type\": \"function\","
             + "  \"function\": {"
             + "    \"name\": \"write_manim_code\","
-            + "    \"description\": \"返回完整的 Manim Python 动画代码。\","
+            + "    \"description\": \"Return complete Manim Community Python animation code.\","
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"code\": { \"type\": \"string\", \"description\": \"完整的 Manim Python 代码\" },"
-            + "        \"scene_name\": { \"type\": \"string\", \"description\": \"主场景类名\" },"
-            + "        \"description\": { \"type\": \"string\", \"description\": \"简短说明\" }"
+            + "        \"code\": { \"type\": \"string\", \"description\": \"Complete Manim Python source code\" },"
+            + "        \"scene_name\": { \"type\": \"string\", \"description\": \"Primary scene class name in ASCII\" },"
+            + "        \"description\": { \"type\": \"string\", \"description\": \"Short summary of the animation\" }"
             + "      },"
             + "      \"required\": [\"code\"]"
             + "    }"
@@ -47,7 +49,7 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             + "}"
             + "]";
 
-    // Validation patterns for 3 mandatory rules
+    // Validation patterns for mandatory rules
     private static final Pattern RULE1_VIOLATION = Pattern.compile(
             "self\\.\\w+\\s*=\\s*(?:MathTex|Text|VGroup|Circle|Square|Line|Dot|Arrow|Axes|NumberPlane)");
     private static final Pattern RULE3_VIOLATION = Pattern.compile(
@@ -81,7 +83,9 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         String expectedSceneName = conceptToClassName(narrative.getTargetConcept());
 
         String userPrompt = narrative.getVerbosePrompt()
-                + "\n\nScene 类名：" + expectedSceneName;
+                + "\n\nScene class name: " + expectedSceneName
+                + "\nAll class names, method names, and variable names must use ASCII identifiers only."
+                + "\nDo not use Chinese, pinyin, mojibake, or any non-ASCII text in Python identifiers.";
 
         String code = null;
         String sceneName = expectedSceneName;
@@ -99,7 +103,6 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                 }
             }
 
-            // Fallback: extract from text content
             if (code == null || code.isBlank()) {
                 String textContent = JsonUtils.extractTextFromResponse(rawResponse);
                 if (textContent != null) {
@@ -110,7 +113,6 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             log.debug("  Tool calling failed, falling back to plain chat: {}", e.getMessage());
         }
 
-        // Final fallback: plain chat
         if (code == null || code.isBlank()) {
             try {
                 String response = aiClient.chat(userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM);
@@ -122,10 +124,8 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             }
         }
 
-        // Extract actual scene name from code
         sceneName = extractSceneName(code, sceneName);
 
-        // Validate and potentially fix code
         List<String> violations = validateCode(code);
         if (!violations.isEmpty()) {
             log.warn("  Code validation found {} violations, attempting AI fix", violations.size());
@@ -192,26 +192,29 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
     private List<String> validateCode(String code) {
         List<String> violations = new ArrayList<>();
         if (code == null || code.isBlank()) {
-            violations.add("代码为空");
+            violations.add("Code is empty");
             return violations;
         }
 
         if (!code.contains("from manim import")) {
-            violations.add("缺少 'from manim import' 语句");
+            violations.add("Missing 'from manim import' statement");
         }
         if (!code.contains("class ") || !code.contains("Scene")) {
-            violations.add("缺少 Scene 类定义");
+            violations.add("Missing Scene class definition");
         }
         if (!code.contains("def construct(")) {
-            violations.add("缺少 construct() 方法");
+            violations.add("Missing construct() method");
+        }
+        if (NON_ASCII_IDENTIFIER.matcher(code).find()) {
+            violations.add("Contains non-ASCII class, method, or variable identifiers");
         }
 
         if (RULE1_VIOLATION.matcher(code).find()) {
-            violations.add("规则 1 违规：通过实例属性跨场景存储 mobject");
+            violations.add("Rule 1 violation: stores mobjects on instance fields across scenes");
         }
 
         if (RULE3_VIOLATION.matcher(code).find()) {
-            violations.add("规则 3 违规：硬编码 MathTex 子对象下标");
+            violations.add("Rule 3 violation: hardcoded MathTex subobject indexing");
         }
 
         return violations;
@@ -221,9 +224,11 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         try {
             String violationList = String.join("\n- ", violations);
             String fixPrompt = String.format(
-                    "下面的代码存在校验错误：\n\n"
+                    "The following code violates validation rules:\n\n"
                     + "```python\n%s\n```\n\n"
-                    + "发现的问题：\n- %s",
+                    + "Problems found:\n- %s\n\n"
+                    + "Ensure that all class names, function names, method names, and variable names"
+                    + " use ASCII English identifiers only.",
                     code, violationList);
 
             String response = aiClient.chat(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM);

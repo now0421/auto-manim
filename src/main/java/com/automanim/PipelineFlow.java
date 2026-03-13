@@ -1,6 +1,11 @@
 package com.automanim;
 
-import com.automanim.node.*;
+import com.automanim.node.CodeGenerationNode;
+import com.automanim.node.ExplorationNode;
+import com.automanim.node.MathEnrichmentNode;
+import com.automanim.node.NarrativeNode;
+import com.automanim.node.RenderNode;
+import com.automanim.node.VisualDesignNode;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,8 +13,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Assembles the full 6-node linear pipeline:
  *
- *   ExplorationNode → MathEnrichmentNode → VisualDesignNode
- *       → NarrativeNode → CodeGenerationNode → RenderNode
+ *   ExplorationNode -> MathEnrichmentNode -> VisualDesignNode
+ *       -> NarrativeNode -> CodeGenerationNode -> RenderNode
  *
  * Each node communicates via the shared context Map using PipelineKeys constants.
  */
@@ -28,7 +33,7 @@ public class PipelineFlow {
         CodeGenerationNode codeGen = new CodeGenerationNode();
         RenderNode render = new RenderNode();
 
-        // Wire linear chain: each node's default action → next node
+        // Wire linear chain: each node's default action -> next node
         exploration.next(mathEnrich);
         mathEnrich.next(visualDesign);
         visualDesign.next(narrative);
@@ -37,12 +42,12 @@ public class PipelineFlow {
 
         PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(exploration);
 
-        log.info("Pipeline assembled: Exploration → MathEnrichment → VisualDesign → Narrative → CodeGeneration → Render");
+        log.info("Pipeline assembled: Exploration -> MathEnrichment -> VisualDesign -> Narrative -> CodeGeneration -> Render");
         return flow;
     }
 
     /**
-     * Creates a pipeline that skips rendering (exploration → enrichment → code only).
+     * Creates a pipeline that skips rendering (exploration -> enrichment -> code only).
      */
     public static PocketFlow.Flow<?> createWithoutRender() {
         ExplorationNode exploration = new ExplorationNode();
@@ -58,7 +63,7 @@ public class PipelineFlow {
 
         PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(exploration);
 
-        log.info("Pipeline assembled (no render): Exploration → MathEnrichment → VisualDesign → Narrative → CodeGeneration");
+        log.info("Pipeline assembled (no render): Exploration -> MathEnrichment -> VisualDesign -> Narrative -> CodeGeneration");
         return flow;
     }
 }

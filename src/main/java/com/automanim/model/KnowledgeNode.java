@@ -3,7 +3,11 @@ package com.automanim.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class KnowledgeNode {
@@ -84,7 +88,7 @@ public class KnowledgeNode {
     }
 
     /**
-     * Builds a child→parent map for the entire tree.
+     * Builds a child-to-parent map for the entire tree.
      * Used by VisualDesignNode to look up a node's parent for style inheritance.
      */
     public Map<KnowledgeNode, KnowledgeNode> buildParentMap() {

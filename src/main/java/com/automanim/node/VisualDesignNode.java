@@ -13,18 +13,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Stage 1b: Visual Design - adds visual specifications to each node.
  *
  * Depth levels processed root-first (depth 0, then 1, then 2, ...):
- *   - Parent node's visual spec is fully finalized before any child begins.
- *   - Children at the same depth may run in parallel since all share a
- *     completed parent spec (read-only at that point).
- *   - The parentMap (built once before processing) provides O(1) child-to-parent lookup.
+ * - Parent node's visual spec is fully finalized before any child begins.
+ * - Children at the same depth may run in parallel since all share a
+ *   completed parent spec (read-only at that point).
+ * - The parentMap (built once before processing) provides O(1) child-to-parent lookup.
  */
 public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNode, String> {
 
@@ -35,17 +42,17 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
             + "  \"type\": \"function\","
             + "  \"function\": {"
             + "    \"name\": \"write_visual_design\","
-            + "    \"description\": \"返回某个概念动画场景的视觉设计规格。\","
+            + "    \"description\": \"Return a visual design spec for a concept animation scene.\","
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"visual_description\": { \"type\": \"string\", \"description\": \"会出现哪些视觉对象或图形\" },"
-            + "        \"color_scheme\": { \"type\": \"string\", \"description\": \"颜色方案说明\" },"
-            + "        \"animation_description\": { \"type\": \"string\", \"description\": \"视觉效果与转场（可选）\" },"
-            + "        \"transitions\": { \"type\": \"string\", \"description\": \"场景切换方式（可选）\" },"
-            + "        \"duration\": { \"type\": \"number\", \"description\": \"时长，单位秒\" },"
-            + "        \"layout\": { \"type\": \"string\", \"description\": \"16:9 画布中的空间布局\" },"
-            + "        \"color_palette\": { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"description\": \"Manim 颜色名称\" }"
+            + "        \"visual_description\": { \"type\": \"string\", \"description\": \"Main visual objects and shapes\" },"
+            + "        \"color_scheme\": { \"type\": \"string\", \"description\": \"Color scheme summary\" },"
+            + "        \"animation_description\": { \"type\": \"string\", \"description\": \"Animation feel and transitions\" },"
+            + "        \"transitions\": { \"type\": \"string\", \"description\": \"Scene transition style\" },"
+            + "        \"duration\": { \"type\": \"number\", \"description\": \"Duration in seconds\" },"
+            + "        \"layout\": { \"type\": \"string\", \"description\": \"Concrete 16:9 canvas layout\" },"
+            + "        \"color_palette\": { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"description\": \"Preferred Manim color names\" }"
             + "      },"
             + "      \"required\": [\"visual_description\", \"color_scheme\", \"layout\"]"
             + "    }"
@@ -105,8 +112,11 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
                         futures.add(executor.submit(() -> designNode(node)));
                     }
                     for (Future<?> f : futures) {
-                        try { f.get(); }
-                        catch (Exception e) { log.warn("  Parallel visual design error: {}", e.getMessage()); }
+                        try {
+                            f.get();
+                        } catch (Exception e) {
+                            log.warn("  Parallel visual design error: {}", e.getMessage());
+                        }
                     }
                 } else {
                     for (KnowledgeNode node : nodes) {
@@ -142,18 +152,18 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
             return;
         }
 
-        String equationsInfo = node.getEquations() != null
-                ? String.join(", ", node.getEquations()) : "无";
+        String equationsInfo = node.getEquations() != null && !node.getEquations().isEmpty()
+                ? String.join(", ", node.getEquations()) : "none";
 
         String parentSpecContext = buildParentSpecContext(node);
 
         String paletteContext = globalColorPalette.isEmpty()
-                ? "当前还没有分配任何颜色。"
-                : "已使用的颜色有：" + String.join(", ", globalColorPalette)
-                  + "。请优先使用互补色或对比色。";
+                ? "No colors have been assigned yet."
+                : "Colors already used: " + String.join(", ", globalColorPalette)
+                  + ". Prefer harmonious contrast and avoid unnecessary repetition.";
 
         String userPrompt = String.format(
-                "概念：%s\n深度：%d\n是否基础：%s\n相关公式：%s\n\n%s\n%s",
+                "Concept: %s\nDepth: %d\nFoundation concept: %s\nRelevant equations: %s\n\n%s\n%s",
                 node.getConcept(), node.getDepth(), node.isFoundation(),
                 equationsInfo, parentSpecContext, paletteContext);
 
@@ -195,33 +205,35 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeNode, KnowledgeNo
     private String buildParentSpecContext(KnowledgeNode node) {
         KnowledgeNode parent = parentMap.get(node);
         if (parent == null) {
-            return "这是根概念，请建立整个动画的总体视觉主题。";
+            return "This is the root concept. Establish the overall visual theme for the animation.";
         }
 
         Map<String, Object> parentSpec = parent.getVisualSpec();
         if (parentSpec == null || parentSpec.isEmpty()) {
-            return String.format("父概念：%s（目前还没有视觉规格）。", parent.getConcept());
+            return String.format("Parent concept: %s (no visual spec available yet).", parent.getConcept());
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("父概念：%s\n", parent.getConcept()));
-        sb.append("请继承父概念的视觉一致性：\n");
+        sb.append(String.format("Parent concept: %s%n", parent.getConcept()));
+        sb.append("Maintain visual continuity with the parent concept:\n");
         if (parentSpec.containsKey("color_scheme")) {
-            sb.append("  配色：").append(parentSpec.get("color_scheme")).append("\n");
+            sb.append("  Color scheme: ").append(parentSpec.get("color_scheme")).append("\n");
         }
         if (parentSpec.containsKey("layout")) {
-            sb.append("  布局风格：").append(parentSpec.get("layout")).append("\n");
+            sb.append("  Layout style: ").append(parentSpec.get("layout")).append("\n");
         }
         if (parentSpec.containsKey("visual_description")) {
-            sb.append("  视觉风格：").append(parentSpec.get("visual_description")).append("\n");
+            sb.append("  Visual style: ").append(parentSpec.get("visual_description")).append("\n");
         }
-        sb.append("请与父概念保持一致的风格、色彩体系、节奏和视觉密度。");
+        sb.append("Keep the style, palette, rhythm, and visual density consistent with the parent.");
         return sb.toString();
     }
 
     private void applyVisualSpec(KnowledgeNode node, JsonNode data) {
         Map<String, Object> visualSpec = node.getVisualSpec();
-        if (visualSpec == null) { visualSpec = new LinkedHashMap<>(); }
+        if (visualSpec == null) {
+            visualSpec = new LinkedHashMap<>();
+        }
 
         Iterator<Map.Entry<String, JsonNode>> fields = data.fields();
         while (fields.hasNext()) {

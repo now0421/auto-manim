@@ -15,17 +15,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
- * Stage 3: Code Rendering — renders Manim code to video with automatic
+ * Stage 3: Code Rendering - renders Manim code to video with automatic
  * error-driven retry.
  */
 public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderResult, String> {
 
     private static final Logger log = LoggerFactory.getLogger(RenderNode.class);
     private static final int MAX_TRACEBACK_LINES = 30;
+    private static final int TRACEBACK_CONTEXT_RADIUS = 4;
+    private static final int MAX_STDOUT_ERROR_LINES = 12;
+    private static final String TRACEBACK_MARKER = "Traceback (most recent call last)";
+    private static final String GENERATED_SCENE_FILE = "scene_render.py";
 
     // Error patterns that indicate non-code (environment) errors
     private static final List<Pattern> NON_CODE_ERROR_PATTERNS = Arrays.asList(
@@ -46,7 +54,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
     private AiClient aiClient;
 
     public RenderNode() {
-        super(1, 0); // no PocketFlow retry — we handle retry internally
+        super(1, 0); // no PocketFlow retry - we handle retry internally
     }
 
     /**
@@ -127,7 +135,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                 return result;
             }
 
-            lastError = renderResult.stderr();
+            lastError = combineErrorStreams(renderResult.stdout(), renderResult.stderr());
             log.warn("  Render failed (attempt {}): {}", attempts,
                     lastError.length() > 200 ? lastError.substring(0, 200) + "..." : lastError);
 
@@ -140,7 +148,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                 break;
             }
 
-            String focusedError = extractTraceback(lastError);
+            String focusedError = extractFocusedError(renderResult);
 
             String errorSignature = focusedError.length() > 200
                     ? focusedError.substring(0, 200) : focusedError;
@@ -152,6 +160,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
             // AI fix
             try {
+                log.info("  Error output sent to LLM:\n{}", focusedError);
                 String fixPrompt = PromptTemplates.renderFixUserPrompt(currentCode, focusedError);
                 String fixResponse = aiClient.chat(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM);
                 toolCalls++;
@@ -210,35 +219,133 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         return true;
     }
 
+    private String extractFocusedError(RenderAttemptResult renderResult) {
+        String stdoutSummary = extractStdoutErrors(renderResult.stdout());
+        String tracebackSummary = extractTraceback(renderResult.stderr());
+
+        List<String> sections = new ArrayList<>();
+        if (!stdoutSummary.isBlank()) {
+            sections.add("=== stdout highlights ===\n" + stdoutSummary);
+        }
+        if (!tracebackSummary.isBlank()) {
+            sections.add("=== stderr traceback ===\n" + tracebackSummary);
+        }
+
+        if (!sections.isEmpty()) {
+            return String.join("\n\n", sections);
+        }
+
+        return tailLines(combineErrorStreams(renderResult.stdout(), renderResult.stderr()), MAX_TRACEBACK_LINES);
+    }
+
+    private String combineErrorStreams(String stdout, String stderr) {
+        List<String> sections = new ArrayList<>();
+        if (stdout != null && !stdout.isBlank()) {
+            sections.add("[stdout]\n" + stdout.strip());
+        }
+        if (stderr != null && !stderr.isBlank()) {
+            sections.add("[stderr]\n" + stderr.strip());
+        }
+        return String.join("\n\n", sections);
+    }
+
     private String extractTraceback(String stderr) {
         if (stderr == null || stderr.isBlank()) return "";
 
-        // Find the last "Traceback" occurrence for the most relevant error
-        int tbStart = stderr.lastIndexOf("Traceback (most recent call last)");
+        int tbStart = stderr.lastIndexOf(TRACEBACK_MARKER);
         if (tbStart < 0) {
-            // No traceback found — return last MAX_TRACEBACK_LINES lines
-            String[] lines = stderr.split("\n");
-            if (lines.length <= MAX_TRACEBACK_LINES) return stderr;
-            StringBuilder sb = new StringBuilder();
-            for (int i = lines.length - MAX_TRACEBACK_LINES; i < lines.length; i++) {
-                sb.append(lines[i]).append("\n");
+            return tailLines(stderr, MAX_TRACEBACK_LINES);
+        }
+
+        List<String> lines = Arrays.asList(stderr.substring(tbStart).split("\\R"));
+        if (lines.size() <= MAX_TRACEBACK_LINES) {
+            return String.join("\n", lines).strip();
+        }
+
+        TreeSet<Integer> selected = new TreeSet<>();
+        selected.add(0);
+
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains(GENERATED_SCENE_FILE)) {
+                addWindow(selected, i, lines.size(), TRACEBACK_CONTEXT_RADIUS, TRACEBACK_CONTEXT_RADIUS + 2);
             }
-            return sb.toString();
         }
 
-        String traceback = stderr.substring(tbStart);
-        String[] lines = traceback.split("\n");
-        if (lines.length <= MAX_TRACEBACK_LINES) return traceback;
+        for (int i = Math.max(0, lines.size() - 4); i < lines.size(); i++) {
+            selected.add(i);
+        }
 
-        // Truncate: keep first few lines and last lines for context
+        if (selected.size() <= 1) {
+            return tailLines(String.join("\n", lines), MAX_TRACEBACK_LINES);
+        }
+
+        return joinSelectedLines(lines, selected);
+    }
+
+    private String extractStdoutErrors(String stdout) {
+        if (stdout == null || stdout.isBlank()) return "";
+
+        List<String> lines = Arrays.asList(stdout.split("\\R"));
+        TreeSet<Integer> selected = new TreeSet<>();
+
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (line.matches(".*(?i)(\\bERROR\\b|exception|traceback|not in the script|latex compilation error|context of error).*")) {
+                addWindow(selected, i, lines.size(), 1, 3);
+            }
+        }
+
+        if (selected.isEmpty()) {
+            return "";
+        }
+
+        List<String> picked = new ArrayList<>();
+        for (Integer index : selected) {
+            String line = lines.get(index);
+            if (line.contains("%|") || line.trim().startsWith("Animation ")) {
+                continue;
+            }
+            picked.add(line);
+            if (picked.size() >= MAX_STDOUT_ERROR_LINES) {
+                break;
+            }
+        }
+        return String.join("\n", picked).strip();
+    }
+
+    private void addWindow(TreeSet<Integer> selected, int center, int lineCount, int before, int after) {
+        int start = Math.max(0, center - before);
+        int end = Math.min(lineCount - 1, center + after);
+        for (int i = start; i <= end; i++) {
+            selected.add(i);
+        }
+    }
+
+    private String joinSelectedLines(List<String> lines, TreeSet<Integer> selected) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 5; i++) {
+        int previous = -2;
+        for (Integer index : selected) {
+            if (previous >= 0 && index > previous + 1) {
+                sb.append("...\n");
+            }
+            sb.append(lines.get(index)).append("\n");
+            previous = index;
+        }
+        return sb.toString().strip();
+    }
+
+    private String tailLines(String text, int maxLines) {
+        if (text == null || text.isBlank()) return "";
+
+        String[] lines = text.split("\\R");
+        if (lines.length <= maxLines) {
+            return text.strip();
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = lines.length - maxLines; i < lines.length; i++) {
             sb.append(lines[i]).append("\n");
         }
-        sb.append("  ... (").append(lines.length - MAX_TRACEBACK_LINES).append(" lines truncated) ...\n");
-        for (int i = lines.length - (MAX_TRACEBACK_LINES - 5); i < lines.length; i++) {
-            sb.append(lines[i]).append("\n");
-        }
-        return sb.toString();
+        return sb.toString().strip();
     }
 }

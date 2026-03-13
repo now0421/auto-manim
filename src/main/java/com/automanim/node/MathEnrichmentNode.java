@@ -11,12 +11,19 @@ import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Stage 1a: Mathematical Enrichment — adds equations and definitions to each
+ * Stage 1a: Mathematical Enrichment - adds equations and definitions to each
  * node in the knowledge tree.
  *
  * Nodes at the same depth level are enriched in parallel (deepest-first).
@@ -31,14 +38,14 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
             + "  \"type\": \"function\","
             + "  \"function\": {"
             + "    \"name\": \"write_mathematical_content\","
-            + "    \"description\": \"返回某个概念对应的数学内容。\","
+            + "    \"description\": \"Return mathematical content for a concept.\","
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"equations\": { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"description\": \"LaTeX 公式字符串\" },"
-            + "        \"definitions\": { \"type\": \"object\", \"additionalProperties\": { \"type\": \"string\" }, \"description\": \"符号到含义的映射\" },"
-            + "        \"interpretation\": { \"type\": \"string\", \"description\": \"简短解释（可选，若概念显然则省略）\" },"
-            + "        \"examples\": { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"description\": \"示例（可选，仅在确实有帮助时提供）\" }"
+            + "        \"equations\": { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"description\": \"LaTeX equations\" },"
+            + "        \"definitions\": { \"type\": \"object\", \"additionalProperties\": { \"type\": \"string\" }, \"description\": \"Symbol-to-meaning map\" },"
+            + "        \"interpretation\": { \"type\": \"string\", \"description\": \"Short explanation when useful\" },"
+            + "        \"examples\": { \"type\": \"array\", \"items\": { \"type\": \"string\" }, \"description\": \"Optional examples when useful\" }"
             + "      },"
             + "      \"required\": [\"equations\", \"definitions\"]"
             + "    }"
@@ -92,8 +99,11 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
                         futures.add(executor.submit(() -> enrichNode(node)));
                     }
                     for (Future<?> f : futures) {
-                        try { f.get(); }
-                        catch (Exception e) { log.warn("  Parallel math enrichment error: {}", e.getMessage()); }
+                        try {
+                            f.get();
+                        } catch (Exception e) {
+                            log.warn("  Parallel math enrichment error: {}", e.getMessage());
+                        }
                     }
                 } else {
                     for (KnowledgeNode node : nodes) {
@@ -131,9 +141,9 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
             return;
         }
 
-        String complexity = node.isFoundation() ? "初中层级" : "高年级本科层级";
+        String complexity = node.isFoundation() ? "middle-school level" : "upper-undergraduate level";
         String userPrompt = String.format(
-                "概念：%s\n深度：%d\n复杂度目标：%s",
+                "Concept: %s\nDepth: %d\nTarget complexity: %s",
                 node.getConcept(), node.getDepth(), complexity);
 
         try {
@@ -169,7 +179,9 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
     private void applyContent(KnowledgeNode node, JsonNode data) {
         if (data.has("equations")) {
             List<String> equations = new ArrayList<>();
-            for (JsonNode eq : data.get("equations")) { equations.add(eq.asText()); }
+            for (JsonNode eq : data.get("equations")) {
+                equations.add(eq.asText());
+            }
             node.setEquations(equations);
         }
         if (data.has("definitions")) {
@@ -183,7 +195,9 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeNode, Knowledge
         }
         if (data.has("examples")) {
             List<String> examples = new ArrayList<>();
-            for (JsonNode ex : data.get("examples")) { examples.add(ex.asText()); }
+            for (JsonNode ex : data.get("examples")) {
+                examples.add(ex.asText());
+            }
             node.setExamples(examples);
         }
     }

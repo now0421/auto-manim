@@ -17,8 +17,8 @@ import java.time.Duration;
  * Google Gemini AI client using the Generative Language REST API.
  *
  * Reads configuration from environment variables:
- *   GEMINI_API_KEY — API key
- *   GEMINI_MODEL — model name (default: gemini-2.0-flash)
+ *   GEMINI_API_KEY - API key
+ *   GEMINI_MODEL - model name (default: gemini-2.0-flash)
  */
 public class GeminiAiClient implements AiClient {
 

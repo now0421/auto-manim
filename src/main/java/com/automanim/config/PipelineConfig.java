@@ -2,7 +2,7 @@ package com.automanim.config;
 
 /**
  * Central configuration for the pipeline.
- * Immutable after construction — use the builder for clarity.
+ * Immutable after construction; use the builder for clarity.
  */
 public class PipelineConfig {
 
@@ -24,7 +24,7 @@ public class PipelineConfig {
     private final int renderMaxRetries;
 
     // AI
-    private final String aiProvider;       // "kimi" or "gemini"
+    private final String aiProvider;      // "kimi" or "gemini"
 
     private PipelineConfig(Builder b) {
         this.maxDepth = b.maxDepth;

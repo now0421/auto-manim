@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -109,7 +110,7 @@ public class FileOutputService {
 
     private static void writeText(Path path, String text, String description) {
         try {
-            Files.writeString(path, text != null ? text : "");
+            Files.writeString(path, text != null ? text : "", StandardCharsets.UTF_8);
             log.info("[Save] {} -> {}", description, path.getFileName());
         } catch (IOException e) {
             log.error("Failed to write {}: {}", description, e.getMessage());
