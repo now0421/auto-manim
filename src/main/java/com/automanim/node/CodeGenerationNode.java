@@ -165,7 +165,7 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                     }
 
                     if (code == null || code.isBlank()) {
-                        String textContent = JsonUtils.extractTextFromResponse(rawResponse);
+                        String textContent = JsonUtils.extractBestEffortTextFromResponse(rawResponse);
                         if (textContent != null) {
                             code = JsonUtils.extractCodeBlock(textContent);
                         }

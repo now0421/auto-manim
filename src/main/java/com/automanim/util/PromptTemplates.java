@@ -34,7 +34,14 @@ public final class PromptTemplates {
             + "6. Bias toward no when uncertain.\n"
             + "\n"
             + "If tools are available, call them.\n"
-            + "Otherwise reply with only yes or no.";
+            + "Otherwise return only a JSON object with the same shape as the tool output.\n"
+            + "- Required field: \"is_foundation\" (boolean)\n"
+            + "- Optional field: \"reason\" (short string)\n"
+            + "- Do not return yes/no prose, markdown, or any extra text outside the JSON object.\n"
+            + "\n"
+            + "Example output:\n"
+            + "{\"is_foundation\": false, \"reason\": \"The concept still bundles multiple"
+            + " sub-ideas and should be decomposed before it becomes a leaf scene.\"}";
 
     public static final String PREREQUISITES_SYSTEM =
             "You are a curriculum design expert building a prerequisite DAG for a Manim"
@@ -83,7 +90,11 @@ public final class PromptTemplates {
             + "Choose concept when the input names a topic or formula to introduce.\n"
             + "\n"
             + "If tools are available, call them.\n"
-            + "Otherwise reply with only one word: concept or problem.";
+            + "Otherwise reply with only one word: concept or problem.\n"
+            + "\n"
+            + "Example tool output:\n"
+            + "{\"input_mode\": \"problem\", \"reason\": \"The input is a concrete optimization"
+            + " problem with givens and a target to solve.\"}";
 
     public static final String PROBLEM_STEP_GRAPH_SYSTEM =
             "You are a mathematical problem-solving planner preparing a Manim animation workflow.\n"
@@ -129,7 +140,9 @@ public final class PromptTemplates {
             + "}\n"
             + "\n"
             + "The edge direction: node -> direct dependencies needed before it.\n"
-            + "If tools are available, call them.";
+            + "If tools are available, call them.\n"
+            + "\n"
+            + "Example output must follow the same shape exactly.";
 
     // =====================================================================
     // Stage 1a: Mathematical Enrichment
@@ -154,7 +167,15 @@ public final class PromptTemplates {
             + "- \"interpretation\": short explanation when useful\n"
             + "- \"examples\": optional examples when useful\n"
             + "\n"
-            + "Do not pad the response. Simple concepts should get concise output.";
+            + "Do not pad the response. Simple concepts should get concise output.\n"
+            + "\n"
+            + "Example output:\n"
+            + "{\n"
+            + "  \"equations\": [\"a^2 + b^2 = c^2\"],\n"
+            + "  \"definitions\": {\"c\": \"the hypotenuse of a right triangle\"},\n"
+            + "  \"interpretation\": \"The theorem links the two legs to the hypotenuse.\",\n"
+            + "  \"examples\": [\"For a 3-4-5 triangle, 3^2 + 4^2 = 5^2.\"]\n"
+            + "}";
 
     // =====================================================================
     // Stage 1b: Visual Design
@@ -182,7 +203,21 @@ public final class PromptTemplates {
             + "- \"duration\" when useful\n"
             + "- \"color_palette\" as an optional array of Manim color names\n"
             + "\n"
-            + "Do not add optional fields unless they are genuinely useful.";
+            + "Do not add optional fields unless they are genuinely useful.\n"
+            + "\n"
+            + "Example output:\n"
+            + "{\n"
+            + "  \"visual_description\": \"Show a centered triangle with the hypotenuse highlighted"
+            + " and a small formula block in the upper-right corner.\",\n"
+            + "  \"color_scheme\": \"Use BLUE for the main shape, YELLOW for the highlighted side,"
+            + " and WHITE for labels.\",\n"
+            + "  \"layout\": \"Keep the triangle centered, place labels close to each vertex,"
+            + " and keep the formula in the upper-right safe area.\",\n"
+            + "  \"animation_description\": \"Draw the triangle first, then pulse the highlighted"
+            + " side before writing the formula.\",\n"
+            + "  \"duration\": 8,\n"
+            + "  \"color_palette\": [\"BLUE\", \"YELLOW\", \"WHITE\"]\n"
+            + "}";
 
     // =====================================================================
     // Stage 1c: Narrative Composition
@@ -227,6 +262,57 @@ public final class PromptTemplates {
             + "        }\n"
             + "      ],\n"
             + "      \"notes_for_codegen\": [\"continuity note\", \"layout note\"]\n"
+            + "    }\n"
+            + "  ]\n"
+            + "}\n"
+            + "\n"
+            + "Example output:\n"
+            + "{\n"
+            + "  \"hook\": \"Start with one concrete question about the diagram.\",\n"
+            + "  \"summary\": \"Move from setup to key observation to final conclusion.\",\n"
+            + "  \"continuity_plan\": \"Keep one stable diagram and update only the necessary"
+            + " labels, highlights, and formulas.\",\n"
+            + "  \"global_visual_rules\": [\n"
+            + "    \"Keep the main geometry near the center.\",\n"
+            + "    \"Keep formulas near a corner instead of covering the diagram.\"\n"
+            + "  ],\n"
+            + "  \"scenes\": [\n"
+            + "    {\n"
+            + "      \"scene_id\": \"scene_1\",\n"
+            + "      \"title\": \"Set Up The Figure\",\n"
+            + "      \"goal\": \"Introduce the main objects and the question.\",\n"
+            + "      \"narration\": \"Draw the base figure and state what we want to prove.\",\n"
+            + "      \"duration_seconds\": 8,\n"
+            + "      \"camera_anchor\": \"center\",\n"
+            + "      \"layout_goal\": \"Keep the diagram centered and reserve the upper-right"
+            + " corner for one short formula.\",\n"
+            + "      \"safe_area_plan\": \"Keep the diagram inside the central safe area and leave"
+            + " a one-unit margin from all edges.\",\n"
+            + "      \"concept_refs\": [\"original problem statement\"],\n"
+            + "      \"entering_objects\": [\n"
+            + "        {\n"
+            + "          \"id\": \"triangle_main\",\n"
+            + "          \"kind\": \"geometry\",\n"
+            + "          \"content\": \"main triangle\",\n"
+            + "          \"placement\": \"center\",\n"
+            + "          \"style\": \"blue outline\",\n"
+            + "          \"source_node\": \"problem\"\n"
+            + "        }\n"
+            + "      ],\n"
+            + "      \"persistent_objects\": [\"triangle_main\"],\n"
+            + "      \"exiting_objects\": [],\n"
+            + "      \"actions\": [\n"
+            + "        {\n"
+            + "          \"order\": 1,\n"
+            + "          \"type\": \"create\",\n"
+            + "          \"targets\": [\"triangle_main\"],\n"
+            + "          \"description\": \"Draw the main triangle and pause briefly for orientation.\"\n"
+            + "        }\n"
+            + "      ],\n"
+            + "      \"notes_for_codegen\": [\n"
+            + "        \"Keep labels close to vertices.\",\n"
+            + "        \"Do not cover the triangle with text.\"\n"
+            + "      ]\n"
             + "    }\n"
             + "  ]\n"
             + "}\n";

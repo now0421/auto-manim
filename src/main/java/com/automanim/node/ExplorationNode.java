@@ -859,10 +859,16 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         String normalized = input == null ? "" : input.trim().toLowerCase(Locale.ROOT);
         int wordCount = normalized.isBlank() ? 0 : normalized.split("\\s+").length;
         boolean looksLikeProblem = normalized.contains("?")
+                || normalized.contains("problem")
                 || normalized.contains("prove")
                 || normalized.contains("show that")
+                || normalized.contains("solve")
                 || normalized.contains("find")
                 || normalized.contains("determine")
+                || normalized.contains("minimize")
+                || normalized.contains("maximize")
+                || normalized.contains("minimum")
+                || normalized.contains("maximum")
                 || normalized.contains("given")
                 || normalized.contains("let ")
                 || wordCount > 12;
@@ -905,9 +911,36 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         }
 
         String normalized = response == null ? "" : response.trim().toLowerCase(Locale.ROOT);
-        String inputModeValue = normalized.startsWith(WorkflowConfig.INPUT_MODE_PROBLEM)
-                ? WorkflowConfig.INPUT_MODE_PROBLEM
-                : WorkflowConfig.INPUT_MODE_CONCEPT;
+        boolean mentionsProblem = normalized.startsWith(WorkflowConfig.INPUT_MODE_PROBLEM)
+                || normalized.contains("\"problem\"")
+                || normalized.contains("'problem'")
+                || normalized.contains("mode: problem")
+                || normalized.contains("mode is problem")
+                || normalized.contains("classified as problem")
+                || normalized.contains("classification: problem")
+                || normalized.contains("this is a problem")
+                || normalized.contains("it is a problem")
+                || (normalized.contains(" problem ") && !normalized.contains("not a problem"));
+        boolean mentionsConcept = normalized.startsWith(WorkflowConfig.INPUT_MODE_CONCEPT)
+                || normalized.contains("\"concept\"")
+                || normalized.contains("'concept'")
+                || normalized.contains("mode: concept")
+                || normalized.contains("mode is concept")
+                || normalized.contains("classified as concept")
+                || normalized.contains("classification: concept")
+                || normalized.contains("this is a concept")
+                || normalized.contains("it is a concept")
+                || (normalized.contains(" concept ") && !normalized.contains("not a concept"));
+
+        String inputModeValue;
+        if (mentionsProblem && !mentionsConcept) {
+            inputModeValue = WorkflowConfig.INPUT_MODE_PROBLEM;
+        } else if (mentionsConcept && !mentionsProblem) {
+            inputModeValue = WorkflowConfig.INPUT_MODE_CONCEPT;
+        } else {
+            inputModeValue = classifyInputModeHeuristically(response);
+        }
+
         ObjectNode payload = JsonUtils.mapper().createObjectNode();
         payload.put("input_mode", inputModeValue);
         return payload;
@@ -937,9 +970,11 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     }
 
     private JsonNode tryParseJsonObject(String response) {
+        if (response == null || !response.contains("{")) {
+            return null;
+        }
         String candidate = JsonUtils.extractJsonObject(response);
-        if ("{}".equals(candidate)
-                && (response == null || !response.contains("{"))) {
+        if ("{}".equals(candidate)) {
             return null;
         }
         return JsonUtils.parseTree(candidate);

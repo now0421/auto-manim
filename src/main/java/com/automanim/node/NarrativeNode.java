@@ -143,15 +143,15 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                 .thenApply(rawResponse -> {
                     toolCalls++;
                     JsonNode toolData = JsonUtils.extractToolCallPayload(rawResponse);
+                    String responseText = JsonUtils.extractBestEffortTextFromResponse(rawResponse);
                     NarrativeDraft fromTool = buildNarrativeDraft(
-                            toolData, JsonUtils.extractTextFromResponse(rawResponse),
+                            toolData, responseText,
                             defaultSceneCount, defaultTotalDuration);
                     if (fromTool != null && fromTool.hasContent()) {
                         return fromTool;
                     }
 
-                    String text = JsonUtils.extractTextFromResponse(rawResponse);
-                    return buildNarrativeDraft(null, text, defaultSceneCount, defaultTotalDuration);
+                    return buildNarrativeDraft(null, responseText, defaultSceneCount, defaultTotalDuration);
                 })
                 .exceptionally(error -> {
                     Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);

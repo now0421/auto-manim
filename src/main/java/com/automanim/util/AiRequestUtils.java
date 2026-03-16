@@ -44,7 +44,7 @@ public final class AiRequestUtils {
         return aiClient.chatWithToolsRawAsync(userPrompt, systemPrompt, toolsJson)
                 .thenApply(rawResponse -> {
                     onApiCall.run();
-                    return extractJsonObject(rawResponse);
+                    return extractJsonObject(rawResponse, plainTextParser);
                 })
                 .exceptionally(error -> {
                     Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
@@ -111,7 +111,7 @@ public final class AiRequestUtils {
         return aiClient.chatWithToolsRawAsync(snapshot, toolsJson)
                 .thenApply(rawResponse -> {
                     onApiCall.run();
-                    JsonNode data = extractJsonObject(rawResponse);
+                    JsonNode data = extractJsonObject(rawResponse, plainTextParser);
                     if (data != null) {
                         String assistantText = JsonUtils.buildToolCallTranscript(rawResponse);
                         if (assistantText == null || assistantText.isBlank()) {
@@ -154,18 +154,30 @@ public final class AiRequestUtils {
                 });
     }
 
-    private static JsonNode extractJsonObject(JsonNode rawResponse) {
+    private static JsonNode extractJsonObject(JsonNode rawResponse,
+                                              Function<String, JsonNode> plainTextParser) {
         JsonNode data = JsonUtils.extractToolCallPayload(rawResponse);
-        if (data != null) {
+        if (isUsablePayload(data)) {
             return data;
         }
 
-        String textContent = JsonUtils.extractTextFromResponse(rawResponse);
+        String textContent = JsonUtils.extractBestEffortTextFromResponse(rawResponse);
         if (textContent != null && !textContent.isBlank()) {
-            return JsonUtils.parseTree(JsonUtils.extractJsonObject(textContent));
+            JsonNode parsed = parsePlainTextResponse(textContent, plainTextParser);
+            return isUsablePayload(parsed) ? parsed : null;
         }
 
         return null;
+    }
+
+    private static boolean isUsablePayload(JsonNode payload) {
+        if (payload == null || payload.isNull()) {
+            return false;
+        }
+        if (payload.isObject()) {
+            return payload.size() > 0;
+        }
+        return true;
     }
 
     private static JsonNode parsePlainTextResponse(String response,
@@ -178,6 +190,9 @@ public final class AiRequestUtils {
     }
 
     private static JsonNode parsePlainTextJsonObject(String response) {
+        if (response == null || !response.contains("{")) {
+            return null;
+        }
         return JsonUtils.parseTree(JsonUtils.extractJsonObject(response));
     }
 }

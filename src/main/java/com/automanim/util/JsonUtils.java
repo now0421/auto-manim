@@ -179,6 +179,10 @@ public final class JsonUtils {
         JsonNode arguments = functionNode.get("arguments");
         if (arguments == null || arguments.isNull()) return null;
 
+        if (arguments.isObject() || arguments.isArray()) {
+            return arguments;
+        }
+
         String argsStr = arguments.asText("");
         if (argsStr.isBlank()) return null;
 
@@ -233,33 +237,98 @@ public final class JsonUtils {
     }
 
     public static String extractTextFromResponse(JsonNode response) {
-        if (response == null) return "";
+        return extractMessageFieldText(extractFirstMessage(response), "content");
+    }
 
-        JsonNode choices = response.get("choices");
-        if (choices == null || choices.isEmpty()) return "";
+    public static String extractReasoningTextFromResponse(JsonNode response) {
+        return extractMessageFieldText(extractFirstMessage(response), "reasoning_content");
+    }
 
-        JsonNode message = choices.get(0).get("message");
-        if (message == null) return "";
-
-        JsonNode content = message.get("content");
-        return (content != null && !content.isNull()) ? content.asText("") : "";
+    public static String extractBestEffortTextFromResponse(JsonNode response) {
+        String content = extractTextFromResponse(response);
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
+        return extractReasoningTextFromResponse(response);
     }
 
     // ---- Private helpers ----
 
-    private static JsonNode extractFirstToolFunction(JsonNode response) {
+    private static JsonNode extractFirstMessage(JsonNode response) {
         if (response == null) return null;
 
         JsonNode choices = response.get("choices");
         if (choices == null || choices.isEmpty()) return null;
 
-        JsonNode message = choices.get(0).get("message");
+        return choices.get(0).get("message");
+    }
+
+    private static JsonNode extractFirstToolFunction(JsonNode response) {
+        JsonNode message = extractFirstMessage(response);
         if (message == null) return null;
 
         JsonNode toolCalls = message.get("tool_calls");
         if (toolCalls == null || toolCalls.isEmpty()) return null;
 
         return toolCalls.get(0).get("function");
+    }
+
+    private static String extractMessageFieldText(JsonNode message, String fieldName) {
+        if (message == null || fieldName == null || fieldName.isBlank()) {
+            return "";
+        }
+
+        return extractTextValue(message.get(fieldName));
+    }
+
+    private static String extractTextValue(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "";
+        }
+
+        if (node.isTextual()) {
+            return node.asText("");
+        }
+
+        if (node.isArray()) {
+            StringBuilder sb = new StringBuilder();
+            for (JsonNode item : node) {
+                String value = extractTextValue(item);
+                if (value == null || value.isBlank()) {
+                    continue;
+                }
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(value.trim());
+            }
+            return sb.toString();
+        }
+
+        if (node.isObject()) {
+            String text = firstNonBlankText(
+                    extractTextValue(node.get("text")),
+                    extractTextValue(node.get("content")),
+                    extractTextValue(node.get("value")),
+                    extractTextValue(node.get("parts"))
+            );
+            return text != null ? text : "";
+        }
+
+        return "";
+    }
+
+    private static String firstNonBlankText(String... values) {
+        if (values == null) {
+            return null;
+        }
+
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static String extractFromCodeBlock(String text, String expectedStart) {

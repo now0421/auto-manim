@@ -2,6 +2,7 @@ package com.automanim.service;
 
 import com.automanim.config.ModelConfig;
 import com.automanim.util.ConcurrencyUtils;
+import com.automanim.util.JsonUtils;
 import com.automanim.util.NodeConversationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,7 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
 
     protected static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int EMPTY_RESPONSE_RETRIES = 2;
+    private static final int MAX_LOG_CHARS = 12000;
 
     private final Logger log;
     private final String clientName;
@@ -270,9 +272,10 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
                 .timeout(Duration.ofMinutes(5))
                 .build();
 
-        log.debug("{} request: model={}", clientName, modelConfig.getModel());
+        logRequest(body, url);
         return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
+                    logResponse(response);
                     if (response.statusCode() != 200) {
                         throw new CompletionException(new RuntimeException(
                                 clientName + " API returned HTTP " + response.statusCode()
@@ -324,29 +327,13 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
     }
 
     protected static String extractTextContent(JsonNode root) {
-        JsonNode choices = root.get("choices");
-        if (choices == null || choices.isEmpty()) {
-            return null;
-        }
-        JsonNode message = choices.get(0).get("message");
-        if (message == null) {
-            return null;
-        }
-        JsonNode content = message.get("content");
-        return (content != null && !content.isNull()) ? content.asText("") : null;
+        String content = JsonUtils.extractTextFromResponse(root);
+        return content == null || content.isBlank() ? null : content;
     }
 
     protected static String extractReasoningContent(JsonNode root) {
-        JsonNode choices = root.get("choices");
-        if (choices == null || choices.isEmpty()) {
-            return null;
-        }
-        JsonNode message = choices.get(0).get("message");
-        if (message == null) {
-            return null;
-        }
-        JsonNode reasoning = message.get("reasoning_content");
-        return (reasoning != null && !reasoning.isNull()) ? reasoning.asText("") : null;
+        String reasoning = JsonUtils.extractReasoningTextFromResponse(root);
+        return reasoning == null || reasoning.isBlank() ? null : reasoning;
     }
 
     protected static String requireEnv(String key) {
@@ -355,6 +342,32 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
             throw new IllegalStateException("Environment variable " + key + " is required");
         }
         return val;
+    }
+
+    private void logRequest(ObjectNode body, String url) {
+        JsonNode messages = body.get("messages");
+        JsonNode tools = body.get("tools");
+        int messageCount = messages != null && messages.isArray() ? messages.size() : 0;
+        int toolCount = tools != null && tools.isArray() ? tools.size() : 0;
+        log.debug("{} request: model={}, messages={}, tools={}, url={}",
+                clientName, modelConfig.getModel(), messageCount, toolCount, url);
+        log.debug("{} request body:\n{}", clientName, abbreviateForLog(body.toPrettyString()));
+    }
+
+    private void logResponse(HttpResponse<String> response) {
+        log.debug("{} raw response: http={}, body=\n{}",
+                clientName, response.statusCode(), abbreviateForLog(response.body()));
+    }
+
+    private String abbreviateForLog(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= MAX_LOG_CHARS) {
+            return text;
+        }
+        return text.substring(0, MAX_LOG_CHARS)
+                + "\n... [truncated " + (text.length() - MAX_LOG_CHARS) + " chars]";
     }
 
 }
