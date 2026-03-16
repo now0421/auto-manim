@@ -15,6 +15,7 @@ import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,19 +39,27 @@ public class AutoManimApplication {
     private static final Logger log = LoggerFactory.getLogger(AutoManimApplication.class);
 
     public static void main(String[] args) {
-        if (args.length < 1 || "--help".equals(args[0]) || "-h".equals(args[0])) {
+        if (args.length == 0 || "--help".equals(args[0]) || "-h".equals(args[0])) {
             printUsage();
-            System.exit(args.length < 1 ? 1 : 0);
+            System.exit(args.length == 0 ? 1 : 0);
             return;
         }
 
-        String concept = args[0];
+        // If first arg doesn't start with '-', treat it as the concept
+        String concept = null;
+        int startIndex = 0;
+        if (!args[0].startsWith("-")) {
+            concept = args[0];
+            startIndex = 1;
+        }
+
         String workflowConfigPath = null;
         String modelConfigPath = null;
         String outputDirOverride = null;
+        String fromGraphPath = null;
 
         // Parse CLI flags
-        for (int i = 1; i < args.length; i++) {
+        for (int i = startIndex; i < args.length; i++) {
             switch (args[i]) {
                 case "--workflow-config":
                     workflowConfigPath = args[++i];
@@ -61,10 +70,37 @@ public class AutoManimApplication {
                 case "--output":
                     outputDirOverride = args[++i];
                     break;
+                case "--from-graph":
+                    fromGraphPath = args[++i];
+                    break;
                 default:
                     log.warn("Unknown option: {}", args[i]);
                     break;
             }
+        }
+
+        // Load pre-built knowledge graph if --from-graph is specified
+        KnowledgeGraph preloadedGraph = null;
+        Path graphOutputDir = null;
+        if (fromGraphPath != null) {
+            Path graphFile = resolveGraphPath(fromGraphPath);
+            if (!Files.exists(graphFile)) {
+                log.error("Knowledge graph file not found: {}", graphFile);
+                System.exit(1);
+                return;
+            }
+            preloadedGraph = FileOutputService.loadKnowledgeGraph(graphFile);
+            graphOutputDir = graphFile.toAbsolutePath().getParent();
+            if (concept == null) {
+                concept = preloadedGraph.getTargetConcept();
+            }
+        }
+
+        if (concept == null) {
+            log.error("No concept provided. Specify a concept as the first argument or use --from-graph.");
+            printUsage();
+            System.exit(1);
+            return;
         }
 
         WorkflowConfig config = ConfigLoader.load(workflowConfigPath, modelConfigPath);
@@ -72,9 +108,12 @@ public class AutoManimApplication {
         // Create AI client
         AiClient aiClient = createAiClient(config);
 
-        // Create output directory
+        // Determine output directory
         Path outputDir;
-        if (outputDirOverride != null) {
+        if (preloadedGraph != null) {
+            // Always write outputs alongside the supplied graph
+            outputDir = graphOutputDir;
+        } else if (outputDirOverride != null) {
             outputDir = Path.of(outputDirOverride);
         } else {
             outputDir = FileOutputService.createOutputDir(Path.of("output"), concept);
@@ -83,6 +122,9 @@ public class AutoManimApplication {
         log.info("============================================================");
         log.info("  Auto-Manim Workflow");
         log.info("  Concept:  {}", concept);
+        if (preloadedGraph != null) {
+            log.info("  Stage 0:  [skipped – loaded from {}]", fromGraphPath);
+        }
         log.info("  Mode:     {}", config.getInputMode());
         log.info("  Model:    {}", config.getModel());
         log.info("  Provider: {}", config.getModelConfig().resolveProvider());
@@ -97,9 +139,18 @@ public class AutoManimApplication {
         ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
         ctx.put(WorkflowKeys.OUTPUT_DIR, outputDir);
 
+        if (preloadedGraph != null) {
+            ctx.put(WorkflowKeys.KNOWLEDGE_GRAPH, preloadedGraph);
+            ctx.put(WorkflowKeys.EXPLORATION_API_CALLS, 0);
+        }
+
         // Create and run workflow
         PocketFlow.Flow<?> flow;
-        if (config.isRenderEnabled()) {
+        if (preloadedGraph != null) {
+            flow = config.isRenderEnabled()
+                    ? WorkflowFlow.createFromGraph()
+                    : WorkflowFlow.createFromGraphWithoutRender();
+        } else if (config.isRenderEnabled()) {
             flow = WorkflowFlow.create();
         } else {
             flow = WorkflowFlow.createWithoutRender();
@@ -211,14 +262,28 @@ public class AutoManimApplication {
         return (s / 60) + "m " + (s % 60) + "s";
     }
 
+    private static Path resolveGraphPath(String fromGraphPath) {
+        Path p = Path.of(fromGraphPath);
+        if (Files.isDirectory(p)) {
+            return p.resolve("1_knowledge_graph.json");
+        }
+        return p;
+    }
+
     private static void printUsage() {
         System.out.println(
-                "Usage: auto-manim <concept> [options]\n"
+                "Usage: auto-manim [concept] [options]\n"
+                + "\n"
+                + "Arguments:\n"
+                + "  concept                    Concept or problem to animate (required unless --from-graph is used)\n"
                 + "\n"
                 + "Options:\n"
+                + "  --from-graph FILE|DIR      Skip stage 0: load a pre-built knowledge graph\n"
+                + "                             (accepts 1_knowledge_graph.json or its parent directory).\n"
+                + "                             Outputs are written to the same directory as the graph.\n"
                 + "  --workflow-config FILE     Workflow JSON config path\n"
                 + "  --model-config FILE        Model JSON config path\n"
-                + "  --output DIR               Output directory\n"
+                + "  --output DIR               Output directory (ignored when --from-graph is used)\n"
                 + "  -h, --help                 Show this help\n"
                 + "\n"
                 + "Environment variables:\n"

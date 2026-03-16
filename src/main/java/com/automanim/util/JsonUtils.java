@@ -173,18 +173,7 @@ public final class JsonUtils {
     }
 
     public static JsonNode extractToolCallPayload(JsonNode response) {
-        if (response == null) return null;
-
-        JsonNode choices = response.get("choices");
-        if (choices == null || choices.isEmpty()) return null;
-
-        JsonNode message = choices.get(0).get("message");
-        if (message == null) return null;
-
-        JsonNode toolCalls = message.get("tool_calls");
-        if (toolCalls == null || toolCalls.isEmpty()) return null;
-
-        JsonNode functionNode = toolCalls.get(0).get("function");
+        JsonNode functionNode = extractFirstToolFunction(response);
         if (functionNode == null) return null;
 
         JsonNode arguments = functionNode.get("arguments");
@@ -201,6 +190,48 @@ public final class JsonUtils {
         }
     }
 
+    public static String extractToolCallName(JsonNode response) {
+        JsonNode functionNode = extractFirstToolFunction(response);
+        if (functionNode == null) {
+            return "";
+        }
+
+        JsonNode name = functionNode.get("name");
+        return name != null && !name.isNull() ? name.asText("") : "";
+    }
+
+    public static String buildToolCallTranscript(JsonNode response) {
+        String toolName = extractToolCallName(response);
+        JsonNode payload = extractToolCallPayload(response);
+        String textContent = extractTextFromResponse(response);
+
+        if ((toolName == null || toolName.isBlank())
+                && payload == null
+                && (textContent == null || textContent.isBlank())) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("[tool_call]").append("\n");
+
+        if (toolName != null && !toolName.isBlank()) {
+            sb.append("name: ").append(toolName).append("\n");
+        }
+
+        if (payload != null) {
+            sb.append("arguments:").append("\n");
+            sb.append(payload.toPrettyString()).append("\n");
+        }
+
+        if (textContent != null && !textContent.isBlank()) {
+            sb.append("assistant_text:").append("\n");
+            sb.append(textContent.trim()).append("\n");
+        }
+
+        sb.append("[/tool_call]");
+        return sb.toString();
+    }
+
     public static String extractTextFromResponse(JsonNode response) {
         if (response == null) return "";
 
@@ -215,6 +246,21 @@ public final class JsonUtils {
     }
 
     // ---- Private helpers ----
+
+    private static JsonNode extractFirstToolFunction(JsonNode response) {
+        if (response == null) return null;
+
+        JsonNode choices = response.get("choices");
+        if (choices == null || choices.isEmpty()) return null;
+
+        JsonNode message = choices.get(0).get("message");
+        if (message == null) return null;
+
+        JsonNode toolCalls = message.get("tool_calls");
+        if (toolCalls == null || toolCalls.isEmpty()) return null;
+
+        return toolCalls.get(0).get("function");
+    }
 
     private static String extractFromCodeBlock(String text, String expectedStart) {
         if (!text.contains("```")) return null;

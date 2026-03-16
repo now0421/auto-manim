@@ -6,12 +6,14 @@ import com.automanim.model.KnowledgeNode;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
+import com.automanim.util.AiRequestUtils;
 import com.automanim.util.ConceptUtils;
 import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
+import com.automanim.util.NodeConversationContext;
 import com.automanim.util.PromptTemplates;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +47,114 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
 
     private static final Logger log = LoggerFactory.getLogger(ExplorationNode.class);
 
+    private static final String PREREQUISITES_TOOL = "["
+            + "{"
+            + "  \"type\": \"function\","
+            + "  \"function\": {"
+            + "    \"name\": \"write_prerequisites\","
+            + "    \"description\": \"Return the list of direct prerequisite concepts.\","
+            + "    \"parameters\": {"
+            + "      \"type\": \"object\","
+            + "      \"properties\": {"
+            + "        \"prerequisites\": {"
+            + "          \"type\": \"array\","
+            + "          \"items\": {"
+            + "            \"type\": \"object\","
+            + "            \"properties\": {"
+            + "              \"concept\": { \"type\": \"string\", \"description\": \"Concept name\" },"
+            + "              \"description\": { \"type\": \"string\", \"description\": \"How to animate this concept in Manim\" }"
+            + "            },"
+            + "            \"required\": [\"concept\", \"description\"]"
+            + "          }"
+            + "        }"
+            + "      },"
+            + "      \"required\": [\"prerequisites\"]"
+            + "    }"
+            + "  }"
+            + "}"
+            + "]";
+
+    private static final String FOUNDATION_CHECK_TOOL = "["
+            + "{"
+            + "  \"type\": \"function\","
+            + "  \"function\": {"
+            + "    \"name\": \"write_foundation_decision\","
+            + "    \"description\": \"Return whether the concept is already foundational enough.\","
+            + "    \"parameters\": {"
+            + "      \"type\": \"object\","
+            + "      \"properties\": {"
+            + "        \"is_foundation\": { \"type\": \"boolean\", \"description\": \"Whether the concept should stop expanding\" },"
+            + "        \"reason\": { \"type\": \"string\", \"description\": \"Short justification\" }"
+            + "      },"
+            + "      \"required\": [\"is_foundation\"]"
+            + "    }"
+            + "  }"
+            + "}"
+            + "]";
+
+    private static final String INPUT_MODE_TOOL = "["
+            + "{"
+            + "  \"type\": \"function\","
+            + "  \"function\": {"
+            + "    \"name\": \"write_input_mode\","
+            + "    \"description\": \"Classify the workflow input mode.\","
+            + "    \"parameters\": {"
+            + "      \"type\": \"object\","
+            + "      \"properties\": {"
+            + "        \"input_mode\": {"
+            + "          \"type\": \"string\","
+            + "          \"enum\": [\"concept\", \"problem\"],"
+            + "          \"description\": \"Workflow mode for the input\""
+            + "        },"
+            + "        \"reason\": { \"type\": \"string\", \"description\": \"Short routing rationale\" }"
+            + "      },"
+            + "      \"required\": [\"input_mode\"]"
+            + "    }"
+            + "  }"
+            + "}"
+            + "]";
+
+    private static final String PROBLEM_GRAPH_TOOL = "["
+            + "{"
+            + "  \"type\": \"function\","
+            + "  \"function\": {"
+            + "    \"name\": \"write_problem_step_graph\","
+            + "    \"description\": \"Return a compact dependency graph of problem-solving steps.\","
+            + "    \"parameters\": {"
+            + "      \"type\": \"object\","
+            + "      \"properties\": {"
+            + "        \"root_id\": { \"type\": \"string\", \"description\": \"Root node id\" },"
+            + "        \"nodes\": {"
+            + "          \"type\": \"array\","
+            + "          \"items\": {"
+            + "            \"type\": \"object\","
+            + "            \"properties\": {"
+            + "              \"id\": { \"type\": \"string\" },"
+            + "              \"concept\": { \"type\": \"string\" },"
+            + "              \"node_type\": { \"type\": \"string\" },"
+            + "              \"min_depth\": { \"type\": \"integer\" },"
+            + "              \"is_foundation\": { \"type\": \"boolean\" },"
+            + "              \"description\": { \"type\": \"string\" }"
+            + "            },"
+            + "            \"required\": [\"id\", \"concept\", \"node_type\", \"min_depth\", \"is_foundation\"]"
+            + "          }"
+            + "        },"
+            + "        \"prerequisite_edges\": {"
+            + "          \"type\": \"object\","
+            + "          \"additionalProperties\": {"
+            + "            \"type\": \"array\","
+            + "            \"items\": { \"type\": \"string\" }"
+            + "          }"
+            + "        }"
+            + "      },"
+            + "      \"required\": [\"root_id\", \"nodes\", \"prerequisite_edges\"]"
+            + "    }"
+            + "  }"
+            + "}"
+            + "]";
+
     private AiClient aiClient;
+    private WorkflowConfig workflowConfig;
     private String targetConcept;
     private int maxDepth = 4;
     private int minDepth = 0;
@@ -56,8 +165,13 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     private final AtomicInteger cacheHits = new AtomicInteger(0);
     private final Map<String, CompletableFuture<List<String>>> prereqCache = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<Boolean>> foundationCache = new ConcurrentHashMap<>();
+    private final Map<String, String> prereqDescriptions = new ConcurrentHashMap<>();
 
     private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
+    private NodeConversationContext prerequisiteContext;
+    private NodeConversationContext foundationContext;
+    private NodeConversationContext routingContext;
+    private NodeConversationContext problemGraphContext;
 
     public ExplorationNode() {
         super(1, 0);
@@ -66,12 +180,12 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     @Override
     public String prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
-        WorkflowConfig config = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
-        if (config != null) {
-            this.maxDepth = config.getMaxDepth();
-            this.minDepth = config.getMinDepth();
-            this.maxConcurrent = config.getMaxConcurrent();
-            this.inputMode = config.getInputMode();
+        this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
+        if (workflowConfig != null) {
+            this.maxDepth = workflowConfig.getMaxDepth();
+            this.minDepth = workflowConfig.getMinDepth();
+            this.maxConcurrent = workflowConfig.getMaxConcurrent();
+            this.inputMode = workflowConfig.getInputMode();
         }
         return (String) ctx.get(WorkflowKeys.CONCEPT);
     }
@@ -84,6 +198,12 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         cacheHits.set(0);
         prereqCache.clear();
         foundationCache.clear();
+        prereqDescriptions.clear();
+
+        int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
+                ? workflowConfig.getModelConfig().getMaxInputTokens()
+                : 131072;
+        initializeContexts(maxInputTokens);
         String resolvedMode = resolveInputMode(concept);
         log.info("=== Stage 0: {} Exploration ===",
                 WorkflowConfig.INPUT_MODE_PROBLEM.equals(resolvedMode) ? "Problem" : "Concept");
@@ -141,11 +261,16 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 + "Build a compact solution-step dependency graph for this problem.";
 
         try {
-            String response = aiCallLimiter.submit(() ->
-                    aiClient.chatAsync(prompt, PromptTemplates.PROBLEM_STEP_GRAPH_SYSTEM)).join();
-            apiCalls.incrementAndGet();
-
-            JsonNode payload = JsonUtils.parseTree(JsonUtils.extractJsonObject(response));
+            JsonNode payload = aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
+                    aiClient,
+                    log,
+                    normalizedProblem,
+                    problemGraphContext,
+                    prompt,
+                    PROBLEM_GRAPH_TOOL,
+                    () -> apiCalls.incrementAndGet(),
+                    this::parseProblemGraphTextResponse
+            )).join();
             return parseProblemGraphPayload(payload, normalizedProblem);
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
@@ -183,6 +308,11 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                         : (nodeId.equals(rootId) ? KnowledgeNode.NODE_TYPE_PROBLEM
                         : KnowledgeNode.NODE_TYPE_DERIVATION);
                 node.setNodeType(nodeType);
+
+                if (nodeJson.hasNonNull("description")) {
+                    node.setDescription(nodeJson.get("description").asText().trim());
+                }
+
                 nodes.put(nodeId, node);
             }
         }
@@ -207,12 +337,13 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 if (dependencyArray != null && dependencyArray.isArray()) {
                     for (JsonNode dependencyJson : dependencyArray) {
                         String dependencyId = ConceptUtils.normalizeConcept(dependencyJson.asText());
-                        if (!dependencyId.isBlank()
-                                && !dependencyId.equals(sourceId)
-                                && nodes.containsKey(dependencyId)
-                                && !dependencies.contains(dependencyId)) {
-                            dependencies.add(dependencyId);
+                        if (dependencyId.isBlank()
+                                || dependencyId.equals(sourceId)
+                                || !nodes.containsKey(dependencyId)
+                                || dependencies.contains(dependencyId)) {
+                            continue;
                         }
+                        dependencies.add(dependencyId);
                     }
                 }
                 if (!dependencies.isEmpty()) {
@@ -381,6 +512,11 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             child.setConcept(trimmedConcept);
             child.setNodeType(KnowledgeNode.NODE_TYPE_CONCEPT);
             child.updateMinDepth(childDepth);
+
+            String description = prereqDescriptions.get(prereqId);
+            if (description != null && child.getDescription() == null) {
+                child.setDescription(description);
+            }
             state.edgeIndex.computeIfAbsent(result.nodeId(), ignored -> ConcurrentHashMap.newKeySet())
                     .add(prereqId);
         }
@@ -460,12 +596,19 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 + " teaching goal.",
                 targetConcept, concept);
 
-        return aiCallLimiter.submit(() -> aiClient.chatAsync(prompt, PromptTemplates.FOUNDATION_CHECK_SYSTEM))
-                .thenApply(response -> {
-                    apiCalls.incrementAndGet();
-                    String normalized = response.trim().toLowerCase(Locale.ROOT);
-                    return normalized.startsWith("yes") || normalized.startsWith("y");
-                })
+        return aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
+                        aiClient,
+                        log,
+                        concept,
+                        foundationContext,
+                        prompt,
+                        FOUNDATION_CHECK_TOOL,
+                        () -> apiCalls.incrementAndGet(),
+                        this::parseFoundationDecisionTextResponse
+                ))
+                .thenApply(data -> data != null
+                        && data.has("is_foundation")
+                        && data.get("is_foundation").asBoolean(false))
                 .exceptionally(error -> {
                     Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
                     log.warn("Foundation check failed for '{}': {}", concept, cause.getMessage());
@@ -505,27 +648,25 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 + " ordered, and free of duplicates or overly broad topics.",
                 targetConcept, concept);
 
-        return aiCallLimiter.submit(() -> aiClient.chatAsync(prompt, PromptTemplates.PREREQUISITES_SYSTEM))
-                .thenApply(response -> {
-                    apiCalls.incrementAndGet();
-                    String jsonArray = JsonUtils.extractJsonArray(response);
-                    List<String> prereqs = parsePrerequisiteList(jsonArray);
-
-                    List<String> cleaned = new ArrayList<>();
-                    Set<String> seen = new LinkedHashSet<>();
-                    for (String prereq : prereqs) {
-                        if (prereq == null || prereq.isBlank()) {
-                            continue;
-                        }
-                        String normalized = ConceptUtils.normalizeConcept(prereq);
-                        if (seen.add(normalized)) {
-                            cleaned.add(prereq.trim());
-                        }
-                        if (cleaned.size() >= 5) {
-                            break;
+        return aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
+                        aiClient,
+                        log,
+                        concept,
+                        prerequisiteContext,
+                        prompt,
+                        PREREQUISITES_TOOL,
+                        () -> apiCalls.incrementAndGet(),
+                        this::parsePrerequisitesTextResponse
+                ))
+                .thenApply(data -> {
+                    if (data != null) {
+                        JsonNode prereqArray = data.has("prerequisites")
+                                ? data.get("prerequisites") : data;
+                        if (prereqArray.isArray()) {
+                            return parsePrerequisiteArray(prereqArray);
                         }
                     }
-                    return cleaned;
+                    return Collections.<String>emptyList();
                 })
                 .exceptionally(error -> {
                     Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
@@ -534,12 +675,51 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 });
     }
 
-    private List<String> parsePrerequisiteList(String jsonArray) {
-        try {
-            return JsonUtils.mapper().readValue(jsonArray, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse prerequisites JSON: " + e.getMessage(), e);
+    /**
+     * Parses a prerequisites JSON array (from tool call or plain response).
+     * Accepts both [{concept, description}, ...] and plain string arrays.
+     */
+    private List<String> parsePrerequisiteArray(JsonNode array) {
+        if (!array.isArray() || array.isEmpty()) {
+            return Collections.emptyList();
         }
+
+        List<String> cleaned = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+
+        for (JsonNode element : array) {
+            String conceptName;
+            String description = null;
+
+            if (element.isObject() && element.has("concept")) {
+                conceptName = element.get("concept").asText();
+                if (element.has("description")) {
+                    description = element.get("description").asText();
+                }
+            } else {
+                conceptName = element.asText();
+            }
+
+            if (conceptName == null || conceptName.isBlank()) {
+                continue;
+            }
+            String normalized = ConceptUtils.normalizeConcept(conceptName);
+            if (!seen.add(normalized)) {
+                continue;
+            }
+
+            String trimmed = conceptName.trim();
+            cleaned.add(trimmed);
+
+            if (description != null && !description.isBlank()) {
+                prereqDescriptions.put(normalized, description.trim());
+            }
+
+            if (cleaned.size() >= 5) {
+                break;
+            }
+        }
+        return cleaned;
     }
 
     private boolean wouldCreateCycle(String parentId, String childId, Map<String, Set<String>> edgeIndex) {
@@ -643,11 +823,20 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 + "Classify the routing mode for this workflow input.";
 
         try {
-            String response = aiCallLimiter.submit(() ->
-                    aiClient.chatAsync(prompt, PromptTemplates.INPUT_MODE_CLASSIFIER_SYSTEM)).join();
-            apiCalls.incrementAndGet();
+            JsonNode data = aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
+                    aiClient,
+                    log,
+                    normalizedInput,
+                    routingContext,
+                    prompt,
+                    INPUT_MODE_TOOL,
+                    () -> apiCalls.incrementAndGet(),
+                    this::parseInputModeTextResponse
+            )).join();
 
-            String normalized = response == null ? "" : response.trim().toLowerCase(Locale.ROOT);
+            String normalized = data != null && data.has("input_mode")
+                    ? data.get("input_mode").asText("").trim().toLowerCase(Locale.ROOT)
+                    : "";
             if (normalized.startsWith(WorkflowConfig.INPUT_MODE_PROBLEM)) {
                 log.info("Auto mode classified by LLM as problem");
                 return WorkflowConfig.INPUT_MODE_PROBLEM;
@@ -657,7 +846,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 return WorkflowConfig.INPUT_MODE_CONCEPT;
             }
 
-            log.warn("LLM returned unexpected input mode classification: {}", response);
+            log.warn("LLM returned unexpected input mode classification payload: {}", data);
             return "";
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
@@ -678,6 +867,82 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                 || normalized.contains("let ")
                 || wordCount > 12;
         return looksLikeProblem ? WorkflowConfig.INPUT_MODE_PROBLEM : WorkflowConfig.INPUT_MODE_CONCEPT;
+    }
+
+    private void initializeContexts(int maxInputTokens) {
+        prerequisiteContext = new NodeConversationContext(maxInputTokens);
+        prerequisiteContext.setSystemMessage(PromptTemplates.PREREQUISITES_SYSTEM);
+
+        foundationContext = new NodeConversationContext(maxInputTokens);
+        foundationContext.setSystemMessage(PromptTemplates.FOUNDATION_CHECK_SYSTEM);
+
+        routingContext = new NodeConversationContext(maxInputTokens);
+        routingContext.setSystemMessage(PromptTemplates.INPUT_MODE_CLASSIFIER_SYSTEM);
+
+        problemGraphContext = new NodeConversationContext(maxInputTokens);
+        problemGraphContext.setSystemMessage(PromptTemplates.PROBLEM_STEP_GRAPH_SYSTEM);
+    }
+
+    private JsonNode parseFoundationDecisionTextResponse(String response) {
+        JsonNode existing = tryParseJsonObject(response);
+        if (existing != null && existing.has("is_foundation")) {
+            return existing;
+        }
+
+        String normalized = response == null ? "" : response.trim().toLowerCase(Locale.ROOT);
+        boolean isFoundation = normalized.startsWith("yes")
+                || normalized.startsWith("y")
+                || normalized.startsWith("true");
+        ObjectNode payload = JsonUtils.mapper().createObjectNode();
+        payload.put("is_foundation", isFoundation);
+        return payload;
+    }
+
+    private JsonNode parseInputModeTextResponse(String response) {
+        JsonNode existing = tryParseJsonObject(response);
+        if (existing != null && existing.has("input_mode")) {
+            return existing;
+        }
+
+        String normalized = response == null ? "" : response.trim().toLowerCase(Locale.ROOT);
+        String inputModeValue = normalized.startsWith(WorkflowConfig.INPUT_MODE_PROBLEM)
+                ? WorkflowConfig.INPUT_MODE_PROBLEM
+                : WorkflowConfig.INPUT_MODE_CONCEPT;
+        ObjectNode payload = JsonUtils.mapper().createObjectNode();
+        payload.put("input_mode", inputModeValue);
+        return payload;
+    }
+
+    private JsonNode parsePrerequisitesTextResponse(String response) {
+        String normalized = response == null ? "" : response.trim();
+        if (normalized.startsWith("[")) {
+            return JsonUtils.parseTree(JsonUtils.extractJsonArray(response));
+        }
+
+        JsonNode objectNode = tryParseJsonObject(response);
+        if (objectNode != null && objectNode.has("prerequisites")) {
+            return objectNode;
+        }
+
+        JsonNode arrayNode = JsonUtils.parseTree(JsonUtils.extractJsonArray(response));
+        if (arrayNode.isArray() && !arrayNode.isEmpty()) {
+            return arrayNode;
+        }
+        return objectNode != null ? objectNode : JsonUtils.parseTree("[]");
+    }
+
+    private JsonNode parseProblemGraphTextResponse(String response) {
+        JsonNode payload = tryParseJsonObject(response);
+        return payload != null ? payload : JsonUtils.parseTree("{}");
+    }
+
+    private JsonNode tryParseJsonObject(String response) {
+        String candidate = JsonUtils.extractJsonObject(response);
+        if ("{}".equals(candidate)
+                && (response == null || !response.contains("{"))) {
+            return null;
+        }
+        return JsonUtils.parseTree(candidate);
     }
 
     private static final class ExplorationState {

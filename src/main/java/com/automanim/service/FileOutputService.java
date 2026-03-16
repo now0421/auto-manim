@@ -57,6 +57,15 @@ public class FileOutputService {
         writeText(outputDir.resolve("1_knowledge_graph_pretty.txt"), graph.printGraph(), "knowledge graph (pretty)");
     }
 
+    public static KnowledgeGraph loadKnowledgeGraph(Path path) {
+        try {
+            log.info("[Load] knowledge graph <- {}", path);
+            return mapper.readValue(path.toFile(), KnowledgeGraph.class);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load knowledge graph from: " + path, e);
+        }
+    }
+
     public static void saveEnrichedGraph(Path outputDir, KnowledgeGraph graph) {
         writeJson(outputDir.resolve("2_enriched_graph.json"), graph, "enriched graph");
     }

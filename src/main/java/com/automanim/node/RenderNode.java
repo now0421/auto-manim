@@ -9,6 +9,7 @@ import com.automanim.service.FileOutputService;
 import com.automanim.service.ManimRendererService;
 import com.automanim.service.ManimRendererService.RenderAttemptResult;
 import com.automanim.util.JsonUtils;
+import com.automanim.util.NodeConversationContext;
 import com.automanim.util.PromptTemplates;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
@@ -107,6 +108,12 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         String quality = config != null ? config.getRenderQuality() : "low";
         int maxRetries = config != null ? config.getRenderMaxRetries() : 4;
 
+        int maxInputTokens = (config != null && config.getModelConfig() != null)
+                ? config.getModelConfig().getMaxInputTokens()
+                : 131072;
+        NodeConversationContext conversationContext = new NodeConversationContext(maxInputTokens);
+        conversationContext.setSystemMessage(PromptTemplates.RENDER_FIX_SYSTEM);
+
         String currentCode = codeResult.getManimCode();
         String sceneName = codeResult.getSceneName();
         String lastError = "";
@@ -172,7 +179,9 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             try {
                 log.info("  Error output sent to LLM:\n{}", focusedError);
                 String fixPrompt = PromptTemplates.renderFixUserPrompt(currentCode, focusedError, fixHistory);
-                String fixResponse = aiClient.chat(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM);
+                conversationContext.addUserMessage(fixPrompt);
+                String fixResponse = aiClient.chat(conversationContext);
+                conversationContext.addAssistantMessage(fixResponse);
                 toolCalls++;
 
                 String fixedCode = JsonUtils.extractCodeBlock(fixResponse);

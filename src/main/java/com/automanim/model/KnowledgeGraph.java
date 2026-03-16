@@ -3,15 +3,14 @@ package com.automanim.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.PriorityQueue;
 import java.util.TreeMap;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -40,6 +39,8 @@ public class KnowledgeGraph {
         this.prerequisiteEdges = new LinkedHashMap<>(prerequisiteEdges);
     }
 
+    // ---- Basic node access ----
+
     public KnowledgeNode getRootNode() {
         return nodes.get(rootNodeId);
     }
@@ -48,8 +49,17 @@ public class KnowledgeGraph {
         return nodes.get(nodeId);
     }
 
+    // ---- Relationship queries ----
+
     public List<String> getPrerequisiteIds(String nodeId) {
-        return prerequisiteEdges.getOrDefault(nodeId, Collections.emptyList());
+        List<String> prerequisites = new ArrayList<>();
+        for (String prerequisiteId : prerequisiteEdges.getOrDefault(nodeId, Collections.emptyList())) {
+            if (nodes.containsKey(prerequisiteId) && !prerequisites.contains(prerequisiteId)) {
+                prerequisites.add(prerequisiteId);
+            }
+        }
+        prerequisites.sort(buildPrerequisiteComparator(nodeId));
+        return prerequisites;
     }
 
     public List<KnowledgeNode> getPrerequisites(String nodeId) {
@@ -66,26 +76,11 @@ public class KnowledgeGraph {
     }
 
     public List<String> getParentIds(String nodeId) {
-        List<String> parents = new ArrayList<>();
-        for (Map.Entry<String, List<String>> entry : prerequisiteEdges.entrySet()) {
-            if (entry.getValue().contains(nodeId)) {
-                parents.add(entry.getKey());
-            }
-        }
-        parents.sort(Comparator.comparingInt((String id) -> nodes.get(id).getMinDepth())
-                .thenComparing(id -> nodes.get(id).getConcept(), String.CASE_INSENSITIVE_ORDER));
-        return parents;
+        return getDependentIds(nodeId);
     }
 
     public List<KnowledgeNode> getParents(String nodeId) {
-        List<KnowledgeNode> parents = new ArrayList<>();
-        for (String parentId : getParentIds(nodeId)) {
-            KnowledgeNode parent = nodes.get(parentId);
-            if (parent != null) {
-                parents.add(parent);
-            }
-        }
-        return parents;
+        return getDependents(nodeId);
     }
 
     public List<KnowledgeNode> getNearestParents(String nodeId) {
@@ -94,7 +89,7 @@ public class KnowledgeGraph {
             return Collections.emptyList();
         }
 
-        int expectedDepth = node.getMinDepth() - 1;
+        int expectedDepth = expectedParentDepth(node);
         List<KnowledgeNode> nearest = new ArrayList<>();
         for (KnowledgeNode parent : getParents(nodeId)) {
             if (parent.getMinDepth() == expectedDepth) {
@@ -107,6 +102,34 @@ public class KnowledgeGraph {
         }
         return getParents(nodeId);
     }
+
+    public List<String> getDependentIds(String nodeId) {
+        List<String> dependents = new ArrayList<>();
+        for (Map.Entry<String, List<String>> entry : prerequisiteEdges.entrySet()) {
+            String dependentId = entry.getKey();
+            if (!nodes.containsKey(dependentId)) {
+                continue;
+            }
+            if (entry.getValue().contains(nodeId) && !dependents.contains(dependentId)) {
+                dependents.add(dependentId);
+            }
+        }
+        dependents.sort(buildDependentComparator(nodeId));
+        return dependents;
+    }
+
+    public List<KnowledgeNode> getDependents(String nodeId) {
+        List<KnowledgeNode> dependents = new ArrayList<>();
+        for (String dependentId : getDependentIds(nodeId)) {
+            KnowledgeNode dependent = nodes.get(dependentId);
+            if (dependent != null) {
+                dependents.add(dependent);
+            }
+        }
+        return dependents;
+    }
+
+    // ---- Aggregate graph info ----
 
     public int countNodes() {
         return nodes.size();
@@ -129,7 +152,9 @@ public class KnowledgeGraph {
     }
 
     public Map<Integer, List<KnowledgeNode>> groupByDepth() {
-        Map<Integer, List<KnowledgeNode>> groups = new TreeMap<>();
+        // Depth 0 is the final goal, so presentation order should run from
+        // foundational prerequisites (deepest) back up to the goal.
+        Map<Integer, List<KnowledgeNode>> groups = new TreeMap<>(Collections.reverseOrder());
         for (KnowledgeNode node : nodes.values()) {
             groups.computeIfAbsent(node.getMinDepth(), ignored -> new ArrayList<>()).add(node);
         }
@@ -139,10 +164,85 @@ public class KnowledgeGraph {
         return groups;
     }
 
+    // ---- Traversal / presentation ----
+
     public List<KnowledgeNode> topologicalOrder() {
         List<KnowledgeNode> ordered = new ArrayList<>();
-        Set<String> visited = new LinkedHashSet<>();
-        visitPostOrder(rootNodeId, visited, ordered);
+        if (nodes.isEmpty()) {
+            return ordered;
+        }
+
+        Map<String, Integer> remainingPrerequisites = new HashMap<>();
+        Map<String, List<String>> dependents = new HashMap<>();
+
+        for (String nodeId : nodes.keySet()) {
+            remainingPrerequisites.put(nodeId, 0);
+            dependents.put(nodeId, new ArrayList<>());
+        }
+
+        for (Map.Entry<String, List<String>> entry : prerequisiteEdges.entrySet()) {
+            String currentNodeId = entry.getKey();
+            if (!nodes.containsKey(currentNodeId)) {
+                continue;
+            }
+
+            int prerequisiteCount = 0;
+            for (String prerequisiteId : entry.getValue()) {
+                if (!nodes.containsKey(prerequisiteId) || prerequisiteId.equals(currentNodeId)) {
+                    continue;
+                }
+                prerequisiteCount++;
+                dependents.computeIfAbsent(prerequisiteId, ignored -> new ArrayList<>()).add(currentNodeId);
+            }
+            remainingPrerequisites.put(currentNodeId, prerequisiteCount);
+        }
+
+        Comparator<String> readyComparator = buildTopologicalComparator();
+        PriorityQueue<String> ready = new PriorityQueue<>(readyComparator);
+        for (Map.Entry<String, Integer> entry : remainingPrerequisites.entrySet()) {
+            if (entry.getValue() == 0) {
+                ready.add(entry.getKey());
+            }
+        }
+
+        while (!ready.isEmpty()) {
+            String nodeId = ready.poll();
+            KnowledgeNode node = nodes.get(nodeId);
+            if (node != null) {
+                ordered.add(node);
+            }
+
+            List<String> nextNodes = new ArrayList<>(dependents.getOrDefault(nodeId, Collections.emptyList()));
+            nextNodes.sort(buildDependentComparator(nodeId));
+            for (String nextNodeId : nextNodes) {
+                int updated = remainingPrerequisites.computeIfPresent(nextNodeId, (ignored, count) -> count - 1);
+                if (updated == 0) {
+                    ready.add(nextNodeId);
+                }
+            }
+        }
+
+        if (ordered.size() == nodes.size()) {
+            return ordered;
+        }
+
+        List<String> missingNodeIds = new ArrayList<>();
+        for (String nodeId : nodes.keySet()) {
+            boolean present = false;
+            for (KnowledgeNode orderedNode : ordered) {
+                if (orderedNode.getId().equals(nodeId)) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                missingNodeIds.add(nodeId);
+            }
+        }
+        missingNodeIds.sort(readyComparator);
+        for (String nodeId : missingNodeIds) {
+            ordered.add(nodes.get(nodeId));
+        }
         return ordered;
     }
 
@@ -183,14 +283,14 @@ public class KnowledgeGraph {
                 sb.append("\n");
             }
 
-            List<KnowledgeNode> parents = getParents(node.getId());
-            if (!parents.isEmpty()) {
-                sb.append("  parents: ");
-                for (int i = 0; i < parents.size(); i++) {
+            List<KnowledgeNode> dependents = getDependents(node.getId());
+            if (!dependents.isEmpty()) {
+                sb.append("  dependents: ");
+                for (int i = 0; i < dependents.size(); i++) {
                     if (i > 0) {
                         sb.append(", ");
                     }
-                    sb.append(parents.get(i).getConcept());
+                    sb.append(dependents.get(i).getConcept());
                 }
                 sb.append("\n");
             }
@@ -198,19 +298,59 @@ public class KnowledgeGraph {
         return sb.toString();
     }
 
-    private void visitPostOrder(String nodeId, Set<String> visited, List<KnowledgeNode> ordered) {
-        if (nodeId == null || visited.contains(nodeId)) {
-            return;
-        }
-        visited.add(nodeId);
-        for (String prereqId : getPrerequisiteIds(nodeId)) {
-            visitPostOrder(prereqId, visited, ordered);
-        }
-        KnowledgeNode node = nodes.get(nodeId);
-        if (node != null) {
-            ordered.add(node);
-        }
+    // ---- Internal helpers ----
+
+    private int expectedPrerequisiteDepth(KnowledgeNode node) {
+        return node.getMinDepth() + 1;
     }
+
+    private int expectedParentDepth(KnowledgeNode node) {
+        return node.getMinDepth() - 1;
+    }
+
+    private Comparator<String> buildTopologicalComparator() {
+        return buildDepthDescendingComparator();
+    }
+
+    private Comparator<String> buildPrerequisiteComparator(String nodeId) {
+        KnowledgeNode node = nodes.get(nodeId);
+        Comparator<String> comparator = buildDepthDescendingComparator();
+        if (node == null) {
+            return comparator;
+        }
+        return comparator.thenComparingInt(id -> Math.abs(nodes.get(id).getMinDepth() - node.getMinDepth()));
+    }
+
+    private Comparator<String> buildDependentComparator(String nodeId) {
+        KnowledgeNode node = nodes.get(nodeId);
+        Comparator<String> comparator = buildDepthAscendingComparator();
+        if (node == null) {
+            return comparator;
+        }
+        return comparator.thenComparingInt(id -> Math.abs(nodes.get(id).getMinDepth() - node.getMinDepth()));
+    }
+
+    private Comparator<String> buildDepthDescendingComparator() {
+        return Comparator.comparingInt((String id) -> {
+            KnowledgeNode node = nodes.get(id);
+            return node != null ? node.getMinDepth() : Integer.MIN_VALUE;
+        }).reversed().thenComparing(id -> {
+            KnowledgeNode node = nodes.get(id);
+            return node != null ? node.getConcept() : id;
+        }, String.CASE_INSENSITIVE_ORDER);
+    }
+
+    private Comparator<String> buildDepthAscendingComparator() {
+        return Comparator.comparingInt((String id) -> {
+            KnowledgeNode node = nodes.get(id);
+            return node != null ? node.getMinDepth() : Integer.MAX_VALUE;
+        }).thenComparing(id -> {
+            KnowledgeNode node = nodes.get(id);
+            return node != null ? node.getConcept() : id;
+        }, String.CASE_INSENSITIVE_ORDER);
+    }
+
+    // ---- Bean accessors ----
 
     public String getRootNodeId() { return rootNodeId; }
     public void setRootNodeId(String rootNodeId) { this.rootNodeId = rootNodeId; }

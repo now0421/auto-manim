@@ -1,5 +1,6 @@
 package com.automanim.node;
 
+import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
 import com.automanim.model.Narrative;
 import com.automanim.model.WorkflowKeys;
@@ -7,6 +8,7 @@ import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
+import com.automanim.util.NodeConversationContext;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
@@ -24,7 +26,7 @@ import java.util.regex.Pattern;
 
 /**
  * Stage 2: Code Generation - generates executable Manim Python code
- * from the narrative prompt.
+ * from the narrative storyboard prompt.
  */
 public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, String> {
 
@@ -59,6 +61,8 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             "\\w+\\[\\d+\\]\\[\\d+:\\d+\\]");
 
     private AiClient aiClient;
+    private WorkflowConfig workflowConfig;
+    private NodeConversationContext conversationContext;
     private int toolCalls = 0;
 
     public CodeGenerationNode() {
@@ -68,6 +72,7 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
     @Override
     public Narrative prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
+        this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         return (Narrative) ctx.get(WorkflowKeys.NARRATIVE);
     }
 
@@ -76,19 +81,28 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         log.info("=== Stage 2: Code Generation ===");
         toolCalls = 0;
 
-        if (narrative == null || narrative.getVerbosePrompt() == null
-                || narrative.getVerbosePrompt().isBlank()) {
+        // Lazy-init: create on first exec(), preserve across PocketFlow retries
+        if (this.conversationContext == null) {
+            int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
+                    ? workflowConfig.getModelConfig().getMaxInputTokens()
+                    : 131072;
+            this.conversationContext = new NodeConversationContext(maxInputTokens);
+            this.conversationContext.setSystemMessage(PromptTemplates.CODE_GENERATION_SYSTEM);
+        }
+
+        if (narrative == null) {
             log.warn("Narrative is empty, cannot generate code");
             return new CodeResult("", "", "Empty narrative",
-                    narrative != null ? narrative.getTargetConcept() : "");
+                    "");
         }
 
         String expectedSceneName = conceptToClassName(narrative.getTargetConcept());
-
-        String userPrompt = narrative.getVerbosePrompt()
-                + "\n\nScene class name: " + expectedSceneName
-                + "\nAll class names, method names, and variable names must use ASCII identifiers only."
-                + "\nDo not use Chinese, pinyin, mojibake, or any non-ASCII text in Python identifiers.";
+        String userPrompt = buildGenerationPrompt(narrative, expectedSceneName);
+        if (userPrompt.isBlank()) {
+            log.warn("Narrative prompt is empty, cannot generate code");
+            return new CodeResult("", "", "Empty narrative",
+                    narrative.getTargetConcept());
+        }
 
         String code;
         String sceneName;
@@ -133,7 +147,9 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
     }
 
     private CompletableFuture<CodeDraft> requestCodeAsync(String userPrompt, String expectedSceneName) {
-        return aiClient.chatWithToolsRawAsync(userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM, MANIM_CODE_TOOL)
+        conversationContext.addUserMessage(userPrompt);
+
+        return aiClient.chatWithToolsRawAsync(conversationContext, MANIM_CODE_TOOL)
                 .thenApply(rawResponse -> {
                     toolCalls++;
 
@@ -155,7 +171,15 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                         }
                     }
 
-                    return new CodeDraft(code, sceneName);
+                    CodeDraft draft = new CodeDraft(code, sceneName);
+                    if (draft.hasCode()) {
+                        String transcript = JsonUtils.buildToolCallTranscript(rawResponse);
+                        conversationContext.addAssistantMessage(
+                                transcript == null || transcript.isBlank()
+                                        ? "```python\n" + draft.code + "\n```"
+                                        : transcript);
+                    }
+                    return draft;
                 })
                 .exceptionally(error -> {
                     Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
@@ -166,9 +190,10 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                     if (draft != null && draft.hasCode()) {
                         return CompletableFuture.completedFuture(draft);
                     }
-                    return aiClient.chatAsync(userPrompt, PromptTemplates.CODE_GENERATION_SYSTEM)
+                    return aiClient.chatAsync(conversationContext)
                             .thenApply(response -> {
                                 toolCalls++;
+                                conversationContext.addAssistantMessage(response);
                                 return new CodeDraft(JsonUtils.extractCodeBlock(response), expectedSceneName);
                             });
                 });
@@ -192,6 +217,26 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             return m.group(1);
         }
         return fallback;
+    }
+
+    private String buildGenerationPrompt(Narrative narrative, String expectedSceneName) {
+        String basePrompt;
+        if (narrative.hasStoryboard()) {
+            basePrompt = PromptTemplates.storyboardCodegenPrompt(
+                    narrative.getTargetConcept(),
+                    JsonUtils.toPrettyJson(narrative.getStoryboard()));
+        } else {
+            basePrompt = narrative.getVerbosePrompt();
+        }
+
+        if (basePrompt == null || basePrompt.isBlank()) {
+            return "";
+        }
+
+        return basePrompt
+                + "\n\nScene class name: " + expectedSceneName
+                + "\nAll class names, method names, and variable names must use ASCII identifiers only."
+                + "\nDo not use Chinese, pinyin, mojibake, or any non-ASCII text in Python identifiers.";
     }
 
     private String conceptToClassName(String concept) {
@@ -252,7 +297,9 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                     + " use ASCII English identifiers only.",
                     code, violationList);
 
-            String response = aiClient.chatAsync(fixPrompt, PromptTemplates.RENDER_FIX_SYSTEM).join();
+            conversationContext.addUserMessage(fixPrompt);
+            String response = aiClient.chatAsync(conversationContext).join();
+            conversationContext.addAssistantMessage(response);
             toolCalls++;
             return JsonUtils.extractCodeBlock(response);
         } catch (CompletionException e) {

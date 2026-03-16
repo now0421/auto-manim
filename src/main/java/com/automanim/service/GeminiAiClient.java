@@ -2,6 +2,7 @@ package com.automanim.service;
 
 import com.automanim.config.ModelConfig;
 import com.automanim.util.ConcurrencyUtils;
+import com.automanim.util.NodeConversationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -57,9 +58,6 @@ public class GeminiAiClient implements AiClient {
     @Override
     public CompletableFuture<String> chatAsync(String userMessage, String systemPrompt) {
         try {
-            String url = modelConfig.resolveBaseUrl().replaceAll("/+$", "")
-                    + "/" + modelConfig.getModel() + ":generateContent?key=" + apiKey;
-
             ObjectNode body = mapper.createObjectNode();
 
             if (systemPrompt != null && !systemPrompt.isBlank()) {
@@ -74,50 +72,32 @@ public class GeminiAiClient implements AiClient {
             ArrayNode parts = userContent.putArray("parts");
             parts.addObject().put("text", userMessage);
 
-            ObjectNode generationConfig = body.putObject("generationConfig");
-            generationConfig.put("temperature", modelConfig.getTemperature());
-            generationConfig.put("maxOutputTokens", modelConfig.getMaxOutputTokens());
+            return sendGenerateContentAsync(body);
+        } catch (Exception e) {
+            log.error("Gemini chat failed: {}", e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat failed: " + e.getMessage(), e
+            ));
+        }
+    }
 
-            String jsonBody = mapper.writeValueAsString(body);
+    @Override
+    public CompletableFuture<String> chatAsync(NodeConversationContext context) {
+        try {
+            context.trimToFitBudget();
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                    .timeout(Duration.ofMinutes(5))
-                    .build();
+            ObjectNode body = mapper.createObjectNode();
 
-            log.debug("Gemini request: model={}", modelConfig.getModel());
-            return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> {
-                        if (response.statusCode() != 200) {
-                            throw new CompletionException(new RuntimeException(
-                                    "Gemini API returned HTTP " + response.statusCode()
-                                            + ": " + response.body()
-                            ));
-                        }
-                        try {
-                            JsonNode root = mapper.readTree(response.body());
-                            JsonNode candidates = root.get("candidates");
-                            if (candidates == null || candidates.isEmpty()) {
-                                throw new RuntimeException("Gemini API returned no candidates");
-                            }
-                            return candidates.get(0).path("content").path("parts")
-                                    .get(0).path("text").asText("");
-                        } catch (Exception e) {
-                            throw new CompletionException(e);
-                        }
-                    })
-                    .handle((result, error) -> {
-                        if (error == null) {
-                            return result;
-                        }
-                        Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
-                        log.error("Gemini chat failed: {}", cause.getMessage(), cause);
-                        throw new CompletionException(new RuntimeException(
-                                "AI chat failed: " + cause.getMessage(), cause
-                        ));
-                    });
+            String systemContent = context.getSystemContent();
+            if (systemContent != null && !systemContent.isBlank()) {
+                ObjectNode sysInstruction = body.putObject("system_instruction");
+                ArrayNode parts = sysInstruction.putArray("parts");
+                parts.addObject().put("text", systemContent);
+            }
+
+            body.set("contents", context.buildGeminiContents());
+
+            return sendGenerateContentAsync(body);
         } catch (Exception e) {
             log.error("Gemini chat failed: {}", e.getMessage(), e);
             return CompletableFuture.failedFuture(new RuntimeException(
@@ -134,7 +114,93 @@ public class GeminiAiClient implements AiClient {
     }
 
     @Override
+    public CompletableFuture<JsonNode> chatWithToolsRawAsync(
+            NodeConversationContext context, String toolsJson) {
+        return chatAsync(context).thenApply(this::wrapTextResponse);
+    }
+
+    @Override
+    public CompletableFuture<String> chatAsync(
+            java.util.List<NodeConversationContext.Message> snapshot) {
+        try {
+            ObjectNode body = mapper.createObjectNode();
+
+            String systemContent = NodeConversationContext.getSystemContent(snapshot);
+            if (systemContent != null && !systemContent.isBlank()) {
+                ObjectNode sysInstruction = body.putObject("system_instruction");
+                ArrayNode parts = sysInstruction.putArray("parts");
+                parts.addObject().put("text", systemContent);
+            }
+
+            body.set("contents", NodeConversationContext.buildGeminiContents(snapshot));
+
+            return sendGenerateContentAsync(body);
+        } catch (Exception e) {
+            log.error("Gemini chat failed: {}", e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat failed: " + e.getMessage(), e
+            ));
+        }
+    }
+
+    @Override
+    public CompletableFuture<JsonNode> chatWithToolsRawAsync(
+            java.util.List<NodeConversationContext.Message> snapshot, String toolsJson) {
+        return chatAsync(snapshot).thenApply(this::wrapTextResponse);
+    }
+
+    @Override
     public String providerName() { return modelConfig.resolveProvider() + ":" + modelConfig.getModel(); }
+
+    private CompletableFuture<String> sendGenerateContentAsync(ObjectNode body) throws Exception {
+        String url = modelConfig.resolveBaseUrl().replaceAll("/+$", "")
+                + "/" + modelConfig.getModel() + ":generateContent?key=" + apiKey;
+
+        ObjectNode generationConfig = body.putObject("generationConfig");
+        generationConfig.put("temperature", modelConfig.getTemperature());
+        generationConfig.put("maxOutputTokens", modelConfig.getMaxOutputTokens());
+
+        String jsonBody = mapper.writeValueAsString(body);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .timeout(Duration.ofMinutes(5))
+                .build();
+
+        log.debug("Gemini request: model={}", modelConfig.getModel());
+        return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() != 200) {
+                        throw new CompletionException(new RuntimeException(
+                                "Gemini API returned HTTP " + response.statusCode()
+                                        + ": " + response.body()
+                        ));
+                    }
+                    try {
+                        JsonNode root = mapper.readTree(response.body());
+                        JsonNode candidates = root.get("candidates");
+                        if (candidates == null || candidates.isEmpty()) {
+                            throw new RuntimeException("Gemini API returned no candidates");
+                        }
+                        return candidates.get(0).path("content").path("parts")
+                                .get(0).path("text").asText("");
+                    } catch (Exception e) {
+                        throw new CompletionException(e);
+                    }
+                })
+                .handle((result, error) -> {
+                    if (error == null) {
+                        return result;
+                    }
+                    Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                    log.error("Gemini chat failed: {}", cause.getMessage(), cause);
+                    throw new CompletionException(new RuntimeException(
+                            "AI chat failed: " + cause.getMessage(), cause
+                    ));
+                });
+    }
 
     private static String requireEnv(String key) {
         String val = System.getenv(key);

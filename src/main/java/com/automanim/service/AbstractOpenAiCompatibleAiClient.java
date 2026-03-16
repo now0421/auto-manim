@@ -2,6 +2,7 @@ package com.automanim.service;
 
 import com.automanim.config.ModelConfig;
 import com.automanim.util.ConcurrencyUtils;
+import com.automanim.util.NodeConversationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -112,6 +113,103 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         return clientName;
     }
 
+    @Override
+    public CompletableFuture<String> chatAsync(NodeConversationContext context) {
+        try {
+            context.trimToFitBudget();
+            ObjectNode body = buildRequestBody(context, null);
+            return sendRequestWithRetryAsync(body).handle((result, error) -> {
+                if (error == null) {
+                    return result;
+                }
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                log.error("{} chat failed: {}", clientName, cause.getMessage(), cause);
+                throw new CompletionException(new RuntimeException(
+                        "AI chat failed: " + cause.getMessage(), cause
+                ));
+            });
+        } catch (Exception e) {
+            log.error("{} chat failed: {}", clientName, e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat failed: " + e.getMessage(), e
+            ));
+        }
+    }
+
+    @Override
+    public CompletableFuture<JsonNode> chatWithToolsRawAsync(
+            NodeConversationContext context, String toolsJson) {
+        try {
+            context.trimToFitBudget();
+            ArrayNode tools = toolsJson != null
+                    ? (ArrayNode) MAPPER.readTree(toolsJson) : null;
+            ObjectNode body = buildRequestBody(context, tools);
+            return sendRawRequestAsync(body).handle((result, error) -> {
+                if (error == null) {
+                    return result;
+                }
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                log.error("{} chat (with tools) failed: {}", clientName, cause.getMessage(), cause);
+                throw new CompletionException(new RuntimeException(
+                        "AI chat with tools failed: " + cause.getMessage(), cause
+                ));
+            });
+        } catch (Exception e) {
+            log.error("{} chat (with tools) failed: {}", clientName, e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat with tools failed: " + e.getMessage(), e
+            ));
+        }
+    }
+
+    @Override
+    public CompletableFuture<String> chatAsync(
+            java.util.List<NodeConversationContext.Message> snapshot) {
+        try {
+            ObjectNode body = buildRequestBody(snapshot, null);
+            return sendRequestWithRetryAsync(body).handle((result, error) -> {
+                if (error == null) {
+                    return result;
+                }
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                log.error("{} chat failed: {}", clientName, cause.getMessage(), cause);
+                throw new CompletionException(new RuntimeException(
+                        "AI chat failed: " + cause.getMessage(), cause
+                ));
+            });
+        } catch (Exception e) {
+            log.error("{} chat failed: {}", clientName, e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat failed: " + e.getMessage(), e
+            ));
+        }
+    }
+
+    @Override
+    public CompletableFuture<JsonNode> chatWithToolsRawAsync(
+            java.util.List<NodeConversationContext.Message> snapshot, String toolsJson) {
+        try {
+            ArrayNode tools = toolsJson != null
+                    ? (ArrayNode) MAPPER.readTree(toolsJson) : null;
+            ObjectNode body = buildRequestBody(snapshot, tools);
+            return sendRawRequestAsync(body).handle((result, error) -> {
+                if (error == null) {
+                    return result;
+                }
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                log.error("{} chat (with tools) failed: {}", clientName, cause.getMessage(), cause);
+                throw new CompletionException(new RuntimeException(
+                        "AI chat with tools failed: " + cause.getMessage(), cause
+                ));
+            });
+        } catch (Exception e) {
+            log.error("{} chat (with tools) failed: {}", clientName, e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException(
+                    "AI chat with tools failed: " + e.getMessage(), e
+            ));
+        }
+    }
+
     private ObjectNode buildRequestBody(String userMessage, String systemPrompt, ArrayNode tools) {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("model", modelConfig.getModel());
@@ -129,6 +227,31 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         userMsg.put("role", "user");
         userMsg.put("content", userMessage);
 
+        if (tools != null && !tools.isEmpty()) {
+            body.set("tools", tools);
+        }
+        return body;
+    }
+
+    private ObjectNode buildRequestBody(NodeConversationContext context, ArrayNode tools) {
+        ObjectNode body = MAPPER.createObjectNode();
+        body.put("model", modelConfig.getModel());
+        body.put("temperature", modelConfig.getTemperature());
+        body.put("max_tokens", modelConfig.getMaxOutputTokens());
+        body.set("messages", context.buildOpenAiMessages());
+        if (tools != null && !tools.isEmpty()) {
+            body.set("tools", tools);
+        }
+        return body;
+    }
+
+    private ObjectNode buildRequestBody(
+            java.util.List<NodeConversationContext.Message> snapshot, ArrayNode tools) {
+        ObjectNode body = MAPPER.createObjectNode();
+        body.put("model", modelConfig.getModel());
+        body.put("temperature", modelConfig.getTemperature());
+        body.put("max_tokens", modelConfig.getMaxOutputTokens());
+        body.set("messages", NodeConversationContext.buildOpenAiMessages(snapshot));
         if (tools != null && !tools.isEmpty()) {
             body.set("tools", tools);
         }

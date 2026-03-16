@@ -20,6 +20,9 @@ public class Narrative {
     @JsonProperty("verbose_prompt")
     private String verbosePrompt;
 
+    @JsonProperty("storyboard")
+    private Storyboard storyboard;
+
     @JsonProperty("concept_order")
     private List<String> conceptOrder = new ArrayList<>();
 
@@ -33,8 +36,14 @@ public class Narrative {
 
     public Narrative(String targetConcept, String verbosePrompt,
                      List<String> conceptOrder, int totalDuration, int sceneCount) {
+        this(targetConcept, verbosePrompt, null, conceptOrder, totalDuration, sceneCount);
+    }
+
+    public Narrative(String targetConcept, String verbosePrompt, Storyboard storyboard,
+                     List<String> conceptOrder, int totalDuration, int sceneCount) {
         this.targetConcept = targetConcept;
         this.verbosePrompt = verbosePrompt;
+        this.storyboard = storyboard;
         this.conceptOrder = conceptOrder;
         this.totalDuration = totalDuration;
         this.sceneCount = sceneCount;
@@ -53,6 +62,9 @@ public class Narrative {
     public String getVerbosePrompt() { return verbosePrompt; }
     public void setVerbosePrompt(String verbosePrompt) { this.verbosePrompt = verbosePrompt; }
 
+    public Storyboard getStoryboard() { return storyboard; }
+    public void setStoryboard(Storyboard storyboard) { this.storyboard = storyboard; }
+
     public List<String> getConceptOrder() { return conceptOrder; }
     public void setConceptOrder(List<String> conceptOrder) { this.conceptOrder = conceptOrder; }
 
@@ -61,4 +73,216 @@ public class Narrative {
 
     public int getSceneCount() { return sceneCount; }
     public void setSceneCount(int sceneCount) { this.sceneCount = sceneCount; }
+
+    public boolean hasStoryboard() {
+        return storyboard != null
+                && storyboard.getScenes() != null
+                && !storyboard.getScenes().isEmpty();
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Storyboard {
+
+        @JsonProperty("hook")
+        private String hook;
+
+        @JsonProperty("summary")
+        private String summary;
+
+        @JsonProperty("continuity_plan")
+        private String continuityPlan;
+
+        @JsonProperty("global_visual_rules")
+        private List<String> globalVisualRules = new ArrayList<>();
+
+        @JsonProperty("scenes")
+        private List<StoryboardScene> scenes = new ArrayList<>();
+
+        public Storyboard() {}
+
+        public String getHook() { return hook; }
+        public void setHook(String hook) { this.hook = hook; }
+
+        public String getSummary() { return summary; }
+        public void setSummary(String summary) { this.summary = summary; }
+
+        public String getContinuityPlan() { return continuityPlan; }
+        public void setContinuityPlan(String continuityPlan) { this.continuityPlan = continuityPlan; }
+
+        public List<String> getGlobalVisualRules() { return globalVisualRules; }
+        public void setGlobalVisualRules(List<String> globalVisualRules) {
+            this.globalVisualRules = globalVisualRules;
+        }
+
+        public List<StoryboardScene> getScenes() { return scenes; }
+        public void setScenes(List<StoryboardScene> scenes) { this.scenes = scenes; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class StoryboardScene {
+
+        @JsonProperty("scene_id")
+        private String sceneId;
+
+        @JsonProperty("title")
+        private String title;
+
+        @JsonProperty("goal")
+        private String goal;
+
+        @JsonProperty("narration")
+        private String narration;
+
+        @JsonProperty("duration_seconds")
+        private int durationSeconds;
+
+        @JsonProperty("camera_anchor")
+        private String cameraAnchor;
+
+        @JsonProperty("layout_goal")
+        private String layoutGoal;
+
+        @JsonProperty("safe_area_plan")
+        private String safeAreaPlan;
+
+        @JsonProperty("concept_refs")
+        private List<String> conceptRefs = new ArrayList<>();
+
+        @JsonProperty("entering_objects")
+        private List<StoryboardObject> enteringObjects = new ArrayList<>();
+
+        @JsonProperty("persistent_objects")
+        private List<String> persistentObjects = new ArrayList<>();
+
+        @JsonProperty("exiting_objects")
+        private List<String> exitingObjects = new ArrayList<>();
+
+        @JsonProperty("actions")
+        private List<StoryboardAction> actions = new ArrayList<>();
+
+        @JsonProperty("notes_for_codegen")
+        private List<String> notesForCodegen = new ArrayList<>();
+
+        public StoryboardScene() {}
+
+        public String getSceneId() { return sceneId; }
+        public void setSceneId(String sceneId) { this.sceneId = sceneId; }
+
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+
+        public String getGoal() { return goal; }
+        public void setGoal(String goal) { this.goal = goal; }
+
+        public String getNarration() { return narration; }
+        public void setNarration(String narration) { this.narration = narration; }
+
+        public int getDurationSeconds() { return durationSeconds; }
+        public void setDurationSeconds(int durationSeconds) { this.durationSeconds = durationSeconds; }
+
+        public String getCameraAnchor() { return cameraAnchor; }
+        public void setCameraAnchor(String cameraAnchor) { this.cameraAnchor = cameraAnchor; }
+
+        public String getLayoutGoal() { return layoutGoal; }
+        public void setLayoutGoal(String layoutGoal) { this.layoutGoal = layoutGoal; }
+
+        public String getSafeAreaPlan() { return safeAreaPlan; }
+        public void setSafeAreaPlan(String safeAreaPlan) { this.safeAreaPlan = safeAreaPlan; }
+
+        public List<String> getConceptRefs() { return conceptRefs; }
+        public void setConceptRefs(List<String> conceptRefs) { this.conceptRefs = conceptRefs; }
+
+        public List<StoryboardObject> getEnteringObjects() { return enteringObjects; }
+        public void setEnteringObjects(List<StoryboardObject> enteringObjects) {
+            this.enteringObjects = enteringObjects;
+        }
+
+        public List<String> getPersistentObjects() { return persistentObjects; }
+        public void setPersistentObjects(List<String> persistentObjects) {
+            this.persistentObjects = persistentObjects;
+        }
+
+        public List<String> getExitingObjects() { return exitingObjects; }
+        public void setExitingObjects(List<String> exitingObjects) { this.exitingObjects = exitingObjects; }
+
+        public List<StoryboardAction> getActions() { return actions; }
+        public void setActions(List<StoryboardAction> actions) { this.actions = actions; }
+
+        public List<String> getNotesForCodegen() { return notesForCodegen; }
+        public void setNotesForCodegen(List<String> notesForCodegen) {
+            this.notesForCodegen = notesForCodegen;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class StoryboardObject {
+
+        @JsonProperty("id")
+        private String id;
+
+        @JsonProperty("kind")
+        private String kind;
+
+        @JsonProperty("content")
+        private String content;
+
+        @JsonProperty("placement")
+        private String placement;
+
+        @JsonProperty("style")
+        private String style;
+
+        @JsonProperty("source_node")
+        private String sourceNode;
+
+        public StoryboardObject() {}
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+
+        public String getKind() { return kind; }
+        public void setKind(String kind) { this.kind = kind; }
+
+        public String getContent() { return content; }
+        public void setContent(String content) { this.content = content; }
+
+        public String getPlacement() { return placement; }
+        public void setPlacement(String placement) { this.placement = placement; }
+
+        public String getStyle() { return style; }
+        public void setStyle(String style) { this.style = style; }
+
+        public String getSourceNode() { return sourceNode; }
+        public void setSourceNode(String sourceNode) { this.sourceNode = sourceNode; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class StoryboardAction {
+
+        @JsonProperty("order")
+        private int order;
+
+        @JsonProperty("type")
+        private String type;
+
+        @JsonProperty("targets")
+        private List<String> targets = new ArrayList<>();
+
+        @JsonProperty("description")
+        private String description;
+
+        public StoryboardAction() {}
+
+        public int getOrder() { return order; }
+        public void setOrder(int order) { this.order = order; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public List<String> getTargets() { return targets; }
+        public void setTargets(List<String> targets) { this.targets = targets; }
+
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+    }
 }

@@ -4,18 +4,24 @@ import com.automanim.config.WorkflowConfig;
 import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.KnowledgeNode;
 import com.automanim.model.Narrative;
+import com.automanim.model.Narrative.Storyboard;
+import com.automanim.model.Narrative.StoryboardAction;
+import com.automanim.model.Narrative.StoryboardObject;
+import com.automanim.model.Narrative.StoryboardScene;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.PromptTemplates;
+import com.automanim.util.TokenEstimator;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -29,25 +35,22 @@ import java.util.concurrent.CompletionException;
 public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, String> {
 
     private static final Logger log = LoggerFactory.getLogger(NarrativeNode.class);
-    private static final int TOKEN_UNIT_DIVISOR = 4;
-    private static final int ASCII_TOKEN_UNITS = 1;
-    private static final int NON_ASCII_TOKEN_UNITS = 2;
     private static final String TRUNCATION_MARKER = "\n[...truncated...]\n";
 
     private static final String NARRATIVE_TOOL = "["
             + "{"
             + "  \"type\": \"function\","
             + "  \"function\": {"
-            + "    \"name\": \"write_narrative\","
-            + "    \"description\": \"Return a narrative animation script for the concept progression.\","
+            + "    \"name\": \"write_storyboard\","
+            + "    \"description\": \"Return a structured storyboard JSON for the concept progression.\","
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"narrative\": { \"type\": \"string\", \"description\": \"Complete animation narrative script\" },"
+            + "        \"storyboard\": { \"type\": \"object\", \"description\": \"Structured storyboard with continuity-aware scenes and object ids\" },"
             + "        \"scene_count\": { \"type\": \"integer\", \"description\": \"Estimated number of scenes\" },"
             + "        \"estimated_duration\": { \"type\": \"integer\", \"description\": \"Estimated total duration in seconds\" }"
             + "      },"
-            + "      \"required\": [\"narrative\"]"
+            + "      \"required\": [\"storyboard\"]"
             + "    }"
             + "  }"
             + "}"
@@ -90,33 +93,46 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         String userPrompt = buildUserPrompt(graph.getTargetConcept(), context, sceneCount, problemMode);
 
         int totalDuration = estimateTotalDuration(sceneCount, problemMode);
-        String narrativeText;
+        Storyboard storyboard;
+        String fallbackText = "";
 
         try {
             NarrativeDraft draft = requestNarrativeAsync(userPrompt, sceneCount, totalDuration).join();
-            narrativeText = draft.narrativeText;
+            storyboard = draft.storyboard;
+            fallbackText = draft.rawText;
             sceneCount = draft.sceneCount;
             totalDuration = draft.totalDuration;
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
             log.error("Narrative composition failed: {}", cause.getMessage());
-            narrativeText = "Narrative generation failed: " + cause.getMessage();
+            storyboard = null;
+            fallbackText = "Narrative generation failed: " + cause.getMessage();
         }
 
-        if (narrativeText == null || narrativeText.isBlank()) {
-            narrativeText = "Narrative generation returned empty content.";
+        storyboard = ensureStoryboard(graph.getTargetConcept(), storyboard, fallbackText);
+        if (storyboard.getScenes() != null && !storyboard.getScenes().isEmpty()) {
+            sceneCount = storyboard.getScenes().size();
+            totalDuration = calculateStoryboardDuration(storyboard, totalDuration);
         }
+
+        String storyboardJson = JsonUtils.toPrettyJson(storyboard);
+        String codegenPrompt = PromptTemplates.storyboardCodegenPrompt(
+                graph.getTargetConcept(), storyboardJson);
 
         Narrative narrative = new Narrative(
                 graph.getTargetConcept(),
-                narrativeText,
+                codegenPrompt,
+                storyboard,
                 conceptOrder,
                 totalDuration,
                 sceneCount
         );
 
-        log.info("Narrative composed: {} words, {} scenes, ~{}s total",
-                narrative.wordCount(), sceneCount, totalDuration);
+        List<String> sceneTitles = storyboard.getScenes().stream()
+                .map(StoryboardScene::getTitle)
+                .collect(java.util.stream.Collectors.toList());
+        log.info("Narrative storyboard composed: {} scenes, ~{}s total, titles={}",
+                sceneCount, totalDuration, sceneTitles);
         return narrative;
     }
 
@@ -127,23 +143,15 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                 .thenApply(rawResponse -> {
                     toolCalls++;
                     JsonNode toolData = JsonUtils.extractToolCallPayload(rawResponse);
-                    if (toolData != null && toolData.has("narrative")) {
-                        return new NarrativeDraft(
-                                toolData.get("narrative").asText(),
-                                toolData.has("scene_count")
-                                        ? toolData.get("scene_count").asInt(defaultSceneCount)
-                                        : defaultSceneCount,
-                                toolData.has("estimated_duration")
-                                        ? toolData.get("estimated_duration").asInt(defaultTotalDuration)
-                                        : defaultTotalDuration
-                        );
+                    NarrativeDraft fromTool = buildNarrativeDraft(
+                            toolData, JsonUtils.extractTextFromResponse(rawResponse),
+                            defaultSceneCount, defaultTotalDuration);
+                    if (fromTool != null && fromTool.hasContent()) {
+                        return fromTool;
                     }
 
                     String text = JsonUtils.extractTextFromResponse(rawResponse);
-                    if (text != null && !text.isBlank()) {
-                        return new NarrativeDraft(text, defaultSceneCount, defaultTotalDuration);
-                    }
-                    return null;
+                    return buildNarrativeDraft(null, text, defaultSceneCount, defaultTotalDuration);
                 })
                 .exceptionally(error -> {
                     Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
@@ -157,7 +165,8 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                     return aiClient.chatAsync(userPrompt, PromptTemplates.NARRATIVE_SYSTEM)
                             .thenApply(response -> {
                                 toolCalls++;
-                                return new NarrativeDraft(response, defaultSceneCount, defaultTotalDuration);
+                                return buildNarrativeDraft(
+                                        null, response, defaultSceneCount, defaultTotalDuration);
                             });
                 });
     }
@@ -218,6 +227,8 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         sb.append("- Treat mathematical enrichment as optional supporting material.\n");
         sb.append("- Use equations, definitions, interpretations, and examples only when they help the main point.\n");
         sb.append("- It is acceptable to ignore optional math details that would make scenes crowded or repetitive.\n");
+        sb.append("- Keep important content inside the safe canvas area: x in [-6.5, 6.5], y in [-3.5, 3.5].\n");
+        sb.append("- If a planned layout would overflow, split content across scenes instead of squeezing it.\n");
         if (problemMode) {
             sb.append("- Keep the story centered on solving the stated problem, not on surveying related theory.\n");
             sb.append("- Reuse one stable diagram and add only the smallest necessary change per scene.\n");
@@ -232,6 +243,249 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         }
 
         return sb.toString();
+    }
+
+    private NarrativeDraft buildNarrativeDraft(JsonNode toolData,
+                                               String rawText,
+                                               int defaultSceneCount,
+                                               int defaultTotalDuration) {
+        Storyboard storyboard = parseStoryboard(toolData, rawText);
+        if (storyboard == null && (rawText == null || rawText.isBlank())) {
+            return null;
+        }
+
+        int sceneCount = defaultSceneCount;
+        int totalDuration = defaultTotalDuration;
+        if (toolData != null) {
+            if (toolData.has("scene_count")) {
+                sceneCount = toolData.get("scene_count").asInt(defaultSceneCount);
+            }
+            if (toolData.has("estimated_duration")) {
+                totalDuration = toolData.get("estimated_duration").asInt(defaultTotalDuration);
+            }
+        }
+
+        if (storyboard != null && storyboard.getScenes() != null && !storyboard.getScenes().isEmpty()) {
+            sceneCount = storyboard.getScenes().size();
+            totalDuration = calculateStoryboardDuration(storyboard, totalDuration);
+        }
+
+        return new NarrativeDraft(storyboard, rawText, sceneCount, totalDuration);
+    }
+
+    private Storyboard parseStoryboard(JsonNode toolData, String rawText) {
+        Storyboard storyboard = parseStoryboardNode(toolData);
+        if (storyboard != null) {
+            return storyboard;
+        }
+
+        if (rawText == null || rawText.isBlank()) {
+            return null;
+        }
+
+        try {
+            JsonNode textNode = JsonUtils.parseTree(JsonUtils.extractJsonObject(rawText));
+            return parseStoryboardNode(textNode);
+        } catch (RuntimeException e) {
+            log.debug("Failed to parse storyboard JSON from text response: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private Storyboard parseStoryboardNode(JsonNode rootNode) {
+        if (rootNode == null || rootNode.isNull()) {
+            return null;
+        }
+
+        JsonNode storyboardNode = rootNode.has("storyboard") ? rootNode.get("storyboard") : rootNode;
+        if (storyboardNode == null || storyboardNode.isNull() || !storyboardNode.has("scenes")) {
+            return null;
+        }
+
+        try {
+            Storyboard storyboard = JsonUtils.mapper().treeToValue(storyboardNode, Storyboard.class);
+            return normalizeStoryboard(storyboard);
+        } catch (Exception e) {
+            log.warn("Failed to map storyboard payload: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private Storyboard ensureStoryboard(String targetConcept, Storyboard storyboard, String fallbackText) {
+        Storyboard normalized = normalizeStoryboard(storyboard);
+        if (normalized != null && normalized.getScenes() != null && !normalized.getScenes().isEmpty()) {
+            return normalized;
+        }
+
+        Storyboard fallback = new Storyboard();
+        fallback.setHook("Introduce " + targetConcept + " with one clear visual anchor.");
+        fallback.setSummary("Fallback storyboard generated from unstructured narrative output.");
+        fallback.setContinuityPlan("Keep one stable layout and selectively add, transform, or remove objects instead of clearing the whole scene.");
+        fallback.setGlobalVisualRules(new ArrayList<>(Arrays.asList(
+                "Keep the main diagram centered and any formula near an edge.",
+                "Prefer smooth transforms over redraws when content persists."
+        )));
+
+        StoryboardScene scene = new StoryboardScene();
+        scene.setSceneId("scene_1");
+        scene.setTitle("Overview");
+        scene.setGoal("Introduce " + targetConcept);
+        scene.setNarration(fallbackText == null || fallbackText.isBlank()
+                ? "Explain the target concept with a stable diagram and uncluttered layout."
+                : fallbackText);
+        scene.setDurationSeconds(8);
+        scene.setCameraAnchor("center");
+        scene.setLayoutGoal("Keep the main diagram centered and any supporting formula in a corner.");
+        scene.setSafeAreaPlan("Keep the main diagram inside the center safe area and leave a margin from all edges.");
+        scene.setNotesForCodegen(new ArrayList<>(Arrays.asList(
+                "Avoid global clears; preserve continuity for any later additions.",
+                "Add only the minimum set of objects needed for this overview."
+        )));
+
+        List<StoryboardScene> scenes = new ArrayList<>();
+        scenes.add(scene);
+        fallback.setScenes(scenes);
+        return normalizeStoryboard(fallback);
+    }
+
+    private Storyboard normalizeStoryboard(Storyboard storyboard) {
+        if (storyboard == null) {
+            return null;
+        }
+
+        if (storyboard.getGlobalVisualRules() == null) {
+            storyboard.setGlobalVisualRules(new ArrayList<>());
+        }
+        if (storyboard.getScenes() == null) {
+            storyboard.setScenes(new ArrayList<>());
+        }
+        if (storyboard.getContinuityPlan() == null || storyboard.getContinuityPlan().isBlank()) {
+            storyboard.setContinuityPlan(
+                    "Maintain one stable layout and update existing objects instead of redrawing the whole scene.");
+        }
+        if (storyboard.getSummary() == null || storyboard.getSummary().isBlank()) {
+            storyboard.setSummary("Continuity-aware storyboard for the target concept.");
+        }
+
+        List<String> globalRules = new ArrayList<>(storyboard.getGlobalVisualRules());
+        if (globalRules.isEmpty()) {
+            globalRules.add("Keep major objects inside the safe frame.");
+            globalRules.add("Reuse stable anchors for persistent objects.");
+        }
+        storyboard.setGlobalVisualRules(globalRules);
+
+        List<StoryboardScene> normalizedScenes = new ArrayList<>();
+        for (int i = 0; i < storyboard.getScenes().size(); i++) {
+            StoryboardScene scene = storyboard.getScenes().get(i);
+            if (scene == null) {
+                continue;
+            }
+
+            String sceneId = scene.getSceneId() == null || scene.getSceneId().isBlank()
+                    ? "scene_" + (i + 1)
+                    : scene.getSceneId().trim();
+            scene.setSceneId(sceneId);
+
+            if (scene.getTitle() == null || scene.getTitle().isBlank()) {
+                scene.setTitle("Scene " + (i + 1));
+            }
+            if (scene.getGoal() == null || scene.getGoal().isBlank()) {
+                scene.setGoal(scene.getTitle());
+            }
+            if (scene.getNarration() == null || scene.getNarration().isBlank()) {
+                scene.setNarration(scene.getGoal());
+            }
+            if (scene.getDurationSeconds() <= 0) {
+                scene.setDurationSeconds(8);
+            }
+            if (scene.getCameraAnchor() == null || scene.getCameraAnchor().isBlank()) {
+                scene.setCameraAnchor("center");
+            }
+            if (scene.getLayoutGoal() == null || scene.getLayoutGoal().isBlank()) {
+                scene.setLayoutGoal("Keep the layout stable and uncluttered.");
+            }
+            if (scene.getSafeAreaPlan() == null || scene.getSafeAreaPlan().isBlank()) {
+                scene.setSafeAreaPlan(
+                        "Keep important content inside x in [-6.5, 6.5] and y in [-3.5, 3.5] with edge margin.");
+            }
+            if (scene.getConceptRefs() == null) {
+                scene.setConceptRefs(new ArrayList<>());
+            }
+            if (scene.getPersistentObjects() == null) {
+                scene.setPersistentObjects(new ArrayList<>());
+            }
+            if (scene.getExitingObjects() == null) {
+                scene.setExitingObjects(new ArrayList<>());
+            }
+            if (scene.getNotesForCodegen() == null) {
+                scene.setNotesForCodegen(new ArrayList<>());
+            }
+
+            List<StoryboardObject> normalizedObjects = new ArrayList<>();
+            List<StoryboardObject> enteringObjects = scene.getEnteringObjects() == null
+                    ? new ArrayList<>()
+                    : scene.getEnteringObjects();
+            for (int j = 0; j < enteringObjects.size(); j++) {
+                StoryboardObject object = enteringObjects.get(j);
+                if (object == null) {
+                    continue;
+                }
+                if (object.getId() == null || object.getId().isBlank()) {
+                    object.setId(sceneId + "_obj_" + (j + 1));
+                }
+                if (object.getKind() == null || object.getKind().isBlank()) {
+                    object.setKind("visual");
+                }
+                if (object.getPlacement() == null || object.getPlacement().isBlank()) {
+                    object.setPlacement("center");
+                }
+                if (object.getContent() == null || object.getContent().isBlank()) {
+                    object.setContent(object.getId());
+                }
+                normalizedObjects.add(object);
+            }
+            scene.setEnteringObjects(normalizedObjects);
+
+            List<StoryboardAction> normalizedActions = new ArrayList<>();
+            List<StoryboardAction> actions = scene.getActions() == null
+                    ? new ArrayList<>()
+                    : scene.getActions();
+            for (int j = 0; j < actions.size(); j++) {
+                StoryboardAction action = actions.get(j);
+                if (action == null) {
+                    continue;
+                }
+                if (action.getOrder() <= 0) {
+                    action.setOrder(j + 1);
+                }
+                if (action.getType() == null || action.getType().isBlank()) {
+                    action.setType("transform");
+                }
+                if (action.getTargets() == null) {
+                    action.setTargets(new ArrayList<>());
+                }
+                if (action.getDescription() == null || action.getDescription().isBlank()) {
+                    action.setDescription("Advance the explanation with a precise visual update.");
+                }
+                normalizedActions.add(action);
+            }
+            scene.setActions(normalizedActions);
+
+            normalizedScenes.add(scene);
+        }
+        storyboard.setScenes(normalizedScenes);
+        return storyboard;
+    }
+
+    private int calculateStoryboardDuration(Storyboard storyboard, int fallbackDuration) {
+        if (storyboard == null || storyboard.getScenes() == null || storyboard.getScenes().isEmpty()) {
+            return fallbackDuration;
+        }
+
+        int total = storyboard.getScenes().stream()
+                .mapToInt(StoryboardScene::getDurationSeconds)
+                .sum();
+        return total > 0 ? total : fallbackDuration;
     }
 
     private String formatNodeContext(int index, KnowledgeNode node, boolean problemMode) {
@@ -331,28 +585,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
     }
 
     private int estimateTokens(String text) {
-        return (estimateTokenUnits(text) + TOKEN_UNIT_DIVISOR - 1) / TOKEN_UNIT_DIVISOR;
-    }
-
-    private int estimateTokenUnits(String text) {
-        if (text == null || text.isEmpty()) {
-            return 0;
-        }
-
-        int units = 0;
-        for (int i = 0; i < text.length();) {
-            int codePoint = text.codePointAt(i);
-            units += estimateTokenUnits(codePoint);
-            i += Character.charCount(codePoint);
-        }
-        return units;
-    }
-
-    private int estimateTokenUnits(int codePoint) {
-        if (Character.isWhitespace(codePoint)) {
-            return 0;
-        }
-        return codePoint <= 0x7F ? ASCII_TOKEN_UNITS : NON_ASCII_TOKEN_UNITS;
+        return TokenEstimator.estimateTokens(text);
     }
 
     private String truncateToTokenBudget(String text, int maxTokens, String marker) {
@@ -360,38 +593,43 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             return "";
         }
 
-        int maxUnits = maxTokens * TOKEN_UNIT_DIVISOR;
-        if (estimateTokenUnits(text) <= maxUnits) {
+        if (estimateTokens(text) <= maxTokens) {
             return text;
         }
 
-        int markerUnits = estimateTokenUnits(marker);
-        int contentBudget = Math.max(0, maxUnits - markerUnits);
-        String truncatedContent = truncateToUnitBudget(text, contentBudget).stripTrailing();
-        if (truncatedContent.isEmpty() || markerUnits > maxUnits) {
-            return truncateToUnitBudget(text, maxUnits).stripTrailing();
+        int markerTokens = estimateTokens(marker);
+        int contentBudget = Math.max(0, maxTokens - markerTokens);
+        String truncatedContent = truncateToCharBudget(text, contentBudget).stripTrailing();
+        if (truncatedContent.isEmpty() || markerTokens > maxTokens) {
+            return truncateToCharBudget(text, maxTokens).stripTrailing();
         }
         return truncatedContent + marker;
     }
 
-    private String truncateToUnitBudget(String text, int maxUnits) {
-        if (text == null || text.isEmpty() || maxUnits <= 0) {
+    private String truncateToCharBudget(String text, int maxTokens) {
+        if (text == null || text.isEmpty() || maxTokens <= 0) {
             return "";
         }
 
-        StringBuilder sb = new StringBuilder();
-        int usedUnits = 0;
-        for (int i = 0; i < text.length();) {
-            int codePoint = text.codePointAt(i);
-            int codePointUnits = estimateTokenUnits(codePoint);
-            if (usedUnits + codePointUnits > maxUnits) {
-                break;
-            }
-            sb.appendCodePoint(codePoint);
-            usedUnits += codePointUnits;
-            i += Character.charCount(codePoint);
+        // Approximate: build text incrementally, checking estimated tokens
+        // Use a conservative char-per-token ratio to avoid over-scanning
+        int estimatedMaxChars = maxTokens * 4;
+        if (text.length() <= estimatedMaxChars && estimateTokens(text) <= maxTokens) {
+            return text;
         }
-        return sb.toString();
+
+        // Binary search for the right cut point
+        int low = 0;
+        int high = Math.min(text.length(), estimatedMaxChars);
+        while (low < high) {
+            int mid = (low + high + 1) / 2;
+            if (estimateTokens(text.substring(0, mid)) <= maxTokens) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return text.substring(0, low);
     }
 
     private String resolveInputMode(KnowledgeGraph graph) {
@@ -408,18 +646,24 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
     }
 
     private static final class NarrativeDraft {
-        private final String narrativeText;
+        private final Storyboard storyboard;
+        private final String rawText;
         private final int sceneCount;
         private final int totalDuration;
 
-        private NarrativeDraft(String narrativeText, int sceneCount, int totalDuration) {
-            this.narrativeText = narrativeText;
+        private NarrativeDraft(Storyboard storyboard, String rawText,
+                               int sceneCount, int totalDuration) {
+            this.storyboard = storyboard;
+            this.rawText = rawText;
             this.sceneCount = sceneCount;
             this.totalDuration = totalDuration;
         }
 
         private boolean hasContent() {
-            return narrativeText != null && !narrativeText.isBlank();
+            return (storyboard != null
+                    && storyboard.getScenes() != null
+                    && !storyboard.getScenes().isEmpty())
+                    || (rawText != null && !rawText.isBlank());
         }
     }
 }

@@ -9,6 +9,7 @@ import com.automanim.util.AiRequestUtils;
 import com.automanim.util.ConceptUtils;
 import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
+import com.automanim.util.NodeConversationContext;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
@@ -16,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,11 +59,13 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
             + "]";
 
     private AiClient aiClient;
+    private WorkflowConfig workflowConfig;
     private final AtomicInteger toolCalls = new AtomicInteger(0);
     private boolean parallelEnabled = true;
     private int maxConcurrent = 4;
     private final Map<String, CompletableFuture<JsonNode>> cache = new ConcurrentHashMap<>();
     private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
+    private NodeConversationContext conversationContext;
 
     public MathEnrichmentNode() {
         super(1, 0);
@@ -70,10 +74,10 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
     @Override
     public KnowledgeGraph prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
-        WorkflowConfig config = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
-        if (config != null) {
-            this.parallelEnabled = config.isParallelMathEnrichment();
-            this.maxConcurrent = config.getMaxConcurrent();
+        this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
+        if (workflowConfig != null) {
+            this.parallelEnabled = workflowConfig.isParallelMathEnrichment();
+            this.maxConcurrent = workflowConfig.getMaxConcurrent();
         }
         return (KnowledgeGraph) ctx.get(WorkflowKeys.KNOWLEDGE_GRAPH);
     }
@@ -86,6 +90,12 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
         toolCalls.set(0);
         cache.clear();
         aiCallLimiter = new ConcurrencyUtils.AsyncLimiter(concurrency);
+
+        int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
+                ? workflowConfig.getModelConfig().getMaxInputTokens()
+                : 131072;
+        this.conversationContext = new NodeConversationContext(maxInputTokens);
+        this.conversationContext.setSystemMessage(PromptTemplates.MATH_ENRICHMENT_SYSTEM);
 
         try {
             return enrichGraph(graph);
@@ -103,13 +113,21 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
     }
 
     private KnowledgeGraph enrichGraph(KnowledgeGraph graph) {
-        List<CompletableFuture<Void>> tasks = new ArrayList<>();
-        for (KnowledgeNode node : graph.getNodes().values()) {
-            tasks.add(enrichNodeAsync(node));
-        }
+        Map<Integer, List<KnowledgeNode>> levels = graph.groupByDepth();
 
         try {
-            CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
+            for (Map.Entry<Integer, List<KnowledgeNode>> entry : levels.entrySet()) {
+                int depth = entry.getKey();
+                List<KnowledgeNode> nodes = entry.getValue();
+                log.info("  Enriching depth {} ({} nodes{})", depth, nodes.size(),
+                        parallelEnabled && nodes.size() > 1 ? ", parallel" : "");
+
+                List<CompletableFuture<Void>> tasks = new ArrayList<>();
+                for (KnowledgeNode node : nodes) {
+                    tasks.add(enrichNodeAsync(node));
+                }
+                CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
+            }
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
             throw new RuntimeException("Math enrichment failed: " + cause.getMessage(), cause);
@@ -170,8 +188,8 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
                 aiClient,
                 log,
                 node.getConcept(),
+                conversationContext,
                 userPrompt,
-                PromptTemplates.MATH_ENRICHMENT_SYSTEM,
                 MATH_CONTENT_TOOL,
                 () -> toolCalls.incrementAndGet()
         ));

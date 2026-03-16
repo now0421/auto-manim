@@ -8,6 +8,7 @@ import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.util.AiRequestUtils;
 import com.automanim.util.ConcurrencyUtils;
+import com.automanim.util.NodeConversationContext;
 import com.automanim.util.PromptTemplates;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -61,13 +63,15 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             + "]";
 
     private AiClient aiClient;
+    private WorkflowConfig workflowConfig;
     private final AtomicInteger toolCalls = new AtomicInteger(0);
     private boolean parallelEnabled = true;
     private int maxConcurrent = 4;
-    private final List<String> globalColorPalette = java.util.Collections.synchronizedList(new ArrayList<>());
+    private final java.util.Set<String> globalColorPalette = ConcurrentHashMap.newKeySet();
     private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
     private String globalStyleGuide = "";
     private KnowledgeGraph graph;
+    private NodeConversationContext conversationContext;
 
     public VisualDesignNode() {
         super(1, 0);
@@ -76,10 +80,10 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     @Override
     public KnowledgeGraph prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
-        WorkflowConfig config = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
-        if (config != null) {
-            this.parallelEnabled = config.isParallelVisualDesign();
-            this.maxConcurrent = config.getMaxConcurrent();
+        this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
+        if (workflowConfig != null) {
+            this.parallelEnabled = workflowConfig.isParallelVisualDesign();
+            this.maxConcurrent = workflowConfig.getMaxConcurrent();
         }
         return (KnowledgeGraph) ctx.get(WorkflowKeys.KNOWLEDGE_GRAPH);
     }
@@ -94,6 +98,12 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         aiCallLimiter = new ConcurrencyUtils.AsyncLimiter(concurrency);
         this.graph = graph;
         this.globalStyleGuide = buildGlobalStyleGuide(graph);
+
+        int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
+                ? workflowConfig.getModelConfig().getMaxInputTokens()
+                : 131072;
+        this.conversationContext = new NodeConversationContext(maxInputTokens);
+        this.conversationContext.setSystemMessage(PromptTemplates.VISUAL_DESIGN_SYSTEM);
 
         try {
             return designGraph(graph);
@@ -117,12 +127,11 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
 
     private KnowledgeGraph designGraph(KnowledgeGraph graph) {
         Map<Integer, List<KnowledgeNode>> levels = graph.groupByDepth();
-        List<Integer> depths = new ArrayList<>(levels.keySet());
-        depths.sort(Collections.reverseOrder());
 
         try {
-            for (int depth : depths) {
-                List<KnowledgeNode> nodes = levels.get(depth);
+            for (Map.Entry<Integer, List<KnowledgeNode>> entry : levels.entrySet()) {
+                int depth = entry.getKey();
+                List<KnowledgeNode> nodes = entry.getValue();
                 log.info("  Designing depth {} ({} nodes{})", depth, nodes.size(),
                         parallelEnabled && nodes.size() > 1 ? ", parallel" : "");
                 waitForDepth(nodes);
@@ -132,7 +141,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             throw new RuntimeException("Visual design failed: " + cause.getMessage(), cause);
         }
 
-        log.info("Visual design complete: {} API calls, palette: {}", toolCalls.get(), globalColorPalette);
+        log.info("Visual design complete: {} API calls, palette: {}", toolCalls.get(), snapshotPalette());
         return graph;
     }
 
@@ -156,9 +165,10 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
 
         String prerequisiteSpecContext = buildPrerequisiteSpecContext(node);
 
-        String paletteContext = globalColorPalette.isEmpty()
+        List<String> paletteSnapshot = snapshotPalette();
+        String paletteContext = paletteSnapshot.isEmpty()
                 ? "No colors have been assigned yet."
-                : "Colors already used: " + String.join(", ", globalColorPalette)
+                : "Colors already used: " + String.join(", ", paletteSnapshot)
                   + ". Prefer harmonious contrast and avoid unnecessary repetition.";
 
         String userPrompt = String.format(
@@ -171,8 +181,8 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                         aiClient,
                         log,
                         node.getConcept(),
+                        conversationContext,
                         userPrompt,
-                        PromptTemplates.VISUAL_DESIGN_SYSTEM,
                         VISUAL_DESIGN_TOOL,
                         () -> toolCalls.incrementAndGet()
                 ))
@@ -267,9 +277,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                 for (JsonNode color : value) {
                     String colorName = color.asText();
                     nodeColors.add(colorName);
-                    if (!globalColorPalette.contains(colorName)) {
-                        globalColorPalette.add(colorName);
-                    }
+                    globalColorPalette.add(colorName);
                 }
                 visualSpec.put(key, nodeColors);
             } else if ("duration".equals(key) && value.isNumber()) {
@@ -280,5 +288,11 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         }
 
         node.setVisualSpec(visualSpec);
+    }
+
+    private List<String> snapshotPalette() {
+        List<String> palette = new ArrayList<>(globalColorPalette);
+        palette.sort(String.CASE_INSENSITIVE_ORDER);
+        return palette;
     }
 }

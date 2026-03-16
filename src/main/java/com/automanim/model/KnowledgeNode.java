@@ -31,6 +31,7 @@ public class KnowledgeNode {
     private Map<String, String> definitions;
     private String interpretation;
     private List<String> examples;
+    private String description;
 
     @JsonProperty("visual_spec")
     private Map<String, Object> visualSpec;
@@ -85,6 +86,9 @@ public class KnowledgeNode {
 
     public List<String> getExamples() { return examples; }
     public void setExamples(List<String> examples) { this.examples = examples; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public Map<String, Object> getVisualSpec() { return visualSpec; }
     public void setVisualSpec(Map<String, Object> visualSpec) { this.visualSpec = visualSpec; }

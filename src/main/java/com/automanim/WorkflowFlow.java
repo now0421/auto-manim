@@ -65,4 +65,46 @@ public class WorkflowFlow {
         log.info("Workflow assembled (no render): Exploration -> MathEnrichment -> VisualDesign -> Narrative -> CodeGeneration");
         return flow;
     }
+
+    /**
+     * Creates a workflow starting from stage 1 (skips stage 0 exploration).
+     * Use when the knowledge graph has been loaded manually via --from-graph.
+     */
+    public static PocketFlow.Flow<?> createFromGraph() {
+        MathEnrichmentNode mathEnrich = new MathEnrichmentNode();
+        VisualDesignNode visualDesign = new VisualDesignNode();
+        NarrativeNode narrative = new NarrativeNode();
+        CodeGenerationNode codeGen = new CodeGenerationNode();
+        RenderNode render = new RenderNode();
+
+        mathEnrich.next(visualDesign);
+        visualDesign.next(narrative);
+        narrative.next(codeGen);
+        codeGen.next(render);
+
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(mathEnrich);
+
+        log.info("Workflow assembled (from graph): MathEnrichment -> VisualDesign -> Narrative -> CodeGeneration -> Render");
+        return flow;
+    }
+
+    /**
+     * Creates a workflow starting from stage 1, without rendering.
+     * Use when the knowledge graph has been loaded manually via --from-graph.
+     */
+    public static PocketFlow.Flow<?> createFromGraphWithoutRender() {
+        MathEnrichmentNode mathEnrich = new MathEnrichmentNode();
+        VisualDesignNode visualDesign = new VisualDesignNode();
+        NarrativeNode narrative = new NarrativeNode();
+        CodeGenerationNode codeGen = new CodeGenerationNode();
+
+        mathEnrich.next(visualDesign);
+        visualDesign.next(narrative);
+        narrative.next(codeGen);
+
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(mathEnrich);
+
+        log.info("Workflow assembled (from graph, no render): MathEnrichment -> VisualDesign -> Narrative -> CodeGeneration");
+        return flow;
+    }
 }
