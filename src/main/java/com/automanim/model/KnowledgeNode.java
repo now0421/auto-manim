@@ -2,12 +2,27 @@ package com.automanim.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonPropertyOrder({
+        "id",
+        "concept",
+        "description",
+        "nodeType",
+        "min_depth",
+        "is_foundation",
+        "equations",
+        "definitions",
+        "interpretation",
+        "examples",
+        "enriched",
+        "visual_spec"
+})
 public class KnowledgeNode {
 
     public static final String NODE_TYPE_CONCEPT = "concept";
