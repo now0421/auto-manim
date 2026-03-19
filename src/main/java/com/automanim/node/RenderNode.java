@@ -134,6 +134,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         String currentCode = codeResult.getManimCode();
         String sceneName = codeResult.getSceneName();
         String lastError = "";
+        String geometryPath = null;
         int attempts = 0;
         int toolCalls = 0;
 
@@ -149,6 +150,9 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             RenderAttemptResult renderResult = renderer.render(
                     currentCode, sceneName, quality, outputDir
             );
+            if (renderResult.geometryPath() != null) {
+                geometryPath = renderResult.geometryPath();
+            }
 
             if (renderResult.success()) {
                 log.info("  Render succeeded on attempt {}", attempts);
@@ -157,6 +161,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                 result.setFinalCode(currentCode);
                 result.setSceneName(sceneName);
                 result.setVideoPath(renderResult.videoPath());
+                result.setGeometryPath(geometryPath);
                 result.setAttempts(attempts);
                 result.setToolCalls(toolCalls);
                 return result;
@@ -220,6 +225,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         result.setSuccess(false);
         result.setFinalCode(currentCode);
         result.setSceneName(sceneName);
+        result.setGeometryPath(geometryPath);
         result.setAttempts(attempts);
         result.setLastError(lastError);
         result.setToolCalls(toolCalls);

@@ -11,6 +11,7 @@ public class RenderResult {
     private String finalCode;
     private String sceneName;
     private String videoPath;
+    private String geometryPath;
     private int attempts;
     private String lastError;
     private int toolCalls;
@@ -48,6 +49,9 @@ public class RenderResult {
 
     public String getVideoPath() { return videoPath; }
     public void setVideoPath(String videoPath) { this.videoPath = videoPath; }
+
+    public String getGeometryPath() { return geometryPath; }
+    public void setGeometryPath(String geometryPath) { this.geometryPath = geometryPath; }
 
     public int getAttempts() { return attempts; }
     public void setAttempts(int attempts) { this.attempts = attempts; }

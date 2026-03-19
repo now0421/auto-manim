@@ -5,6 +5,7 @@ import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.Narrative;
 import com.automanim.model.RenderResult;
 import com.automanim.model.CodeEvaluationResult;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
@@ -23,6 +24,8 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Handles persisting intermediate workflow results to disk.
@@ -32,6 +35,9 @@ public class FileOutputService {
     private static final Logger log = LoggerFactory.getLogger(FileOutputService.class);
     private static final ObjectMapper mapper = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
+    private static final String CODE_METADATA_FILE = "4_code_result.json";
+    private static final Pattern SCENE_CLASS_PATTERN =
+            Pattern.compile("class\\s+(\\w+)\\s*\\(.*?Scene.*?\\)");
 
     public static Path createOutputDir(Path baseDir, String concept) {
         String safeName = concept.toLowerCase()
@@ -64,6 +70,40 @@ public class FileOutputService {
             return mapper.readValue(path.toFile(), KnowledgeGraph.class);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load knowledge graph from: " + path, e);
+        }
+    }
+
+    public static CodeResult loadCodeResult(Path path) {
+        try {
+            log.info("[Load] Manim code <- {}", path);
+            String code = Files.readString(path, StandardCharsets.UTF_8);
+
+            Path metadataPath = path.toAbsolutePath().normalize().getParent();
+            JsonNode metadata = loadOptionalMetadata(
+                    metadataPath != null ? metadataPath.resolve(CODE_METADATA_FILE) : null);
+
+            String sceneName = readTextField(metadata, "scene_name");
+            if (sceneName.isBlank()) {
+                sceneName = extractSceneName(code, fileStem(path));
+            }
+
+            String description = readTextField(metadata, "description");
+            String targetConcept = readTextField(metadata, "target_concept");
+            if (targetConcept.isBlank()) {
+                targetConcept = sceneName;
+            }
+
+            CodeResult codeResult = new CodeResult(
+                    code,
+                    sceneName,
+                    description,
+                    targetConcept,
+                    readTextField(metadata, "target_description"));
+            codeResult.setToolCalls(0);
+            codeResult.setExecutionTimeSeconds(0.0);
+            return codeResult;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load Manim code from: " + path, e);
         }
     }
 
@@ -111,6 +151,7 @@ public class FileOutputService {
         meta.put("success", renderResult.isSuccess());
         meta.put("scene_name", renderResult.getSceneName());
         meta.put("video_path", renderResult.getVideoPath());
+        meta.put("geometry_path", renderResult.getGeometryPath());
         meta.put("attempts", renderResult.getAttempts());
         meta.put("last_error", renderResult.getLastError());
         meta.put("tool_calls", renderResult.getToolCalls());
@@ -189,5 +230,48 @@ public class FileOutputService {
 
         log.debug("Sanitizing non-JSON-friendly summary value of type {}", className);
         return value.toString();
+    }
+
+    private static JsonNode loadOptionalMetadata(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return null;
+        }
+
+        try {
+            log.info("[Load] code metadata <- {}", path);
+            return mapper.readTree(path.toFile());
+        } catch (IOException e) {
+            log.warn("Failed to load code metadata from {}: {}", path, e.getMessage());
+            return null;
+        }
+    }
+
+    private static String readTextField(JsonNode node, String fieldName) {
+        if (node == null || fieldName == null || fieldName.isBlank()) {
+            return "";
+        }
+
+        JsonNode value = node.get(fieldName);
+        return value != null && !value.isNull() ? value.asText("").trim() : "";
+    }
+
+    private static String extractSceneName(String code, String fallback) {
+        if (code != null) {
+            Matcher matcher = SCENE_CLASS_PATTERN.matcher(code);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        return fallback != null && !fallback.isBlank() ? fallback : "MainScene";
+    }
+
+    private static String fileStem(Path path) {
+        if (path == null || path.getFileName() == null) {
+            return "MainScene";
+        }
+
+        String fileName = path.getFileName().toString();
+        int dotIndex = fileName.lastIndexOf('.');
+        return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
     }
 }

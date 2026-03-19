@@ -27,6 +27,10 @@ public class ManimRendererService {
     private static final Logger log = LoggerFactory.getLogger(ManimRendererService.class);
     private static final long RENDER_TIMEOUT_MINUTES = 10;
     private static final String GENERATED_SCENE_FILE = "scene_render.py";
+    private static final String GEOMETRY_EXPORT_HELPER_FILE = "automanim_geometry_export.py";
+    private static final String GEOMETRY_EXPORT_OUTPUT_FILE = "5_mobject_geometry.json";
+    private static final String GEOMETRY_EXPORT_HELPER_RESOURCE = "/render/automanim_geometry_export.py";
+    private static final String GEOMETRY_EXPORT_ENV = "AUTOMANIM_GEOMETRY_PATH";
 
     /**
      * Result of a single Manim render attempt.
@@ -36,18 +40,22 @@ public class ManimRendererService {
         private final String stdout;
         private final String stderr;
         private final String videoPath;
+        private final String geometryPath;
 
-        public RenderAttemptResult(boolean success, String stdout, String stderr, String videoPath) {
+        public RenderAttemptResult(boolean success, String stdout, String stderr,
+                                   String videoPath, String geometryPath) {
             this.success = success;
             this.stdout = stdout;
             this.stderr = stderr;
             this.videoPath = videoPath;
+            this.geometryPath = geometryPath;
         }
 
         public boolean success() { return success; }
         public String stdout() { return stdout; }
         public String stderr() { return stderr; }
         public String videoPath() { return videoPath; }
+        public String geometryPath() { return geometryPath; }
     }
 
     /**
@@ -61,16 +69,31 @@ public class ManimRendererService {
      */
     public RenderAttemptResult render(String code, String sceneName, String quality, Path outputDir) {
         Path codeFile = null;
+        Path geometryHelperFile = null;
         try {
             Path normalizedOutputDir = outputDir.toAbsolutePath().normalize();
+            Path geometryOutputFile = normalizedOutputDir.resolve(GEOMETRY_EXPORT_OUTPUT_FILE);
+            deleteTemporaryFile(geometryOutputFile);
+
+            String renderCode = code;
+            try {
+                geometryHelperFile = normalizedOutputDir.resolve(GEOMETRY_EXPORT_HELPER_FILE);
+                Files.writeString(geometryHelperFile, loadGeometryExportHelperScript(), StandardCharsets.UTF_8);
+                renderCode = instrumentCodeWithGeometryExport(code, sceneName);
+            } catch (IOException e) {
+                geometryHelperFile = null;
+                log.warn("Geometry export helper unavailable; rendering without geometry export: {}",
+                        e.getMessage());
+            }
 
             codeFile = normalizedOutputDir.resolve(GENERATED_SCENE_FILE);
-            Files.writeString(codeFile, code, StandardCharsets.UTF_8);
+            Files.writeString(codeFile, renderCode, StandardCharsets.UTF_8);
 
             List<String> cmd = buildManimCommand(codeFile, sceneName, quality, normalizedOutputDir);
             log.info("Rendering: manim {} (quality={})", sceneName, quality);
 
-            Process process = startProcess(cmd, normalizedOutputDir);
+            Process process = startProcess(cmd, normalizedOutputDir,
+                    geometryHelperFile != null ? geometryOutputFile : null);
 
             ExecutorService streamReaders = Executors.newFixedThreadPool(2);
             Future<String> stdoutFuture = streamReaders.submit(
@@ -90,6 +113,7 @@ public class ManimRendererService {
             String stdout = awaitCapturedOutput(stdoutFuture, "stdout");
             String stderr = awaitCapturedOutput(stderrFuture, "stderr");
             streamReaders.shutdown();
+            String geometryPath = readGeneratedGeometryPath(geometryOutputFile);
 
             if (!finished) {
                 process.destroyForcibly();
@@ -97,43 +121,56 @@ public class ManimRendererService {
                         false,
                         stdout,
                         appendMessage(stderr, "Render timed out after " + RENDER_TIMEOUT_MINUTES + " minutes"),
-                        null
+                        null,
+                        geometryPath
                 );
             }
 
             int exitCode = process.exitValue();
             if (exitCode != 0) {
                 log.warn("Manim render failed (exit={}): {}", exitCode, stderr);
-                return new RenderAttemptResult(false, stdout, stderr, null);
+                return new RenderAttemptResult(false, stdout, stderr, null, geometryPath);
             }
 
             String videoPath = findVideoFile(normalizedOutputDir, sceneName);
             
             if (videoPath == null) {
                 log.warn("Manim exited successfully but produced no video file");
-                return new RenderAttemptResult(false, stdout, appendMessage(stderr, "No video file produced despite successful exit"), null);
+                return new RenderAttemptResult(
+                        false,
+                        stdout,
+                        appendMessage(stderr, "No video file produced despite successful exit"),
+                        null,
+                        geometryPath
+                );
             }
 
             log.info("Render successful: {}", videoPath);
-            return new RenderAttemptResult(true, stdout, stderr, videoPath);
+            return new RenderAttemptResult(true, stdout, stderr, videoPath, geometryPath);
 
         } catch (IOException | InterruptedException e) {
             log.error("Render execution error: {}", e.getMessage(), e);
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            return new RenderAttemptResult(false, "", e.getMessage(), null);
+            return new RenderAttemptResult(false, "", e.getMessage(), null, null);
         } finally {
-            deleteTemporarySceneFile(codeFile);
+            deleteTemporaryFile(codeFile);
+            deleteTemporaryFile(geometryHelperFile);
         }
     }
 
-    protected Process startProcess(List<String> cmd, Path workingDir) throws IOException {
+    protected Process startProcess(List<String> cmd, Path workingDir, Path geometryOutputPath)
+            throws IOException {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(workingDir.toFile());
         pb.redirectErrorStream(false);
         pb.environment().put("PYTHONUTF8", "1");
         pb.environment().put("PYTHONIOENCODING", "utf-8");
+        if (geometryOutputPath != null) {
+            pb.environment().put(GEOMETRY_EXPORT_ENV,
+                    geometryOutputPath.toAbsolutePath().normalize().toString());
+        }
         return pb.start();
     }
 
@@ -163,17 +200,42 @@ public class ManimRendererService {
         return cmd;
     }
 
-    private void deleteTemporarySceneFile(Path codeFile) {
-        if (codeFile == null) {
+    private String instrumentCodeWithGeometryExport(String code, String sceneName) {
+        return code
+                + System.lineSeparator()
+                + System.lineSeparator()
+                + "from automanim_geometry_export import patch_scene_for_geometry_export as __automanim_patch_scene"
+                + System.lineSeparator()
+                + sceneName + " = __automanim_patch_scene(" + sceneName + ")"
+                + System.lineSeparator();
+    }
+
+    private String loadGeometryExportHelperScript() throws IOException {
+        try (var in = ManimRendererService.class.getResourceAsStream(GEOMETRY_EXPORT_HELPER_RESOURCE)) {
+            if (in == null) {
+                throw new IOException("Missing geometry export helper resource: " + GEOMETRY_EXPORT_HELPER_RESOURCE);
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private String readGeneratedGeometryPath(Path geometryOutputFile) {
+        return Files.exists(geometryOutputFile)
+                ? geometryOutputFile.toAbsolutePath().normalize().toString()
+                : null;
+    }
+
+    private void deleteTemporaryFile(Path file) {
+        if (file == null) {
             return;
         }
 
         try {
-            if (Files.deleteIfExists(codeFile)) {
-                log.debug("Deleted temporary render script: {}", codeFile);
+            if (Files.deleteIfExists(file)) {
+                log.debug("Deleted temporary render artifact: {}", file);
             }
         } catch (IOException e) {
-            log.warn("Failed to delete temporary render script {}: {}", codeFile, e.getMessage());
+            log.warn("Failed to delete temporary render artifact {}: {}", file, e.getMessage());
         }
     }
 

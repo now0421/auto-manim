@@ -8,7 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ManimRendererServiceTest {
@@ -20,7 +22,8 @@ class ManimRendererServiceTest {
     void deletesTemporarySceneFileWhenProcessFailsToStart() {
         ManimRendererService service = new ManimRendererService() {
             @Override
-            protected Process startProcess(List<String> cmd, Path workingDir) throws IOException {
+            protected Process startProcess(List<String> cmd, Path workingDir, Path geometryOutputPath)
+                    throws IOException {
                 throw new IOException("simulated manim startup failure");
             }
         };
@@ -36,5 +39,41 @@ class ManimRendererServiceTest {
         assertFalse(result.success());
         assertTrue(result.stderr().contains("simulated manim startup failure"));
         assertFalse(Files.exists(codeFile));
+    }
+
+    @Test
+    void injectsGeometryExportHookIntoTemporaryRenderScript() {
+        Path helperFile = tempDir.resolve("automanim_geometry_export.py");
+
+        ManimRendererService service = new ManimRendererService() {
+            @Override
+            protected Process startProcess(List<String> cmd, Path workingDir, Path geometryOutputPath)
+                    throws IOException {
+                String script = Files.readString(workingDir.resolve("scene_render.py"));
+                assertTrue(script.contains("from automanim_geometry_export import patch_scene_for_geometry_export"));
+                assertTrue(script.contains("DemoScene = __automanim_patch_scene(DemoScene)"));
+                assertTrue(Files.exists(workingDir.resolve("automanim_geometry_export.py")));
+                assertNotNull(geometryOutputPath);
+                assertEquals(workingDir.resolve("5_mobject_geometry.json"), geometryOutputPath);
+                throw new IOException("stop after inspection");
+            }
+        };
+
+        ManimRendererService.RenderAttemptResult result = service.render(
+                String.join("\n",
+                        "from manim import *",
+                        "",
+                        "class DemoScene(Scene):",
+                        "    def construct(self):",
+                        "        self.add(Dot())"),
+                "DemoScene",
+                "low",
+                tempDir
+        );
+
+        assertFalse(result.success());
+        assertTrue(result.stderr().contains("stop after inspection"));
+        assertFalse(Files.exists(tempDir.resolve("scene_render.py")));
+        assertFalse(Files.exists(helperFile));
     }
 }

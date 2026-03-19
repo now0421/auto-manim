@@ -116,4 +116,33 @@ public class WorkflowFlow {
         log.info("Workflow assembled (from graph, no render): MathEnrichment -> VisualDesign -> Narrative -> CodeGeneration -> CodeEvaluation");
         return flow;
     }
+
+    /**
+     * Creates a workflow starting from stage 3 (skips exploration through code generation).
+     * Use when Manim code has been loaded manually via --from-code.
+     */
+    public static PocketFlow.Flow<?> createFromCode() {
+        CodeEvaluationNode codeEvaluation = new CodeEvaluationNode();
+        RenderNode render = new RenderNode();
+
+        codeEvaluation.next(render);
+
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(codeEvaluation);
+
+        log.info("Workflow assembled (from code): CodeEvaluation -> Render");
+        return flow;
+    }
+
+    /**
+     * Creates a workflow starting from stage 3, without rendering.
+     * Use when Manim code has been loaded manually via --from-code.
+     */
+    public static PocketFlow.Flow<?> createFromCodeWithoutRender() {
+        CodeEvaluationNode codeEvaluation = new CodeEvaluationNode();
+
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(codeEvaluation);
+
+        log.info("Workflow assembled (from code, no render): CodeEvaluation");
+        return flow;
+    }
 }

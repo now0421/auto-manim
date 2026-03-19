@@ -58,6 +58,7 @@ public class AutoManimApplication {
         String modelConfigPath = null;
         String outputDirOverride = null;
         String fromGraphPath = null;
+        String fromCodePath = null;
 
         // Parse CLI flags
         for (int i = startIndex; i < args.length; i++) {
@@ -74,10 +75,20 @@ public class AutoManimApplication {
                 case "--from-graph":
                     fromGraphPath = args[++i];
                     break;
+                case "--from-code":
+                    fromCodePath = args[++i];
+                    break;
                 default:
                     log.warn("Unknown option: {}", args[i]);
                     break;
             }
+        }
+
+        if (fromGraphPath != null && fromCodePath != null) {
+            log.error("Use either --from-graph or --from-code, not both.");
+            printUsage();
+            System.exit(1);
+            return;
         }
 
         // Load pre-built knowledge graph if --from-graph is specified
@@ -97,8 +108,26 @@ public class AutoManimApplication {
             }
         }
 
+        CodeResult preloadedCodeResult = null;
+        Path codeOutputDir = null;
+        if (fromCodePath != null) {
+            Path codeFile = resolveCodePath(fromCodePath);
+            if (!Files.exists(codeFile)) {
+                log.error("Manim code file not found: {}", codeFile);
+                System.exit(1);
+                return;
+            }
+            preloadedCodeResult = FileOutputService.loadCodeResult(codeFile);
+            codeOutputDir = codeFile.toAbsolutePath().getParent();
+            if (concept == null) {
+                concept = firstNonBlank(
+                        preloadedCodeResult.getTargetConcept(),
+                        preloadedCodeResult.getSceneName());
+            }
+        }
+
         if (concept == null) {
-            log.error("No concept provided. Specify a concept as the first argument or use --from-graph.");
+            log.error("No concept provided. Specify a concept as the first argument or use --from-graph/--from-code.");
             printUsage();
             System.exit(1);
             return;
@@ -114,6 +143,9 @@ public class AutoManimApplication {
         if (preloadedGraph != null) {
             // Always write outputs alongside the supplied graph
             outputDir = graphOutputDir;
+        } else if (preloadedCodeResult != null) {
+            // Always write outputs alongside the supplied code
+            outputDir = codeOutputDir;
         } else if (outputDirOverride != null) {
             outputDir = Path.of(outputDirOverride);
         } else {
@@ -125,6 +157,9 @@ public class AutoManimApplication {
         log.info("  Concept:  {}", concept);
         if (preloadedGraph != null) {
             log.info("  Stage 0:  [skipped – loaded from {}]", fromGraphPath);
+        }
+        if (preloadedCodeResult != null) {
+            log.info("  Stage 0-2: [skipped - loaded from {}]", fromCodePath);
         }
         log.info("  Mode:     {}", config.getInputMode());
         log.info("  Model:    {}", config.getModel());
@@ -144,6 +179,9 @@ public class AutoManimApplication {
             ctx.put(WorkflowKeys.KNOWLEDGE_GRAPH, preloadedGraph);
             ctx.put(WorkflowKeys.EXPLORATION_API_CALLS, 0);
         }
+        if (preloadedCodeResult != null) {
+            ctx.put(WorkflowKeys.CODE_RESULT, preloadedCodeResult);
+        }
 
         // Create and run workflow
         PocketFlow.Flow<?> flow;
@@ -151,6 +189,10 @@ public class AutoManimApplication {
             flow = config.isRenderEnabled()
                     ? WorkflowFlow.createFromGraph()
                     : WorkflowFlow.createFromGraphWithoutRender();
+        } else if (preloadedCodeResult != null) {
+            flow = config.isRenderEnabled()
+                    ? WorkflowFlow.createFromCode()
+                    : WorkflowFlow.createFromCodeWithoutRender();
         } else if (config.isRenderEnabled()) {
             flow = WorkflowFlow.create();
         } else {
@@ -244,6 +286,7 @@ public class AutoManimApplication {
             summary.put("render_success", renderResult.isSuccess());
             summary.put("render_attempts", renderResult.getAttempts());
             summary.put("video_path", renderResult.getVideoPath());
+            summary.put("geometry_path", renderResult.getGeometryPath());
         }
 
         summary.put("total_api_calls_estimate", apiCalls);
@@ -287,6 +330,9 @@ public class AutoManimApplication {
             } else {
                 log.info("  Render: FAILED after {} attempts", summary.get("render_attempts"));
             }
+            if (summary.get("geometry_path") != null) {
+                log.info("  Geometry: {}", summary.get("geometry_path"));
+            }
         }
         log.info("  Total API calls: ~{}", summary.get("total_api_calls_estimate"));
         log.info("  Duration: {}", summary.get("duration_human"));
@@ -307,20 +353,46 @@ public class AutoManimApplication {
         return p;
     }
 
+    private static Path resolveCodePath(String fromCodePath) {
+        Path p = Path.of(fromCodePath);
+        if (Files.isDirectory(p)) {
+            return p.resolve("4_manim_code.py");
+        }
+        return p;
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private static void printUsage() {
         System.out.println(
                 "Usage: auto-manim [concept] [options]\n"
                 + "\n"
                 + "Arguments:\n"
-                + "  concept                    Concept or problem to animate (required unless --from-graph is used)\n"
+                + "  concept                    Concept or problem to animate"
+                + " (required unless --from-graph/--from-code is used)\n"
                 + "\n"
                 + "Options:\n"
                 + "  --from-graph FILE|DIR      Skip stage 0: load a pre-built knowledge graph\n"
                 + "                             (accepts 1_knowledge_graph.json or its parent directory).\n"
                 + "                             Outputs are written to the same directory as the graph.\n"
+                + "  --from-code FILE|DIR       Skip stages 0-2: load pre-built Manim code\n"
+                + "                             (accepts 4_manim_code.py or its parent directory).\n"
+                + "                             Outputs are written to the same directory as the code.\n"
                 + "  --workflow-config FILE     Workflow JSON config path\n"
                 + "  --model-config FILE        Model JSON config path\n"
-                + "  --output DIR               Output directory (ignored when --from-graph is used)\n"
+                + "  --output DIR               Output directory"
+                + " (ignored when --from-graph/--from-code is used)\n"
                 + "  -h, --help                 Show this help\n"
                 + "\n"
                 + "Environment variables:\n"
