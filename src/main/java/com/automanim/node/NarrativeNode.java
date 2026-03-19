@@ -86,15 +86,17 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                 .map(KnowledgeNode::getConcept)
                 .collect(java.util.stream.Collectors.toList());
         String targetDescription = buildWorkflowTargetDescription(graph, problemMode);
+        String workflowTarget = graph.getTargetConcept();
         String systemPrompt = PromptTemplates.narrativeSystemPrompt(
-                graph.getTargetConcept(), targetDescription);
+                workflowTarget, targetDescription);
 
         log.info("  Narrative mode: {}, order: {}", resolvedMode, conceptOrder);
 
         int sceneCount = estimateSceneCount(ordered, problemMode);
+        String promptTarget = graph.getTargetConcept();
         String context = buildTruncatedContext(
-                graph.getTargetConcept(), ordered, problemMode, sceneCount, systemPrompt);
-        String userPrompt = buildUserPrompt(graph.getTargetConcept(), context, sceneCount, problemMode);
+                promptTarget, ordered, problemMode, sceneCount, systemPrompt);
+        String userPrompt = buildUserPrompt(promptTarget, context, sceneCount, problemMode);
 
         int totalDuration = estimateTotalDuration(sceneCount, problemMode);
         Storyboard storyboard;
@@ -219,7 +221,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         if (problemMode) {
             sb.append("- Keep the story centered on solving the stated problem, not on surveying related theory.\n");
             sb.append("- Reuse one stable diagram and add only the smallest necessary change per scene.\n");
-            sb.append("- The original problem statement is already provided separately, so do not treat it as a standalone graph lesson.\n");
+            sb.append("- Use the problem node to establish the givens and target before later solution moves.\n");
             sb.append("- Merge nearby steps when they belong to the same solving move.\n");
         }
         sb.append("\n");
@@ -616,36 +618,14 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             return WorkflowConfig.normalizeInputMode(configuredInputMode);
         }
 
-        KnowledgeNode root = graph.getRootNode();
-        if (root != null && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(root.getNodeType())) {
-            return WorkflowConfig.INPUT_MODE_PROBLEM;
-        }
-        boolean hasProblemStatementNode = graph.getNodes().values().stream()
-                .anyMatch(node -> node != null
-                        && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType()));
-        if (hasProblemStatementNode) {
+        if (graph != null && graph.isProblemMode()) {
             return WorkflowConfig.INPUT_MODE_PROBLEM;
         }
         return WorkflowConfig.INPUT_MODE_CONCEPT;
     }
 
     private List<KnowledgeNode> filterNarrativeNodes(List<KnowledgeNode> orderedNodes, boolean problemMode) {
-        if (!problemMode) {
-            return orderedNodes;
-        }
-
-        List<KnowledgeNode> filtered = new ArrayList<>();
-        for (KnowledgeNode node : orderedNodes) {
-            if (node == null || isProblemMetadataNode(node)) {
-                continue;
-            }
-            filtered.add(node);
-        }
-        return filtered;
-    }
-
-    private boolean isProblemMetadataNode(KnowledgeNode node) {
-        return KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType());
+        return orderedNodes;
     }
 
     private String buildWorkflowTargetDescription(KnowledgeGraph graph, boolean problemMode) {

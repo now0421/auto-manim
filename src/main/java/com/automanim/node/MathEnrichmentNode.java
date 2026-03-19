@@ -67,6 +67,7 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
     private final Map<String, CompletableFuture<JsonNode>> cache = new ConcurrentHashMap<>();
     private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
     private NodeConversationContext conversationContext;
+    private KnowledgeGraph graph;
 
     public MathEnrichmentNode() {
         super(1, 0);
@@ -91,19 +92,22 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
         toolCalls.set(0);
         cache.clear();
         aiCallLimiter = new ConcurrencyUtils.AsyncLimiter(concurrency);
+        this.graph = graph;
 
         int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
                 ? workflowConfig.getModelConfig().getMaxInputTokens()
                 : 131072;
+        String workflowTarget = graph != null ? graph.getTargetConcept() : "";
         this.conversationContext = new NodeConversationContext(maxInputTokens);
         this.conversationContext.setSystemMessage(PromptTemplates.mathEnrichmentSystemPrompt(
-                graph.getTargetConcept(),
+                workflowTarget,
                 buildWorkflowTargetDescription(graph)));
 
         try {
             return enrichGraph(graph);
         } finally {
             aiCallLimiter = null;
+            this.graph = null;
         }
     }
 
@@ -128,7 +132,7 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
                     }
                 }
                 if (nodes.isEmpty()) {
-                    log.info("  Skipping depth {} (only metadata nodes)", depth);
+                    log.info("  Skipping depth {} (no eligible nodes)", depth);
                     continue;
                 }
                 log.info("  Enriching depth {} ({} nodes{})", depth, nodes.size(),
@@ -191,20 +195,14 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
     }
 
     private CompletableFuture<JsonNode> fetchMathContentAsync(KnowledgeNode node) {
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("Concept: ").append(node.getConcept())
-                .append("\nNode type: ").append(node.getNodeType())
-                .append("\nDepth: ").append(node.getMinDepth());
-        if (node.getDescription() != null && !node.getDescription().isBlank()) {
-            userPrompt.append("\nAnimation description: ").append(node.getDescription().trim());
-        }
+        String userPrompt = buildCurrentStepPrompt(node);
 
         return aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
                 aiClient,
                 log,
                 node.getConcept(),
                 conversationContext,
-                userPrompt.toString(),
+                userPrompt,
                 MATH_CONTENT_TOOL,
                 () -> toolCalls.incrementAndGet()
         ));
@@ -219,22 +217,114 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
     }
 
     private boolean shouldEnrichNode(KnowledgeNode node) {
-        return node != null && !KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType());
+        return node != null;
     }
 
     private String buildWorkflowTargetDescription(KnowledgeGraph graph) {
         KnowledgeNode root = graph != null ? graph.getRootNode() : null;
+        boolean problemMode = graph != null && graph.isProblemMode();
+        if (problemMode && graph != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Target problem: ").append(graph.getTargetConcept()).append("\n");
+            if (root != null) {
+                sb.append("Final conclusion: ").append(root.getConcept()).append("\n");
+                if (root.getDescription() != null && !root.getDescription().isBlank()) {
+                    sb.append("Conclusion role: ").append(root.getDescription().trim()).append("\n");
+                }
+            }
+            String stepChain = buildProblemSolutionChainSummary(graph, null);
+            if (!stepChain.isBlank()) {
+                sb.append("Ordered solution-step chain:\n").append(stepChain);
+            }
+            return sb.toString().trim();
+        }
         return PromptTemplates.workflowTargetDescription(
                 graph != null ? graph.getTargetConcept() : "",
                 root != null ? root.getConcept() : "",
                 root != null ? root.getDescription() : "",
-                graph != null && isProblemGraph(graph));
+                problemMode);
     }
 
-    private boolean isProblemGraph(KnowledgeGraph graph) {
-        return graph.getNodes().values().stream()
-                .anyMatch(node -> node != null
-                        && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType()));
+    private String buildCurrentStepPrompt(KnowledgeNode node) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Current step:\n");
+        sb.append("- Concept: ").append(node.getConcept()).append("\n");
+        sb.append("- Node type: ").append(node.getNodeType()).append("\n");
+        sb.append("- Depth: ").append(node.getMinDepth()).append("\n");
+        if (node.getDescription() != null && !node.getDescription().isBlank()) {
+            sb.append("- Planning summary: ").append(node.getDescription().trim()).append("\n");
+        }
+
+        if (graph != null && graph.isProblemMode()) {
+            sb.append("- Target problem: ").append(graph.getTargetConcept()).append("\n");
+
+            List<KnowledgeNode> prerequisites = graph.getPrerequisites(node.getId());
+            if (!prerequisites.isEmpty()) {
+                sb.append("Direct prerequisite steps:\n");
+                for (KnowledgeNode prerequisite : prerequisites) {
+                    appendStepLine(sb, prerequisite);
+                }
+            }
+
+            List<KnowledgeNode> dependents = graph.getDependents(node.getId());
+            if (!dependents.isEmpty()) {
+                sb.append("Direct downstream steps:\n");
+                for (KnowledgeNode dependent : dependents) {
+                    appendStepLine(sb, dependent);
+                }
+            }
+
+            String stepChain = buildProblemSolutionChainSummary(graph, node);
+            if (!stepChain.isBlank()) {
+                sb.append("Current step inside the ordered solution-step chain:\n")
+                        .append(stepChain);
+            }
+        }
+
+        sb.append("Return only the mathematical content needed for this current step.");
+        return sb.toString();
+    }
+
+    private String buildProblemSolutionChainSummary(KnowledgeGraph graph, KnowledgeNode currentNode) {
+        if (graph == null || !graph.isProblemMode()) {
+            return "";
+        }
+
+        List<KnowledgeNode> steps = graph.topologicalOrder();
+        if (steps.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < steps.size(); i++) {
+            KnowledgeNode step = steps.get(i);
+            String marker = currentNode != null && step.getId().equals(currentNode.getId()) ? "-> " : "   ";
+            sb.append(marker)
+                    .append(i + 1)
+                    .append(". [")
+                    .append(step.getNodeType())
+                    .append("] ")
+                    .append(step.getConcept());
+            if (step.getDescription() != null && !step.getDescription().isBlank()) {
+                sb.append(" - ").append(step.getDescription().trim());
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    private void appendStepLine(StringBuilder sb, KnowledgeNode step) {
+        if (sb == null || step == null) {
+            return;
+        }
+        sb.append("- [")
+                .append(step.getNodeType())
+                .append("] ")
+                .append(step.getConcept());
+        if (step.getDescription() != null && !step.getDescription().isBlank()) {
+            sb.append(" - ").append(step.getDescription().trim());
+        }
+        sb.append("\n");
     }
 
     private void applyContent(KnowledgeNode node, JsonNode data) {

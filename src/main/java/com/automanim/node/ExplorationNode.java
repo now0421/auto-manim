@@ -62,7 +62,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             + "            \"type\": \"object\","
             + "            \"properties\": {"
             + "              \"concept\": { \"type\": \"string\", \"description\": \"Concept name\" },"
-            + "              \"description\": { \"type\": \"string\", \"description\": \"How to animate this concept in Manim\" }"
+            + "              \"description\": { \"type\": \"string\", \"description\": \"Short conceptual summary of why this prerequisite matters in the learning path\" }"
             + "            },"
             + "            \"required\": [\"concept\", \"description\"]"
             + "          }"
@@ -131,7 +131,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             + "            \"properties\": {"
             + "              \"id\": { \"type\": \"string\" },"
             + "              \"concept\": { \"type\": \"string\" },"
-            + "              \"description\": { \"type\": \"string\" },"
+            + "              \"description\": { \"type\": \"string\", \"description\": \"Short summary of the step's mathematical role in the solution\" },"
             + "              \"node_type\": { \"type\": \"string\" },"
             + "              \"min_depth\": { \"type\": \"integer\" },"
             + "              \"is_foundation\": { \"type\": \"boolean\" }"
@@ -249,7 +249,9 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         scheduleAnalysis(state, new NodeRef(rootId, rootConcept, 0));
 
         try {
-            return state.completion.join();
+            KnowledgeGraph graph = state.completion.join();
+            graph.setTargetConcept(rootConcept);
+            return graph;
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
             throw new RuntimeException("Exploration failed: " + cause.getMessage(), cause);
@@ -346,10 +348,14 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             });
         }
 
-        ensureProblemStatementNode(nodes, problemStatement);
         rootId = sanitizeProblemRoot(rootId, nodes, edges);
         recomputeProblemDepths(rootId, nodes, edges);
-        return new KnowledgeGraph(rootId, problemStatement, orderNodes(nodes), orderProblemEdges(edges, nodes));
+        return new KnowledgeGraph(
+                rootId,
+                problemStatement,
+                orderNodes(nodes),
+                orderProblemEdges(edges, nodes)
+        );
     }
 
     private String sanitizeProblemRoot(String currentRootId,
@@ -388,43 +394,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             }
         }
 
-        String syntheticRootId = createSyntheticConclusionRoot(nodes, edges);
-        String problemNodeId = findProblemStatementNodeId(nodes);
-        if (problemNodeId != null && !problemNodeId.equals(syntheticRootId)) {
-            edges.put(syntheticRootId, Collections.singletonList(problemNodeId));
-        }
-        return syntheticRootId;
-    }
-
-    private void ensureProblemStatementNode(Map<String, KnowledgeNode> nodes, String problemStatement) {
-        if (findProblemStatementNodeId(nodes) != null) {
-            return;
-        }
-
-        String nodeId = createProblemStatementNodeId(nodes);
-        KnowledgeNode problemNode = new KnowledgeNode(nodeId, problemStatement, 1, false);
-        problemNode.setNodeType(KnowledgeNode.NODE_TYPE_PROBLEM);
-        problemNode.setDescription("Introduce the problem statement, givens, and target clearly.");
-        nodes.put(nodeId, problemNode);
-    }
-
-    private String findProblemStatementNodeId(Map<String, KnowledgeNode> nodes) {
-        for (KnowledgeNode node : nodes.values()) {
-            if (node != null && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType())) {
-                return node.getId();
-            }
-        }
-        return null;
-    }
-
-    private String createProblemStatementNodeId(Map<String, KnowledgeNode> nodes) {
-        String baseId = nodes.containsKey("problem") ? "problem_statement" : "problem";
-        String candidate = baseId;
-        int suffix = 2;
-        while (nodes.containsKey(candidate)) {
-            candidate = baseId + "_" + suffix++;
-        }
-        return candidate;
+        return createSyntheticConclusionRoot(nodes, edges);
     }
 
     private boolean isValidProblemRoot(String nodeId, Map<String, KnowledgeNode> nodes) {
@@ -445,10 +415,10 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
                     KnowledgeNode node = nodes.get(id);
                     return node != null && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType());
                 })
-                .thenComparing(Comparator.comparingInt((String id) -> {
+                .thenComparingInt(id -> {
                     KnowledgeNode node = nodes.get(id);
-                    return node != null ? node.getMinDepth() : Integer.MIN_VALUE;
-                }).reversed())
+                    return node != null ? node.getMinDepth() : Integer.MAX_VALUE;
+                })
                 .thenComparing(id -> {
                     KnowledgeNode node = nodes.get(id);
                     return node != null ? node.getConcept() : id;

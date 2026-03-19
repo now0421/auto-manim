@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.TreeMap;
@@ -250,6 +251,9 @@ public class KnowledgeGraph {
         StringBuilder sb = new StringBuilder();
         KnowledgeNode root = getRootNode();
         sb.append("KnowledgeGraph\n");
+        if (targetConcept != null && !targetConcept.isBlank()) {
+            sb.append("Target: ").append(targetConcept).append("\n");
+        }
         if (root != null) {
             sb.append("Root: ").append(root.getConcept())
                     .append(" [depth=").append(root.getMinDepth()).append("]\n");
@@ -364,5 +368,31 @@ public class KnowledgeGraph {
     public Map<String, List<String>> getPrerequisiteEdges() { return prerequisiteEdges; }
     public void setPrerequisiteEdges(Map<String, List<String>> prerequisiteEdges) {
         this.prerequisiteEdges = prerequisiteEdges;
+    }
+
+    public boolean isProblemMode() {
+        boolean hasProblemNode = nodes.values().stream()
+                .anyMatch(node -> node != null
+                        && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType()));
+        if (hasProblemNode) {
+            return true;
+        }
+
+        String normalized = targetConcept == null ? "" : targetConcept.trim().toLowerCase(Locale.ROOT);
+        int wordCount = normalized.isBlank() ? 0 : normalized.split("\\s+").length;
+        return normalized.contains("?")
+                || normalized.contains("problem")
+                || normalized.contains("prove")
+                || normalized.contains("show that")
+                || normalized.contains("solve")
+                || normalized.contains("find")
+                || normalized.contains("determine")
+                || normalized.contains("minimize")
+                || normalized.contains("maximize")
+                || normalized.contains("minimum")
+                || normalized.contains("maximum")
+                || normalized.contains("given")
+                || normalized.contains("let ")
+                || wordCount > 12;
     }
 }

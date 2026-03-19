@@ -102,9 +102,10 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
                 ? workflowConfig.getModelConfig().getMaxInputTokens()
                 : 131072;
+        String workflowTarget = graph != null ? graph.getTargetConcept() : "";
         this.conversationContext = new NodeConversationContext(maxInputTokens);
         this.conversationContext.setSystemMessage(PromptTemplates.visualDesignSystemPrompt(
-                graph.getTargetConcept(),
+                workflowTarget,
                 buildWorkflowTargetDescription(graph)));
 
         try {
@@ -140,7 +141,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                     }
                 }
                 if (nodes.isEmpty()) {
-                    log.info("  Skipping depth {} (only metadata nodes)", depth);
+                    log.info("  Skipping depth {} (no eligible nodes)", depth);
                     continue;
                 }
                 log.info("  Designing depth {} ({} nodes{})", depth, nodes.size(),
@@ -182,18 +183,22 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                 : "Colors already used: " + String.join(", ", paletteSnapshot)
                   + ". Prefer harmonious contrast and avoid unnecessary repetition.";
 
-        String userPrompt = String.format(
-                "Concept: %s\nNode type: %s\nDepth: %d\nFoundation concept: %s\nRelevant equations: %s\n\n"
-                + "Global style guide:\n%s\n\n%s\n%s",
-                node.getConcept(), node.getNodeType(), node.getMinDepth(), node.isFoundation(),
-                equationsInfo, globalStyleGuide, prerequisiteSpecContext, paletteContext);
+        StringBuilder userPrompt = new StringBuilder();
+        userPrompt.append(buildCurrentStepPrompt(node, equationsInfo));
+        String problemDesignContext = buildProblemDesignContext(node);
+        if (!problemDesignContext.isBlank()) {
+            userPrompt.append("\n\n").append(problemDesignContext);
+        }
+        userPrompt.append("\n\nGlobal style guide:\n").append(globalStyleGuide)
+                .append("\n\n").append(prerequisiteSpecContext)
+                .append("\n").append(paletteContext);
 
         return aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
                         aiClient,
                         log,
                         node.getConcept(),
                         conversationContext,
-                        userPrompt,
+                        userPrompt.toString(),
                         VISUAL_DESIGN_TOOL,
                         () -> toolCalls.incrementAndGet()
                 ))
@@ -272,22 +277,145 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     }
 
     private boolean shouldDesignNode(KnowledgeNode node) {
-        return node != null && !KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType());
+        return node != null;
     }
 
     private String buildWorkflowTargetDescription(KnowledgeGraph graph) {
         KnowledgeNode root = graph != null ? graph.getRootNode() : null;
+        if (graph != null && graph.isProblemMode()) {
+            StringBuilder sb = new StringBuilder();
+            appendLabeledLine(sb, "Original problem", graph.getTargetConcept());
+            appendLabeledLine(sb, "Final conclusion", root != null ? root.getConcept() : "");
+            if (root != null && root.getDescription() != null && !root.getDescription().isBlank()) {
+                appendLabeledLine(sb, "Conclusion role", root.getDescription());
+            }
+            String solutionChain = buildProblemSolutionChainSummary();
+            if (!solutionChain.isBlank()) {
+                if (sb.length() > 0) {
+                    sb.append("\n");
+                }
+                sb.append("Ordered solution-step chain:\n").append(solutionChain);
+            }
+            String detailedTarget = sb.toString().trim();
+            if (!detailedTarget.isEmpty()) {
+                return detailedTarget;
+            }
+        }
         return PromptTemplates.workflowTargetDescription(
                 graph != null ? graph.getTargetConcept() : "",
                 root != null ? root.getConcept() : "",
                 root != null ? root.getDescription() : "",
-                graph != null && isProblemGraph(graph));
+                graph != null && graph.isProblemMode());
     }
 
-    private boolean isProblemGraph(KnowledgeGraph graph) {
-        return graph.getNodes().values().stream()
-                .anyMatch(node -> node != null
-                        && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType()));
+    private String buildCurrentStepPrompt(KnowledgeNode node, String equationsInfo) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Current step:\n");
+        sb.append("- Concept: ").append(node.getConcept()).append("\n");
+        sb.append("- Node type: ").append(node.getNodeType()).append("\n");
+        sb.append("- Depth: ").append(node.getMinDepth()).append("\n");
+        sb.append("- Relevant equations: ").append(equationsInfo).append("\n");
+        if (node.getDescription() != null && !node.getDescription().isBlank()) {
+            sb.append("- Planning summary: ").append(node.getDescription().trim()).append("\n");
+        }
+        if (graph != null && graph.isProblemMode()) {
+            sb.append("- Target problem: ").append(graph.getTargetConcept()).append("\n");
+
+            List<KnowledgeNode> dependents = graph.getDependents(node.getId());
+            if (!dependents.isEmpty()) {
+                sb.append("Direct downstream steps:\n");
+                for (KnowledgeNode dependent : dependents) {
+                    appendStepLine(sb, dependent);
+                }
+            }
+        }
+        sb.append("Design the visuals for this current step only, while staying consistent with"
+                + " the full problem and solution path.\n");
+        return sb.toString().trim();
+    }
+
+    private String buildProblemDesignContext(KnowledgeNode currentNode) {
+        if (graph == null || currentNode == null || !graph.isProblemMode()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Problem context (source of truth):\n");
+        appendLabeledLine(sb, "- Statement", graph.getTargetConcept());
+
+        List<KnowledgeNode> prerequisites = graph.getPrerequisites(currentNode.getId());
+        if (!prerequisites.isEmpty()) {
+            sb.append("Direct prerequisite steps for this node:\n");
+            for (KnowledgeNode prerequisite : prerequisites) {
+                sb.append(String.format("- [%s] %s", prerequisite.getNodeType(), prerequisite.getConcept()));
+                if (prerequisite.getDescription() != null && !prerequisite.getDescription().isBlank()) {
+                    sb.append(" - ").append(prerequisite.getDescription().trim());
+                }
+                sb.append("\n");
+            }
+        }
+
+        String solutionChain = buildProblemSolutionChainSummary(currentNode);
+        if (!solutionChain.isBlank()) {
+            sb.append("Ordered solution-step chain (do not invent extra steps):\n")
+                    .append(solutionChain);
+        }
+        sb.append("Design only the current step, but keep object identities, notation, and spatial"
+                + " anchors consistent with the full solution.\n");
+        return sb.toString().trim();
+    }
+
+    private String buildProblemSolutionChainSummary() {
+        return buildProblemSolutionChainSummary(null);
+    }
+
+    private String buildProblemSolutionChainSummary(KnowledgeNode currentNode) {
+        if (graph == null || !graph.isProblemMode()) {
+            return "";
+        }
+
+        List<KnowledgeNode> steps = graph.topologicalOrder();
+        if (steps.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < steps.size(); i++) {
+            KnowledgeNode step = steps.get(i);
+            String marker = currentNode != null && step.getId().equals(currentNode.getId()) ? "-> " : "   ";
+            sb.append(marker)
+                    .append(i + 1)
+                    .append(". [")
+                    .append(step.getNodeType())
+                    .append("] ")
+                    .append(step.getConcept());
+            if (step.getDescription() != null && !step.getDescription().isBlank()) {
+                sb.append(" - ").append(step.getDescription().trim());
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    private void appendLabeledLine(StringBuilder sb, String label, String value) {
+        if (sb == null || value == null || value.isBlank()) {
+            return;
+        }
+        sb.append(label).append(": ").append(value.trim()).append("\n");
+    }
+
+    private void appendStepLine(StringBuilder sb, KnowledgeNode step) {
+        if (sb == null || step == null) {
+            return;
+        }
+        sb.append("- [")
+                .append(step.getNodeType())
+                .append("] ")
+                .append(step.getConcept());
+        if (step.getDescription() != null && !step.getDescription().isBlank()) {
+            sb.append(" - ").append(step.getDescription().trim());
+        }
+        sb.append("\n");
     }
 
     private void applyVisualSpec(KnowledgeNode node, JsonNode data) {
