@@ -23,8 +23,12 @@ public final class PromptTemplates {
     private static String buildWorkflowSystemPrefix(String stageLabel,
                                                     String substepLabel,
                                                     String targetTitle,
-                                                    String targetDescription) {
-        return "You are working inside a multi-stage Manim animation generation workflow.\n"
+                                                    String targetDescription,
+                                                    boolean manimSpecific) {
+        String workflowLabel = manimSpecific
+                ? "multi-stage Manim animation generation workflow"
+                : "multi-stage teaching animation generation workflow";
+        return "You are working inside a " + workflowLabel + ".\n"
                 + "Current workflow stage: " + sanitizePromptText(stageLabel, "Unknown stage") + "\n"
                 + "Current substep: " + sanitizePromptText(substepLabel, "Unknown substep") + "\n"
                 + "Overall workflow: " + WORKFLOW_OVERVIEW + "\n"
@@ -46,13 +50,16 @@ public final class PromptTemplates {
         if (problemMode) {
             if (!safeRootDescription.isEmpty()) {
                 return String.format(
-                        "Solve the math problem \"%s\" through a coherent Manim animation. The solution"
-                                + " should culminate in the final conclusion \"%s\": %s",
+                        "Explain and solve the math problem \"%s\" through a coherent teaching"
+                                + " animation. The goal is not only to reach the answer, but to"
+                                + " help the viewer understand why it works. The animation should"
+                                + " culminate in the final conclusion \"%s\": %s",
                         safeTarget, safeRootConcept, safeRootDescription);
             }
             return String.format(
-                    "Solve the math problem \"%s\" through a coherent Manim animation that reaches"
-                            + " the final conclusion \"%s\".",
+                    "Explain and solve the math problem \"%s\" through a coherent teaching"
+                            + " animation that leads to the final conclusion \"%s\" while helping"
+                            + " the viewer understand the reasoning.",
                     safeTarget, safeRootConcept);
         }
 
@@ -60,7 +67,7 @@ public final class PromptTemplates {
             return safeRootDescription;
         }
         return String.format(
-                "Explain the concept \"%s\" through a coherent Manim animation built from the"
+                "Explain the concept \"%s\" through a coherent teaching animation built from the"
                         + " necessary prerequisites up to the final idea.",
                 safeTarget);
     }
@@ -70,7 +77,8 @@ public final class PromptTemplates {
                 "Stage 0 / Exploration",
                 "Foundation sufficiency check",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                false
         ) + FOUNDATION_CHECK_SYSTEM;
     }
 
@@ -79,7 +87,8 @@ public final class PromptTemplates {
                 "Stage 0 / Exploration",
                 "Direct prerequisite extraction",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                false
         ) + PREREQUISITES_SYSTEM;
     }
 
@@ -89,7 +98,8 @@ public final class PromptTemplates {
                 "Input mode classification",
                 inputText,
                 "Decide whether this input should follow the concept-explanation workflow or the"
-                        + " problem-solving workflow."
+                        + " problem-solving workflow.",
+                false
         ) + INPUT_MODE_CLASSIFIER_SYSTEM;
     }
 
@@ -98,7 +108,8 @@ public final class PromptTemplates {
                 "Stage 0 / Exploration",
                 "Problem solution-step graph planning",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                false
         ) + PROBLEM_STEP_GRAPH_SYSTEM;
     }
 
@@ -107,7 +118,8 @@ public final class PromptTemplates {
                 "Stage 1a / Mathematical Enrichment",
                 "Mathematical content enrichment",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                false
         ) + MATH_ENRICHMENT_SYSTEM;
     }
 
@@ -116,7 +128,8 @@ public final class PromptTemplates {
                 "Stage 1b / Visual Design",
                 "Scene visual design",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                true
         ) + VISUAL_DESIGN_SYSTEM;
     }
 
@@ -125,7 +138,8 @@ public final class PromptTemplates {
                 "Stage 1c / Narrative Composition",
                 "Storyboard composition",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                true
         ) + NARRATIVE_SYSTEM;
     }
 
@@ -134,7 +148,8 @@ public final class PromptTemplates {
                 "Stage 2 / Code Generation",
                 "Generate executable Manim code",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                true
         ) + CODE_GENERATION_SYSTEM;
     }
 
@@ -143,7 +158,8 @@ public final class PromptTemplates {
                 "Stage 3 / Code Evaluation",
                 "Review code for layout, continuity, pacing, and clutter risk",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                true
         ) + CODE_EVALUATION_SYSTEM;
     }
 
@@ -152,7 +168,8 @@ public final class PromptTemplates {
                 "Stage 3 / Code Evaluation",
                 "Revise Manim code after code evaluation before render",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                true
         ) + CODE_REVISION_SYSTEM;
     }
 
@@ -161,7 +178,8 @@ public final class PromptTemplates {
                 "Stage 4 / Render Fix",
                 "Repair Manim code after render failure",
                 targetTitle,
-                targetDescription
+                targetDescription,
+                true
         ) + RENDER_FIX_SYSTEM;
     }
 
@@ -170,26 +188,37 @@ public final class PromptTemplates {
     // =====================================================================
 
     public static final String FOUNDATION_CHECK_SYSTEM =
-            "You are a curriculum design expert building a prerequisite DAG for a Manim"
-            + " teaching animation.\n"
+            "You are a curriculum designer building a prerequisite DAG for a math teaching"
+            + " animation aimed at middle-school students.\n"
             + "\n"
             + "Workflow context:\n"
             + "- The DAG will be topologically traversed to produce a sequence of animated scenes.\n"
             + "- Each node becomes one scene; foundation (leaf) nodes become the simplest opening"
             + " scenes, so they must be truly self-explanatory.\n"
+            + "- This stage does not write the final storyboard. It decides whether a concept can"
+            + " stand on its own as one simple teaching beat before later scenes build on it.\n"
+            + "- Keep in mind a teaching flow that usually moves from observation to relation to"
+            + " transformation to conclusion. Foundation nodes should support the earliest,"
+            + " most intuitive part of that flow.\n"
+            + "- Do not judge only by mathematical sufficiency. Judge whether this concept can"
+            + " support one clear animated teaching beat with a concrete focus and no hidden jump.\n"
             + "\n"
             + "Decide whether the given concept is already basic enough for an ordinary"
             + " middle-school student to understand directly, while still being clearly relevant"
             + " to the final teaching goal.\n"
             + "\n"
             + "Rules:\n"
-            + "1. Judge from a middle-school student's perspective.\n"
+            + "1. Judge from a middle-school student's perspective using clear, concrete,"
+            + " non-university-level expectations.\n"
             + "2. The concept must be clearly useful for the final teaching goal.\n"
-            + "3. If it still bundles multiple sub-ideas, steps, or layers, answer no.\n"
-            + "4. If it requires advanced abstraction, formal derivation, or significant prior"
+            + "3. A good foundation node should be understandable as one short, intuitive scene,"
+            + " not as a compressed chain of hidden reasoning.\n"
+            + "4. If it still bundles multiple sub-ideas, steps, cases, or layers, answer no.\n"
+            + "5. If it requires advanced abstraction, formal derivation, or significant prior"
             + " knowledge, answer no.\n"
-            + "5. If it would overlap with nearby concepts in the graph, answer no.\n"
-            + "6. Bias toward no when uncertain.\n"
+            + "6. If it would be hard to introduce visually or naturally without first proving"
+            + " something else, answer no.\n"
+            + "7. Bias toward yes when uncertain.\n"
             + "\n"
             + "If tools are available, call them.\n"
             + "Otherwise return only a JSON object with the same shape as the tool output.\n"
@@ -202,27 +231,40 @@ public final class PromptTemplates {
             + " sub-ideas and should be decomposed before it becomes a leaf scene.\"}";
 
     public static final String PREREQUISITES_SYSTEM =
-            "You are a curriculum design expert building a prerequisite DAG for a Manim"
-            + " teaching animation.\n"
+            "You are a curriculum designer building a prerequisite DAG for a math teaching"
+            + " animation aimed at middle-school students.\n"
             + "\n"
             + "Workflow context:\n"
             + "- The DAG is topologically traversed to generate one animated scene per node.\n"
             + "- This exploration stage is responsible for the knowledge structure, not for detailed"
             + " visual staging.\n"
+            + "- Later stages will turn this graph into a teaching animation script and storyboard,"
+            + " so choose prerequisites that support a natural, easy-to-follow learning flow.\n"
             + "- For each prerequisite, write a brief \"description\" summarizing the concept's role"
             + " in the learning path and what the viewer must understand before moving on.\n"
             + "- The description must stay conceptual: do not describe colors, camera moves,"
             + " animation beats, or layout.\n"
+            + "- Prefer a progression that can naturally move from observation to key relation to"
+            + " transformation or representation and then to the target idea.\n"
+            + "- Do not merely mirror a textbook dependency list. Choose concepts that help a later"
+            + " animation reveal the reasoning gradually instead of jumping to the answer.\n"
             + "\n"
             + "Rules:\n"
             + "1. Return only truly necessary prerequisites, not merely helpful background.\n"
             + "2. Keep them directly relevant to the final teaching goal.\n"
-            + "3. Avoid overly broad, tangential, or generic topics.\n"
-            + "4. Each prerequisite should express one clear, atomic concept.\n"
-            + "5. Avoid synonyms, near-duplicates, and parent-child duplication.\n"
-            + "6. Prefer simpler concepts tightly connected to the goal.\n"
-            + "7. Replace overly advanced candidates with more basic but relevant ones.\n"
-            + "8. Return at most 3 to 5 items, ordered by necessity.\n"
+            + "3. Prefer concepts that help students first see or notice something concrete before"
+            + " asking them to accept a formal statement.\n"
+            + "4. Avoid overly broad, tangential, or generic topics.\n"
+            + "5. Each prerequisite should express one clear, atomic concept that could support"
+            + " one focused scene.\n"
+            + "6. Avoid synonyms, near-duplicates, parent-child duplication, and hidden multi-step"
+            + " bundles.\n"
+            + "7. Prefer simpler, more visualizable concepts tightly connected to the goal.\n"
+            + "8. Replace overly advanced candidates with more basic but still mathematically"
+            + " relevant ones.\n"
+            + "9. In the description, explain the teaching job of the prerequisite: what it helps"
+            + " the student notice, understand, or use in a later step.\n"
+            + "10. Return at most 3 to 5 items, ordered by necessity.\n"
             + "\n"
             + "If tools are available, call them.\n"
             + "Otherwise return a JSON array of objects, each with two fields:\n"
@@ -236,7 +278,7 @@ public final class PromptTemplates {
             + " concrete reference.\"}]";
 
     public static final String INPUT_MODE_CLASSIFIER_SYSTEM =
-            "You are a routing classifier for a Manim math-animation workflow.\n"
+            "You are a routing classifier for a math teaching-animation workflow.\n"
             + "\n"
             + "Given a single user input, decide the workflow mode:\n"
             + "- concept: a concept, theorem, formula, topic, or idea to explain via animation\n"
@@ -255,23 +297,46 @@ public final class PromptTemplates {
             + " problem with givens and a target to solve.\"}";
 
     public static final String PROBLEM_STEP_GRAPH_SYSTEM =
-            "You are a mathematical problem-solving planner preparing a Manim animation workflow.\n"
+            "You are a mathematical problem-solving planner preparing a teaching animation"
+            + " workflow for middle-school learners.\n"
             + "\n"
-            + "Build a compact dependency graph for the actual solution path.\n"
-            + "Each node will later become one scene, so every node must have a real teaching"
-            + " purpose.\n"
-            + "For each node, write a short conceptual \"description\" explaining the step's role"
-            + " in the solution. Do not describe animation, layout, or style.\n"
+            + "Build a compact dependency graph for the actual animated solution path.\n"
+            + "The goal is not to output a bare mathematical answer, but to organize the reasoning"
+            + " into teachable steps that can later become animated scenes.\n"
+            + "Each node will later become one scene or one major beat, so every node must have"
+            + " a real teaching purpose.\n"
+            + "For each node, write a short conceptual \"description\" explaining what this step"
+            + " establishes, why it matters for understanding, and what kind of thinking move it"
+            + " represents. Do not describe exact animation, layout, or style.\n"
+            + "\n"
+            + "Design principles:\n"
+            + "1. First establish the problem situation and givens, then move into solving.\n"
+            + "2. Prefer a route that is intuitive and visually teachable before one that is only"
+            + " formally elegant.\n"
+            + "3. Convert abstract reasoning into explicit steps such as observation,"
+            + " construction, transformation, symmetry, auxiliary line, case split, or extremal"
+            + " idea whenever those moves are central.\n"
+            + "4. Avoid hidden leaps. If the learner needs to notice something before accepting"
+            + " a formula or conclusion, make that noticing step explicit.\n"
+            + "5. Keep the pacing natural and avoid graphs that jump straight from setup to"
+            + " answer with no intermediate insight.\n"
+            + "6. If a formal justification is not well suited to stand alone visually, attach"
+            + " it to a nearby more concrete step instead of making the graph depend on a"
+            + " disconnected abstraction.\n"
             + "\n"
             + "Rules:\n"
-            + "1. Focus only on steps that are genuinely needed to solve the problem.\n"
-            + "2. Each node should represent one atomic solving step.\n"
+            + "1. Focus only on steps that are genuinely needed to solve and teach the problem.\n"
+            + "2. Each node should represent one atomic solving or teaching step, not a bundle.\n"
             + "3. Use node_type from: problem, observation, construction, derivation, conclusion.\n"
-            + "4. The root_id must be the final conclusion node, and that node must have min_depth 0.\n"
-            + "5. Earlier required steps should have larger min_depth values.\n"
-            + "6. Dependencies must point only to direct prerequisite steps.\n"
-            + "7. Prefer a small, clean graph; avoid generic or redundant nodes.\n"
-            + "8. Use concise English labels.\n"
+            + "4. The graph should usually include a `problem` node that introduces the givens"
+            + " and target before later reasoning nodes build on it.\n"
+            + "5. The root_id must be the final conclusion node, and that node must have min_depth 0.\n"
+            + "6. Earlier required steps should have larger min_depth values.\n"
+            + "7. Dependencies must point only to direct prerequisite steps.\n"
+            + "8. Prefer a small, clean graph; avoid generic or redundant nodes.\n"
+            + "9. Use concise English labels.\n"
+            + "10. In each description, emphasize the teaching job of the step, not only the"
+            + " local mathematical result.\n"
             + "\n"
             + "Return a JSON object with this shape:\n"
             + "{\n"
@@ -308,7 +373,7 @@ public final class PromptTemplates {
     // =====================================================================
 
     public static final String MATH_ENRICHMENT_SYSTEM =
-            "You are a mathematics and physics educator preparing content for a Manim animation.\n"
+            "You are a mathematics educator preparing content for a teaching animation.\n"
             + "\n"
             + "The system context includes the target problem or concept together with the ordered"
             + " solution-step chain when available.\n"
@@ -317,8 +382,13 @@ public final class PromptTemplates {
             + " path. Do not invent a different route, extra givens, or unsupported claims.\n"
             + "Use the current step's planning summary as teaching context, but return only the"
             + " mathematical content that genuinely improves teaching quality.\n"
+            + "Do not treat this as a request for a full textbook-style solution. Return the"
+            + " mathematical material that will help later animation stages show what students"
+            + " should notice, understand, and connect.\n"
+            + "Prefer intuitive interpretations and compact symbolic support over long formal"
+            + " derivations when both serve the same teaching goal.\n"
             + "\n"
-            + "MathTex / LaTeX rules:\n"
+            + "LaTeX rules:\n"
             + "- Use raw LaTeX strings without dollar signs.\n"
             + "- Escape backslashes as needed, for example \\\\frac{a}{b}.\n"
             + "- For multi-line formulas, return each line as a separate array item.\n"
@@ -355,10 +425,26 @@ public final class PromptTemplates {
             + " prerequisite visual context, and the current color palette state.\n"
             + "For problem-solving tasks, the original problem statement and the ordered"
             + " solution-step chain are source of truth and must stay consistent across designs.\n"
+            + "Your job is to turn abstract reasoning into something the viewer can see happen, "
+            + "compare, track, and understand.\n"
+            + "Treat the step chain as the logical backbone, but choose visuals that make the"
+            + " key relation or change perceptible on screen.\n"
             + "\n"
             + "The exploration-stage \"description\" field is a step-purpose summary, not a visual"
-            + " specification. Use it to understand what the scene must accomplish, then decide"
-            + " the actual visual objects, color scheme, animation feel, and layout here.\n"
+            + " specification.\n"
+            + "\n"
+            + "Visual design principles:\n"
+            + "- Prefer direct visual reasoning over text-heavy explanation whenever possible.\n"
+            + "- Show change through motion, comparison, decomposition, transformation,"
+            + " symmetry, highlighting, or auxiliary constructions when those reveal the idea.\n"
+            + "- Keep the viewer oriented around one stable diagram whenever possible, and change"
+            + " only the layer that carries the new insight.\n"
+            + "- Let formulas support the visual argument instead of replacing it.\n"
+            + "- If a reasoning step is not naturally visible, design a mathematically faithful"
+            + " proxy such as a comparison view, a staged construction, a before/after"
+            + " transformation, or a highlighted substructure.\n"
+            + "- For each scene, implicitly answer: what is on screen now, what changes, and why"
+            + " that change helps the learner understand the math.\n"
             + "\n"
             + "Do not invent new givens, helper claims, or alternative solution branches that"
             + " are not supported by the provided problem context and step graph.\n"
@@ -372,14 +458,16 @@ public final class PromptTemplates {
             + "Return a JSON object containing:\n"
             + "- \"visual_description\": describe what visual elements appear in the scene, such"
             + " as geometry, labels, highlights, axes, arrows, or formula blocks. Focus on what"
-            + " is shown, not on color assignment, exact placement, or animation order.\n"
+            + " is shown and what mathematical relation is being made visible, not on color"
+            + " assignment, exact placement, or animation order.\n"
             + "- \"color_scheme\": describe the visual styling of those elements, especially which"
             + " colors or emphasis styles belong to the main objects, highlights, labels, and"
             + " supporting annotations.\n"
             + "- \"layout\": describe the spatial arrangement on the 16:9 canvas, including where"
             + " each important element is placed and how the composition avoids overflow.\n"
             + "- \"animation_description\" when useful: describe the animation order, motion,"
-            + " emphasis changes, and how the scene evolves over time.\n"
+            + " emphasis changes, and how the scene evolves over time so the reasoning becomes"
+            + " visually legible.\n"
             + "- \"transitions\" when useful: describe the scene transition style when it matters.\n"
             + "- \"duration\" when useful: approximate duration in seconds.\n"
             + "- \"color_palette\" as an optional array of Manim color names.\n"
@@ -507,10 +595,17 @@ public final class PromptTemplates {
             + "Write a scene-by-scene storyboard that:\n"
             + "- begins with a clear hook or motivation\n"
             + "- explains foundations before advanced content\n"
+            + "- treats the output as an animation script, not as a plain solved answer\n"
+            + "- makes clear what appears on screen, what changes on screen, and what the student"
+            + " is meant to notice in each beat\n"
+            + "- states the teaching purpose of each scene through goal, narration, object flow,"
+            + " and ordered actions\n"
             + "- preserves provided LaTeX formulas exactly when referenced\n"
             + "- turns every visual change into explicit staging data rather than vague prose\n"
             + "- feels like one connected visual argument, not a stack of unrelated mini-lessons\n"
             + "- keeps a stable diagram/layout whenever possible and changes only the necessary layer\n"
+            + "- prefers intuitive visual understanding before the strict final justification when"
+            + " that improves teaching clarity\n"
             + "\n"
             + "Canvas constraints for storyboard design:\n"
             + "- Treat the canvas as a 16:9 frame with important content kept inside"
@@ -543,12 +638,18 @@ public final class PromptTemplates {
             + "\n"
             + "Problem-solving focus rules:\n"
             + "- If the target is a math problem, every scene must directly advance the solution.\n"
+            + "- Do not collapse the whole solution into one answer scene or one dense narration"
+            + " block.\n"
+            + "- Start by establishing the problem situation, givens, and what must be found or"
+            + " proved before the main derivation begins.\n"
             + "- Do not give secondary facts, historical remarks, or theorem side-quests their own"
             + " standalone scenes unless they are indispensable.\n"
             + "- Merge nearby steps when they serve one reasoning move.\n"
             + "- Keep one stable diagram and evolve it with small changes from scene to scene.\n"
             + "- Auxiliary facts such as equal-angle laws should appear as brief support, not as"
             + " the main headline, unless the whole problem is about that law.\n"
+            + "- If one formal step is not naturally visual, represent it through a more visible"
+            + " intermediate beat that preserves the mathematical meaning.\n"
             + "\n"
             + STORYBOARD_SCHEMA_GUIDE
             + "\n"
@@ -566,10 +667,17 @@ public final class PromptTemplates {
                                                     int targetSceneCount) {
         return String.format(
                 "Math problem to solve: %s\n\nOrdered solution-step graph context:\n%s\n\n"
-                        + "Write the animation as a structured problem-solving storyboard. Start by"
-                        + " stating the problem clearly, then move through the key observation/"
-                        + " construction/derivation steps in solving order, and end with the final"
-                        + " answer and why it is correct or optimal.\n"
+                        + "Write the animation as a structured problem-solving storyboard, not as"
+                        + " a plain written solution.\n"
+                        + "Start by establishing the problem situation clearly, then move through"
+                        + " the key observation/construction/derivation steps in solving order,"
+                        + " and end with the final answer and why it is correct or optimal.\n"
+                        + "For each scene, make the on-screen progression legible: what appears,"
+                        + " what changes, and what the student should realize from that change.\n"
+                        + "Prefer intuitive visual reasoning before compact formal wording when"
+                        + " both are mathematically sound.\n"
+                        + "If some justification is awkward to animate directly, replace it with a"
+                        + " more visual intermediate beat rather than skipping the reasoning.\n"
                         + "Target about %d scenes total.\n"
                         + "Do not force one scene per node; merge nodes whenever that improves"
                         + " focus and continuity.\n"

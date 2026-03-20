@@ -261,7 +261,10 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     private KnowledgeGraph buildProblemGraph(String problemStatement) {
         String normalizedProblem = problemStatement == null ? "" : problemStatement.trim();
         String prompt = "Math problem:\n" + normalizedProblem + "\n\n"
-                + "Build a compact solution-step dependency graph for this problem.";
+                + "Build a compact solution-step dependency graph for this problem.\n"
+                + "Organize it for a teaching animation, not for an answer-only writeup.\n"
+                + "Make the steps suitable for later scenes that reveal the reasoning"
+                + " progressively.";
 
         try {
             JsonNode payload = aiCallLimiter.submit(() -> AiRequestUtils.requestJsonObjectAsync(
