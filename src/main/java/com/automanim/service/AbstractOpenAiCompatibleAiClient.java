@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -17,6 +18,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 /**
  * Shared base for providers exposing an OpenAI-compatible chat completions API.
@@ -25,6 +28,9 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
 
     protected static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int EMPTY_RESPONSE_RETRIES = 2;
+    private static final int TRANSIENT_FAILURE_RETRIES = 2;
+    private static final long RETRY_BASE_DELAY_MILLIS = 1_000L;
+    private static final long RETRY_MAX_DELAY_MILLIS = 4_000L;
     private static final int MAX_LOG_CHARS = 12000;
 
     private final Logger log;
@@ -45,6 +51,7 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         this.baseUrl = modelConfig.resolveBaseUrl();
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
     }
 
@@ -263,7 +270,15 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
     private CompletableFuture<JsonNode> sendRawRequestAsync(ObjectNode body) throws Exception {
         String url = baseUrl.replaceAll("/+$", "") + "/chat/completions";
         String jsonBody = MAPPER.writeValueAsString(body);
+        return sendRawRequestAsync(body, url, jsonBody, 0);
+    }
 
+    private CompletableFuture<JsonNode> sendRawRequestAsync(
+            ObjectNode body,
+            String url,
+            String jsonBody,
+            int attempt
+    ) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
@@ -272,22 +287,35 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
                 .timeout(Duration.ofMinutes(5))
                 .build();
 
-        logRequest(body, url);
+        logRequest(body, url, attempt);
         return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(response -> {
+                .<CompletableFuture<JsonNode>>handle((response, error) -> {
+                    if (error != null) {
+                        Throwable cause = ConcurrencyUtils.unwrapCompletionException(error);
+                        if (attempt < TRANSIENT_FAILURE_RETRIES && isRetryableFailure(cause)) {
+                            return scheduleRetry(body, url, jsonBody, attempt, cause.getMessage());
+                        }
+                        return CompletableFuture.<JsonNode>failedFuture(cause);
+                    }
+
                     logResponse(response);
                     if (response.statusCode() != 200) {
-                        throw new CompletionException(new RuntimeException(
-                                clientName + " API returned HTTP " + response.statusCode()
-                                        + ": " + response.body()
-                        ));
+                        String message = clientName + " API returned HTTP " + response.statusCode()
+                                + ": " + response.body();
+                        if (attempt < TRANSIENT_FAILURE_RETRIES
+                                && isRetryableStatusCode(response.statusCode())) {
+                            return scheduleRetry(body, url, jsonBody, attempt, message);
+                        }
+                        return CompletableFuture.failedFuture(new RuntimeException(message));
                     }
+
                     try {
-                        return MAPPER.readTree(response.body());
+                        return CompletableFuture.completedFuture(MAPPER.readTree(response.body()));
                     } catch (Exception e) {
-                        throw new CompletionException(e);
+                        return CompletableFuture.<JsonNode>failedFuture(e);
                     }
-                });
+                })
+                .thenCompose(Function.identity());
     }
 
     private CompletableFuture<String> sendRequestWithRetryAsync(ObjectNode body) {
@@ -344,14 +372,74 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         return val;
     }
 
-    private void logRequest(ObjectNode body, String url) {
+    static boolean isRetryableFailure(Throwable error) {
+        if (error == null) {
+            return false;
+        }
+        if (error instanceof IOException) {
+            return true;
+        }
+
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+
+        String normalized = message.toLowerCase();
+        return normalized.contains("rst_stream")
+                || normalized.contains("goaway")
+                || normalized.contains("connection reset")
+                || normalized.contains("stream was reset")
+                || normalized.contains("timed out")
+                || normalized.contains("temporarily unavailable");
+    }
+
+    static boolean isRetryableStatusCode(int statusCode) {
+        return statusCode == 408
+                || statusCode == 425
+                || statusCode == 429
+                || statusCode >= 500;
+    }
+
+    private CompletableFuture<JsonNode> scheduleRetry(
+            ObjectNode body,
+            String url,
+            String jsonBody,
+            int attempt,
+            String reason
+    ) {
+        long delayMillis = retryDelayMillis(attempt);
+        log.warn("Transient failure from {} (attempt {}/{}), retrying in {} ms: {}",
+                clientName,
+                attempt + 1,
+                TRANSIENT_FAILURE_RETRIES + 1,
+                delayMillis,
+                reason);
+        return CompletableFuture.runAsync(
+                        () -> { },
+                        CompletableFuture.delayedExecutor(delayMillis, TimeUnit.MILLISECONDS))
+                .thenCompose(ignored -> sendRawRequestAsync(body, url, jsonBody, attempt + 1));
+    }
+
+    private long retryDelayMillis(int attempt) {
+        long delay = RETRY_BASE_DELAY_MILLIS * (1L << attempt);
+        return Math.min(delay, RETRY_MAX_DELAY_MILLIS);
+    }
+
+    private void logRequest(ObjectNode body, String url, int attempt) {
         JsonNode messages = body.get("messages");
         JsonNode tools = body.get("tools");
         int messageCount = messages != null && messages.isArray() ? messages.size() : 0;
         int toolCount = tools != null && tools.isArray() ? tools.size() : 0;
-        log.debug("{} request: model={}, messages={}, tools={}, url={}",
-                clientName, modelConfig.getModel(), messageCount, toolCount, url);
-        log.debug("{} request body:\n{}", clientName, abbreviateForLog(body.toPrettyString()));
+        if (attempt == 0) {
+            log.debug("{} request: model={}, messages={}, tools={}, url={}",
+                    clientName, modelConfig.getModel(), messageCount, toolCount, url);
+            log.debug("{} request body:\n{}", clientName, abbreviateForLog(body.toPrettyString()));
+            return;
+        }
+
+        log.debug("{} retry request: attempt={}, model={}, messages={}, tools={}, url={}",
+                clientName, attempt + 1, modelConfig.getModel(), messageCount, toolCount, url);
     }
 
     private void logResponse(HttpResponse<String> response) {

@@ -37,6 +37,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
     private static final int MAX_CONSECUTIVE_SAME_ERROR_ATTEMPTS = 3;
     private static final String TRACEBACK_MARKER = "Traceback (most recent call last)";
     private static final String GENERATED_SCENE_FILE = "scene_render.py";
+    private static final Pattern ANY_SCENE_CLASS = Pattern.compile("class\\s+[^\\s(]+\\s*\\((.*?Scene.*?)\\)");
 
     // Error patterns that indicate non-code (environment) errors
     private static final List<Pattern> NON_CODE_ERROR_PATTERNS = Arrays.asList(
@@ -140,7 +141,9 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         if (currentCode == null || currentCode.isBlank()) {
             currentCode = codeResult.getManimCode();
         }
-        String sceneName = codeResult.getSceneName();
+        currentCode = enforceMainSceneClassName(currentCode);
+        String sceneName = "MainScene";
+        codeResult.setSceneName(sceneName);
         String lastError = "";
         String geometryPath = null;
         int attempts = 0;
@@ -217,7 +220,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     log.warn("  AI fix produced empty or identical code, stopping retries");
                     break;
                 }
-                currentCode = fixedCode;
+                currentCode = enforceMainSceneClassName(fixedCode);
+                codeResult.setSceneName(sceneName);
                 log.info("  AI fix applied ({} lines)", fixedCode.split("\n").length);
             } catch (Exception e) {
                 log.error("  AI fix failed: {}", e.getMessage());
@@ -403,5 +407,13 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         }
         String normalized = focusedError.replaceAll("\\s+", " ").trim();
         return normalized.length() > 200 ? normalized.substring(0, 200) : normalized;
+    }
+
+    private String enforceMainSceneClassName(String code) {
+        if (code == null || code.isBlank()) {
+            return code;
+        }
+        return ANY_SCENE_CLASS.matcher(code)
+                .replaceFirst("class MainScene($1)");
     }
 }

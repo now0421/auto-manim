@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -31,7 +30,8 @@ import java.util.regex.Pattern;
 public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, String> {
 
     private static final Logger log = LoggerFactory.getLogger(CodeGenerationNode.class);
-    private static final Pattern SCENE_CLASS = Pattern.compile("class\\s+(\\w+)\\s*\\(.*?Scene.*?\\)");
+    private static final Pattern MAIN_SCENE_CLASS = Pattern.compile("class\\s+MainScene\\s*\\(.*?Scene.*?\\)");
+    private static final Pattern ANY_SCENE_CLASS = Pattern.compile("class\\s+[^\\s(]+\\s*\\((.*?Scene.*?)\\)");
     private static final Pattern NON_ASCII_IDENTIFIER = Pattern.compile(
             "(?:class|def)\\s+[^\\x00-\\x7F]+|self\\.[^\\x00-\\x7F]+|\\b[^\\x00-\\x7F_][^\\s(=:,]*");
 
@@ -99,7 +99,7 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
                 narrative.getTargetConcept(),
                 narrative.getTargetDescription()));
 
-        String expectedSceneName = conceptToClassName(narrative.getTargetConcept());
+        String expectedSceneName = "MainScene";
         String userPrompt = buildGenerationPrompt(narrative, expectedSceneName);
         if (userPrompt.isBlank()) {
             log.warn("Narrative prompt is empty, cannot generate code");
@@ -111,7 +111,7 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         String sceneName;
         try {
             CodeDraft draft = requestCodeAsync(userPrompt, expectedSceneName).join();
-            code = draft.code;
+            code = enforceMainSceneClassName(draft.code);
             sceneName = draft.sceneName;
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
@@ -120,17 +120,18 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             sceneName = expectedSceneName;
         }
 
-        sceneName = extractSceneName(code, sceneName);
+        sceneName = expectedSceneName;
 
         List<String> violations = validateCode(code);
         if (!violations.isEmpty()) {
             log.warn("  Code validation found {} violations, attempting AI fix", violations.size());
-            String fixedCode = attemptAiFix(code, violations);
+            String fixedCode = attemptAiFix(code, violations, sceneName);
             if (fixedCode != null && !fixedCode.isBlank()) {
+                fixedCode = enforceMainSceneClassName(fixedCode);
                 List<String> postFixViolations = validateCode(fixedCode);
                 if (postFixViolations.size() < violations.size()) {
                     code = fixedCode;
-                    sceneName = extractSceneName(code, sceneName);
+                    sceneName = expectedSceneName;
                     log.info("  AI fix reduced violations from {} to {}",
                             violations.size(), postFixViolations.size());
                 }
@@ -163,9 +164,6 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
 
                     if (toolData != null && toolData.has("code")) {
                         code = toolData.get("code").asText();
-                        if (toolData.has("scene_name")) {
-                            sceneName = toolData.get("scene_name").asText();
-                        }
                     }
 
                     if (code == null || code.isBlank()) {
@@ -215,14 +213,6 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         return null;
     }
 
-    private String extractSceneName(String code, String fallback) {
-        Matcher m = SCENE_CLASS.matcher(code);
-        if (m.find()) {
-            return m.group(1);
-        }
-        return fallback;
-    }
-
     private String buildGenerationPrompt(Narrative narrative, String expectedSceneName) {
         String basePrompt;
         if (narrative.hasStoryboard()) {
@@ -239,24 +229,9 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
 
         return basePrompt
                 + "\n\nScene class name: " + expectedSceneName
+                + "\nUse this exact scene class name verbatim in the generated code."
                 + "\nAll class names, method names, and variable names must use ASCII identifiers only."
                 + "\nDo not use Chinese, pinyin, mojibake, or any non-ASCII text in Python identifiers.";
-    }
-
-    private String conceptToClassName(String concept) {
-        if (concept == null || concept.isBlank()) return "MainScene";
-
-        StringBuilder sb = new StringBuilder();
-        for (String word : concept.split("[\\s\\-_]+")) {
-            if (!word.isEmpty()) {
-                sb.append(Character.toUpperCase(word.charAt(0)));
-                if (word.length() > 1) {
-                    sb.append(word.substring(1).toLowerCase());
-                }
-            }
-        }
-        sb.append("Scene");
-        return sb.toString();
     }
 
     private List<String> validateCode(String code) {
@@ -269,8 +244,8 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         if (!code.contains("from manim import")) {
             violations.add("Missing 'from manim import' statement");
         }
-        if (!code.contains("class ") || !code.contains("Scene")) {
-            violations.add("Missing Scene class definition");
+        if (!MAIN_SCENE_CLASS.matcher(code).find()) {
+            violations.add("Scene class must be named MainScene");
         }
         if (!code.contains("def construct(")) {
             violations.add("Missing construct() method");
@@ -290,16 +265,17 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         return violations;
     }
 
-    private String attemptAiFix(String code, List<String> violations) {
+    private String attemptAiFix(String code, List<String> violations, String sceneName) {
         try {
             String violationList = String.join("\n- ", violations);
             String fixPrompt = String.format(
                     "The following code violates validation rules:\n\n"
                     + "```python\n%s\n```\n\n"
                     + "Problems found:\n- %s\n\n"
+                    + "Use `%s` as the scene class name exactly.\n"
                     + "Ensure that all class names, function names, method names, and variable names"
                     + " use ASCII English identifiers only.",
-                    code, violationList);
+                    code, violationList, sceneName);
 
             conversationContext.addUserMessage(fixPrompt);
             String response = aiClient.chatAsync(conversationContext).join();
@@ -311,6 +287,14 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             log.debug("  AI fix attempt failed: {}", cause.getMessage());
             return null;
         }
+    }
+
+    private String enforceMainSceneClassName(String code) {
+        if (code == null || code.isBlank()) {
+            return code;
+        }
+        return ANY_SCENE_CLASS.matcher(code)
+                .replaceFirst("class MainScene($1)");
     }
 
     private static final class CodeDraft {
