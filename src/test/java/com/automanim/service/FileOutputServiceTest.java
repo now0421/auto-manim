@@ -2,12 +2,14 @@ package com.automanim.service;
 
 import com.automanim.model.CodeResult;
 import com.automanim.model.RenderResult;
+import com.automanim.model.SceneEvaluationResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,6 +65,26 @@ class FileOutputServiceTest {
         assertEquals("FallbackScene", codeResult.getSceneName());
         assertEquals("FallbackScene", codeResult.getTargetConcept());
         assertEquals("", codeResult.getTargetDescription());
+    }
+
+    @Test
+    void saveSceneEvaluationPersistsStageOutputAndSummaryUsesNewName() throws IOException {
+        SceneEvaluationResult result = new SceneEvaluationResult();
+        result.setEvaluated(true);
+        result.setApproved(false);
+        result.setSceneName("DemoScene");
+        result.setGeometryPath("5_mobject_geometry.json");
+        result.setSampleCount(3);
+        result.setIssueSampleCount(1);
+        result.setTotalIssueCount(2);
+
+        FileOutputService.saveSceneEvaluation(tempDir, result);
+        FileOutputService.saveWorkflowSummary(tempDir, Map.of("scene_name", "DemoScene"));
+
+        String sceneEvaluation = Files.readString(tempDir.resolve("6_scene_evaluation.json"));
+        assertTrue(sceneEvaluation.contains("\"sceneName\""));
+        assertTrue(sceneEvaluation.contains("DemoScene"));
+        assertTrue(Files.exists(tempDir.resolve("7_workflow_summary.json")));
     }
 
     private static String sampleCode(String sceneName) {

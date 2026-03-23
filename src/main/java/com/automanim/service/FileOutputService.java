@@ -5,6 +5,7 @@ import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.Narrative;
 import com.automanim.model.RenderResult;
 import com.automanim.model.CodeEvaluationResult;
+import com.automanim.model.SceneEvaluationResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -163,8 +164,13 @@ public class FileOutputService {
         }
     }
 
+    public static void saveSceneEvaluation(Path outputDir, SceneEvaluationResult sceneEvaluationResult) {
+        writeJson(outputDir.resolve("6_scene_evaluation.json"),
+                sceneEvaluationResult, "scene evaluation");
+    }
+
     public static void saveWorkflowSummary(Path outputDir, Map<String, Object> summary) {
-        writeJson(outputDir.resolve("6_workflow_summary.json"),
+        writeJson(outputDir.resolve("7_workflow_summary.json"),
                 sanitizeForJson(summary), "workflow summary");
     }
 

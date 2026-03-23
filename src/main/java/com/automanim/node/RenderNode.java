@@ -1,21 +1,25 @@
 package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
+import com.automanim.model.CodeEvaluationResult;
+import com.automanim.model.CodeFixRequest;
+import com.automanim.model.CodeFixResult;
+import com.automanim.model.CodeFixSource;
 import com.automanim.model.CodeResult;
 import com.automanim.model.RenderResult;
-import com.automanim.model.CodeEvaluationResult;
+import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.service.ManimRendererService;
 import com.automanim.service.ManimRendererService.RenderAttemptResult;
 import com.automanim.util.JsonUtils;
-import com.automanim.util.NodeConversationContext;
-import com.automanim.util.PromptTemplates;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,8 +29,8 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
- * Stage 4: Code Rendering - renders Manim code to video with automatic
- * error-driven retry.
+ * Stage 4: Code Rendering - renders Manim code to video and routes code fixes
+ * through the shared CodeFixNode when needed.
  */
 public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderResult, String> {
 
@@ -62,7 +66,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
     }
 
     RenderNode(ManimRendererService renderer) {
-        super(1, 0); // no PocketFlow retry - we handle retry internally
+        super(1, 0);
         this.renderer = renderer;
     }
 
@@ -74,32 +78,54 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         private final CodeEvaluationResult codeEvaluationResult;
         private final WorkflowConfig config;
         private final Path outputDir;
+        private final CodeFixResult previousFixResult;
+        private final RenderRetryState retryState;
 
         public RenderInput(CodeResult codeResult,
                            CodeEvaluationResult codeEvaluationResult,
                            WorkflowConfig config,
-                           Path outputDir) {
+                           Path outputDir,
+                           CodeFixResult previousFixResult,
+                           RenderRetryState retryState) {
             this.codeResult = codeResult;
             this.codeEvaluationResult = codeEvaluationResult;
             this.config = config;
             this.outputDir = outputDir;
+            this.previousFixResult = previousFixResult;
+            this.retryState = retryState;
         }
 
         public CodeResult codeResult() { return codeResult; }
         public CodeEvaluationResult codeEvaluationResult() { return codeEvaluationResult; }
         public WorkflowConfig config() { return config; }
         public Path outputDir() { return outputDir; }
+        public CodeFixResult previousFixResult() { return previousFixResult; }
+        public RenderRetryState retryState() { return retryState; }
     }
 
     @Override
     public RenderInput prep(Map<String, Object> ctx) {
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
+        ctx.remove(WorkflowKeys.SCENE_EVALUATION_RESULT);
+
+        RenderRetryState retryState = (RenderRetryState) ctx.get(WorkflowKeys.RENDER_RETRY_STATE);
+        if (retryState == null) {
+            retryState = new RenderRetryState();
+            ctx.put(WorkflowKeys.RENDER_RETRY_STATE, retryState);
+        }
+
+        CodeFixResult previousFixResult = consumeRetryRenderFixResult(ctx);
+        if (previousFixResult != null) {
+            retryState.fixToolCalls += previousFixResult.getToolCalls();
+        }
+
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         CodeEvaluationResult codeEvaluationResult =
                 (CodeEvaluationResult) ctx.get(WorkflowKeys.CODE_EVALUATION_RESULT);
         WorkflowConfig config = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         Path outputDir = (Path) ctx.get(WorkflowKeys.OUTPUT_DIR);
-        return new RenderInput(codeResult, codeEvaluationResult, config, outputDir);
+        deleteStaleSceneEvaluationArtifact(outputDir);
+        return new RenderInput(codeResult, codeEvaluationResult, config, outputDir, previousFixResult, retryState);
     }
 
     @Override
@@ -108,17 +134,21 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         CodeEvaluationResult codeEvaluationResult = input.codeEvaluationResult();
         WorkflowConfig config = input.config();
         Path outputDir = input.outputDir();
+        RenderRetryState retryState = input.retryState();
+        retryState.requestFix = false;
+        retryState.pendingFocusedError = null;
 
         log.info("=== Stage 4: Code Rendering ===");
 
-        // Skip if render disabled or no code
         if (config != null && !config.isRenderEnabled()) {
             log.info("Rendering disabled by config");
-            return RenderResult.skipped(codeResult.getSceneName(), "Render disabled");
+            retryState.reset();
+            return RenderResult.skipped(codeResult != null ? codeResult.getSceneName() : "MainScene", "Render disabled");
         }
-        if (!codeResult.hasCode()) {
+        if (codeResult == null || !codeResult.hasCode()) {
             log.warn("No code to render");
-            return RenderResult.skipped(codeResult.getSceneName(), "No code");
+            retryState.reset();
+            return RenderResult.skipped(codeResult != null ? codeResult.getSceneName() : "MainScene", "No code");
         }
         if (codeEvaluationResult != null && !codeEvaluationResult.isApprovedForRender()) {
             String reason = codeEvaluationResult.getGateReason();
@@ -126,120 +156,84 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     reason != null && !reason.isBlank() ? reason : "No additional detail");
         }
 
-        String quality = config != null ? config.getRenderQuality() : "low";
-        int maxRetries = config != null ? config.getRenderMaxRetries() : 4;
-
-        int maxInputTokens = (config != null && config.getModelConfig() != null)
-                ? config.getModelConfig().getMaxInputTokens()
-                : 131072;
-        NodeConversationContext conversationContext = new NodeConversationContext(maxInputTokens);
-        conversationContext.setSystemMessage(PromptTemplates.renderFixSystemPrompt(
-                codeResult.getTargetConcept(),
-                codeResult.getTargetDescription()));
-
         String currentCode = JsonUtils.extractCodeBlock(codeResult.getManimCode());
         if (currentCode == null || currentCode.isBlank()) {
             currentCode = codeResult.getManimCode();
         }
         currentCode = enforceMainSceneClassName(currentCode);
+        codeResult.setManimCode(currentCode);
+
         String sceneName = "MainScene";
         codeResult.setSceneName(sceneName);
-        String lastError = "";
-        String geometryPath = null;
-        int attempts = 0;
-        int toolCalls = 0;
 
-        List<String> fixHistory = new ArrayList<>();
-        String previousErrorSignature = null;
-        int consecutiveSameErrorCount = 0;
-
-        // Render-fix loop
-        for (int i = 0; i <= maxRetries; i++) {
-            attempts++;
-            log.info("  Render attempt {}/{}", attempts, maxRetries + 1);
-
-            RenderAttemptResult renderResult = renderer.render(
-                    currentCode, sceneName, quality, outputDir
+        if (input.previousFixResult() != null && !input.previousFixResult().isApplied()) {
+            log.warn("Previous shared code-fix pass produced no meaningful change, stopping render retries");
+            return failureResult(
+                    currentCode,
+                    sceneName,
+                    retryState.attempts,
+                    input.previousFixResult().getFailureReason(),
+                    null,
+                    retryState.fixToolCalls
             );
-            geometryPath = renderResult.geometryPath();
-
-            if (renderResult.success()) {
-                log.info("  Render succeeded on attempt {}", attempts);
-                RenderResult result = new RenderResult();
-                result.setSuccess(true);
-                result.setFinalCode(currentCode);
-                result.setSceneName(sceneName);
-                result.setVideoPath(renderResult.videoPath());
-                result.setGeometryPath(geometryPath);
-                result.setAttempts(attempts);
-                result.setToolCalls(toolCalls);
-                return result;
-            }
-
-            lastError = combineErrorStreams(renderResult.stdout(), renderResult.stderr());
-            log.warn("  Render failed (attempt {}): {}", attempts,
-                    lastError.length() > 200 ? lastError.substring(0, 200) + "..." : lastError);
-
-            // Don't fix on last attempt
-            if (i >= maxRetries) break;
-
-            // Error classification: skip AI fix for non-code errors
-            if (!isCodeError(lastError)) {
-                log.warn("  Non-code error detected (environment issue), stopping retries");
-                break;
-            }
-
-            String focusedError = extractFocusedError(renderResult);
-
-            String errorSignature = summarizeErrorSignature(focusedError);
-            if (errorSignature.equals(previousErrorSignature)) {
-                consecutiveSameErrorCount++;
-            } else {
-                consecutiveSameErrorCount = 1;
-            }
-
-            if (consecutiveSameErrorCount >= MAX_CONSECUTIVE_SAME_ERROR_ATTEMPTS) {
-                log.warn("  Same error repeated {} times in a row, stopping retries",
-                        consecutiveSameErrorCount);
-                break;
-            }
-            fixHistory.add(errorSignature);
-            previousErrorSignature = errorSignature;
-
-            // AI fix
-            try {
-                log.info("  Error output sent to LLM:\n{}", focusedError);
-                String fixPrompt = PromptTemplates.renderFixUserPrompt(currentCode, focusedError, fixHistory);
-                conversationContext.addUserMessage(fixPrompt);
-                String fixResponse = aiClient.chat(conversationContext);
-                conversationContext.addAssistantMessage(fixResponse);
-                toolCalls++;
-
-                String fixedCode = JsonUtils.extractCodeBlock(fixResponse);
-                if (fixedCode.isBlank() || fixedCode.equals(currentCode)) {
-                    log.warn("  AI fix produced empty or identical code, stopping retries");
-                    break;
-                }
-                currentCode = enforceMainSceneClassName(fixedCode);
-                codeResult.setSceneName(sceneName);
-                log.info("  AI fix applied ({} lines)", fixedCode.split("\n").length);
-            } catch (Exception e) {
-                log.error("  AI fix failed: {}", e.getMessage());
-                break;
-            }
         }
 
-        // All retries exhausted
-        log.warn("Render failed after {} attempts", attempts);
-        RenderResult result = new RenderResult();
-        result.setSuccess(false);
-        result.setFinalCode(currentCode);
-        result.setSceneName(sceneName);
-        result.setGeometryPath(geometryPath);
-        result.setAttempts(attempts);
-        result.setLastError(lastError);
-        result.setToolCalls(toolCalls);
-        return result;
+        String quality = config != null ? config.getRenderQuality() : "low";
+        int maxRetries = config != null ? config.getRenderMaxRetries() : 4;
+        int attemptNumber = retryState.attempts + 1;
+        log.info("  Render attempt {}/{}", attemptNumber, maxRetries + 1);
+
+        RenderAttemptResult renderAttempt = renderer.render(currentCode, sceneName, quality, outputDir);
+        String geometryPath = renderAttempt.geometryPath();
+
+        if (renderAttempt.success()) {
+            log.info("  Render succeeded on attempt {}", attemptNumber);
+            retryState.reset();
+            RenderResult result = new RenderResult();
+            result.setSuccess(true);
+            result.setFinalCode(currentCode);
+            result.setSceneName(sceneName);
+            result.setVideoPath(renderAttempt.videoPath());
+            result.setGeometryPath(geometryPath);
+            result.setAttempts(attemptNumber);
+            result.setToolCalls(retryState.fixToolCalls);
+            return result;
+        }
+
+        retryState.attempts = attemptNumber;
+        String lastError = combineErrorStreams(renderAttempt.stdout(), renderAttempt.stderr());
+        log.warn("  Render failed (attempt {}): {}", attemptNumber,
+                lastError.length() > 200 ? lastError.substring(0, 200) + "..." : lastError);
+
+        if (attemptNumber >= maxRetries + 1) {
+            log.warn("Render failed after {} attempts", attemptNumber);
+            return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.fixToolCalls);
+        }
+
+        if (!isCodeError(lastError)) {
+            log.warn("  Non-code error detected (environment issue), stopping retries");
+            return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.fixToolCalls);
+        }
+
+        String focusedError = extractFocusedError(renderAttempt);
+        String errorSignature = summarizeErrorSignature(focusedError);
+        if (errorSignature.equals(retryState.previousErrorSignature)) {
+            retryState.consecutiveSameErrorCount++;
+        } else {
+            retryState.consecutiveSameErrorCount = 1;
+        }
+
+        if (retryState.consecutiveSameErrorCount >= MAX_CONSECUTIVE_SAME_ERROR_ATTEMPTS) {
+            log.warn("  Same error repeated {} times in a row, stopping retries",
+                    retryState.consecutiveSameErrorCount);
+            return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.fixToolCalls);
+        }
+
+        retryState.previousErrorSignature = errorSignature;
+        retryState.fixHistory.add(errorSignature);
+        retryState.requestFix = true;
+        retryState.pendingFocusedError = focusedError;
+        return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.fixToolCalls);
     }
 
     @Override
@@ -253,10 +247,62 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             CodeResult codeResult = input.codeResult();
             if (result.getFinalCode() != null
                     && !result.getFinalCode().equals(codeResult.getManimCode())) {
-                log.info("Final code differs from original (AI fixes applied)");
+                log.info("Final code differs from current workflow code");
             }
         }
 
+        if (input.retryState().requestFix) {
+            ctx.put(WorkflowKeys.CODE_FIX_REQUEST, buildRenderFixRequest(input));
+            return WorkflowActions.FIX_CODE;
+        }
+
+        input.retryState().reset();
+        return null;
+    }
+
+    private CodeFixRequest buildRenderFixRequest(RenderInput input) {
+        CodeResult codeResult = input.codeResult();
+        RenderRetryState retryState = input.retryState();
+
+        CodeFixRequest request = new CodeFixRequest();
+        request.setSource(CodeFixSource.RENDER_FAILURE);
+        request.setReturnAction(WorkflowActions.RETRY_RENDER);
+        request.setCode(codeResult.getManimCode());
+        request.setErrorReason(retryState.pendingFocusedError);
+        request.setTargetConcept(codeResult.getTargetConcept());
+        request.setTargetDescription(codeResult.getTargetDescription());
+        request.setSceneName(codeResult.getSceneName());
+        request.setExpectedSceneName("MainScene");
+        request.setFixHistory(new ArrayList<>(retryState.fixHistory));
+        return request;
+    }
+
+    private RenderResult failureResult(String code,
+                                       String sceneName,
+                                       int attempts,
+                                       String error,
+                                       String geometryPath,
+                                       int toolCalls) {
+        RenderResult result = new RenderResult();
+        result.setSuccess(false);
+        result.setFinalCode(code);
+        result.setSceneName(sceneName);
+        result.setGeometryPath(geometryPath);
+        result.setAttempts(attempts);
+        result.setLastError(error);
+        result.setToolCalls(toolCalls);
+        return result;
+    }
+
+    private CodeFixResult consumeRetryRenderFixResult(Map<String, Object> ctx) {
+        CodeFixResult result = (CodeFixResult) ctx.get(WorkflowKeys.CODE_FIX_RESULT);
+        if (result != null
+                && WorkflowActions.RETRY_RENDER.equals(result.getReturnAction())
+                && (result.getSource() == CodeFixSource.RENDER_FAILURE
+                || result.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION)) {
+            ctx.remove(WorkflowKeys.CODE_FIX_RESULT);
+            return result;
+        }
         return null;
     }
 
@@ -409,11 +455,42 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         return normalized.length() > 200 ? normalized.substring(0, 200) : normalized;
     }
 
+    private void deleteStaleSceneEvaluationArtifact(Path outputDir) {
+        if (outputDir == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(outputDir.resolve("6_scene_evaluation.json"));
+        } catch (IOException e) {
+            log.debug("Could not clear stale scene evaluation artifact: {}", e.getMessage());
+        }
+    }
+
     private String enforceMainSceneClassName(String code) {
         if (code == null || code.isBlank()) {
             return code;
         }
         return ANY_SCENE_CLASS.matcher(code)
                 .replaceFirst("class MainScene($1)");
+    }
+
+    static final class RenderRetryState {
+        private int attempts;
+        private int fixToolCalls;
+        private boolean requestFix;
+        private String previousErrorSignature;
+        private int consecutiveSameErrorCount;
+        private final List<String> fixHistory = new ArrayList<>();
+        private String pendingFocusedError;
+
+        void reset() {
+            attempts = 0;
+            fixToolCalls = 0;
+            requestFix = false;
+            previousErrorSignature = null;
+            consecutiveSameErrorCount = 0;
+            fixHistory.clear();
+            pendingFocusedError = null;
+        }
     }
 }

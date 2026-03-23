@@ -4,12 +4,14 @@ import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
 import com.automanim.model.Narrative;
 import com.automanim.model.CodeEvaluationResult;
+import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.util.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.github.the_pocket.PocketFlow;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
@@ -39,8 +41,9 @@ class CodeEvaluationNodeTest {
                 "Approved for render."));
 
         Map<String, Object> ctx = buildContext(aiClient, initialCode());
+        PocketFlow.Flow<?> flow = evaluationFlow();
 
-        new CodeEvaluationNode().run(ctx);
+        flow.run(ctx);
 
         CodeEvaluationResult result =
                 (CodeEvaluationResult) ctx.get(WorkflowKeys.CODE_EVALUATION_RESULT);
@@ -70,8 +73,9 @@ class CodeEvaluationNodeTest {
                 "Split the scene further."));
 
         Map<String, Object> ctx = buildContext(aiClient, initialCode());
+        PocketFlow.Flow<?> flow = evaluationFlow();
 
-        new CodeEvaluationNode().run(ctx);
+        flow.run(ctx);
 
         CodeEvaluationResult result =
                 (CodeEvaluationResult) ctx.get(WorkflowKeys.CODE_EVALUATION_RESULT);
@@ -97,6 +101,14 @@ class CodeEvaluationNodeTest {
                 "Demo concept",
                 "Test code evaluation"));
         return ctx;
+    }
+
+    private static PocketFlow.Flow<?> evaluationFlow() {
+        CodeEvaluationNode codeEvaluation = new CodeEvaluationNode();
+        CodeFixNode codeFix = new CodeFixNode();
+        codeEvaluation.next(codeFix, WorkflowActions.FIX_CODE);
+        codeFix.next(codeEvaluation, WorkflowActions.RETRY_CODE_EVALUATION);
+        return new PocketFlow.Flow<>(codeEvaluation);
     }
 
     private static WorkflowConfig createWorkflowConfig() {

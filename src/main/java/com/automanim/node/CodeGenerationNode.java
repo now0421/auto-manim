@@ -1,8 +1,12 @@
 package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
+import com.automanim.model.CodeFixRequest;
+import com.automanim.model.CodeFixResult;
+import com.automanim.model.CodeFixSource;
 import com.automanim.model.CodeResult;
 import com.automanim.model.Narrative;
+import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
@@ -27,13 +31,15 @@ import java.util.regex.Pattern;
  * Stage 2: Code Generation - generates executable Manim Python code
  * from the narrative storyboard prompt.
  */
-public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, String> {
+public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeGenerationInput, CodeResult, String> {
 
     private static final Logger log = LoggerFactory.getLogger(CodeGenerationNode.class);
     private static final Pattern MAIN_SCENE_CLASS = Pattern.compile("class\\s+MainScene\\s*\\(.*?Scene.*?\\)");
     private static final Pattern ANY_SCENE_CLASS = Pattern.compile("class\\s+[^\\s(]+\\s*\\((.*?Scene.*?)\\)");
     private static final Pattern NON_ASCII_IDENTIFIER = Pattern.compile(
             "(?:class|def)\\s+[^\\x00-\\x7F]+|self\\.[^\\x00-\\x7F]+|\\b[^\\x00-\\x7F_][^\\s(=:,]*");
+    private static final int MAX_VALIDATION_FIX_ATTEMPTS = 1;
+    private static final String EXPECTED_SCENE_NAME = "MainScene";
 
     private static final String MANIM_CODE_TOOL = "["
             + "{"
@@ -69,19 +75,57 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         super(2, 2000); // 2 retries with 2-second wait
     }
 
-    @Override
-    public Narrative prep(Map<String, Object> ctx) {
-        this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
-        this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
-        return (Narrative) ctx.get(WorkflowKeys.NARRATIVE);
+    public static class CodeGenerationInput {
+        private final Narrative narrative;
+        private final CodeResult existingCodeResult;
+        private final CodeFixResult previousFixResult;
+        private final GenerationFixState fixState;
+
+        public CodeGenerationInput(Narrative narrative,
+                                   CodeResult existingCodeResult,
+                                   CodeFixResult previousFixResult,
+                                   GenerationFixState fixState) {
+            this.narrative = narrative;
+            this.existingCodeResult = existingCodeResult;
+            this.previousFixResult = previousFixResult;
+            this.fixState = fixState;
+        }
+
+        public Narrative narrative() { return narrative; }
+        public CodeResult existingCodeResult() { return existingCodeResult; }
+        public CodeFixResult previousFixResult() { return previousFixResult; }
+        public GenerationFixState fixState() { return fixState; }
     }
 
     @Override
-    public CodeResult exec(Narrative narrative) {
+    public CodeGenerationInput prep(Map<String, Object> ctx) {
+        this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
+        this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
+
+        GenerationFixState fixState = (GenerationFixState) ctx.get(WorkflowKeys.CODE_GENERATION_FIX_STATE);
+        if (fixState == null) {
+            fixState = new GenerationFixState();
+            ctx.put(WorkflowKeys.CODE_GENERATION_FIX_STATE, fixState);
+        }
+
+        CodeFixResult previousFixResult = consumeFixResult(ctx, CodeFixSource.GENERATION_VALIDATION);
+        if (previousFixResult != null) {
+            fixState.fixToolCalls += previousFixResult.getToolCalls();
+        }
+
+        return new CodeGenerationInput(
+                (Narrative) ctx.get(WorkflowKeys.NARRATIVE),
+                (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT),
+                previousFixResult,
+                fixState
+        );
+    }
+
+    @Override
+    public CodeResult exec(CodeGenerationInput input) {
         log.info("=== Stage 2: Code Generation ===");
         toolCalls = 0;
 
-        // Lazy-init: create on first exec(), preserve across PocketFlow retries
         if (this.conversationContext == null) {
             int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
                     ? workflowConfig.getModelConfig().getMaxInputTokens()
@@ -89,63 +133,82 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             this.conversationContext = new NodeConversationContext(maxInputTokens);
         }
 
-        if (narrative == null) {
+        Narrative narrative = input.narrative();
+        GenerationFixState fixState = input.fixState();
+        fixState.requestFix = false;
+
+        if (narrative == null && input.existingCodeResult() == null) {
             log.warn("Narrative is empty, cannot generate code");
-            return new CodeResult("", "", "Empty narrative",
-                    "", "");
+            return new CodeResult("", "", "Empty narrative", "", "");
         }
 
-        this.conversationContext.setSystemMessage(PromptTemplates.codeGenerationSystemPrompt(
-                narrative.getTargetConcept(),
-                narrative.getTargetDescription()));
-
-        String expectedSceneName = "MainScene";
-        String userPrompt = buildGenerationPrompt(narrative, expectedSceneName);
-        if (userPrompt.isBlank()) {
-            log.warn("Narrative prompt is empty, cannot generate code");
-            return new CodeResult("", "", "Empty narrative",
-                    narrative.getTargetConcept(), narrative.getTargetDescription());
-        }
+        String targetConcept = narrative != null ? narrative.getTargetConcept()
+                : input.existingCodeResult().getTargetConcept();
+        String targetDescription = narrative != null ? narrative.getTargetDescription()
+                : input.existingCodeResult().getTargetDescription();
+        this.conversationContext.setSystemMessage(
+                PromptTemplates.codeGenerationSystemPrompt(targetConcept, targetDescription));
 
         String code;
-        String sceneName;
-        try {
-            CodeDraft draft = requestCodeAsync(userPrompt, expectedSceneName).join();
-            code = enforceMainSceneClassName(draft.code);
-            sceneName = draft.sceneName;
-        } catch (CompletionException e) {
-            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
-            log.error("  Code generation failed: {}", cause.getMessage());
-            code = "";
-            sceneName = expectedSceneName;
+        String sceneName = EXPECTED_SCENE_NAME;
+        if (input.previousFixResult() != null) {
+            log.info("  Re-validating code returned from shared CodeFixNode");
+            code = extractRetriedCode(input);
+        } else {
+            String userPrompt = buildGenerationPrompt(narrative, EXPECTED_SCENE_NAME);
+            if (userPrompt.isBlank()) {
+                log.warn("Narrative prompt is empty, cannot generate code");
+                return new CodeResult("", "", "Empty narrative", targetConcept, targetDescription);
+            }
+
+            try {
+                CodeDraft draft = requestCodeAsync(userPrompt, EXPECTED_SCENE_NAME).join();
+                code = enforceMainSceneClassName(draft.code);
+                sceneName = draft.sceneName;
+            } catch (CompletionException e) {
+                Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
+                log.error("  Code generation failed: {}", cause.getMessage());
+                code = "";
+            }
+            sceneName = EXPECTED_SCENE_NAME;
         }
 
-        sceneName = expectedSceneName;
-
+        code = enforceMainSceneClassName(code);
         List<String> violations = validateCode(code);
-        if (!violations.isEmpty()) {
-            log.warn("  Code validation found {} violations, attempting AI fix", violations.size());
-            String fixedCode = attemptAiFix(code, violations, sceneName);
-            if (fixedCode != null && !fixedCode.isBlank()) {
-                fixedCode = enforceMainSceneClassName(fixedCode);
-                List<String> postFixViolations = validateCode(fixedCode);
-                if (postFixViolations.size() < violations.size()) {
-                    code = fixedCode;
-                    sceneName = expectedSceneName;
-                    log.info("  AI fix reduced violations from {} to {}",
-                            violations.size(), postFixViolations.size());
+
+        if (input.previousFixResult() != null) {
+            if (!violations.isEmpty()) {
+                if (fixState.originalCodeBeforeFix != null
+                        && violations.size() >= fixState.originalViolationCount) {
+                    log.warn("  Shared code fix did not improve validation violations ({} -> {}),"
+                                    + " keeping original generated code",
+                            fixState.originalViolationCount, violations.size());
+                    code = fixState.originalCodeBeforeFix;
+                    violations = validateCode(code);
+                } else {
+                    log.info("  Shared code fix reduced violations from {} to {}",
+                            fixState.originalViolationCount, violations.size());
                 }
             }
+            fixState.clearPending();
+        } else if (!violations.isEmpty() && fixState.attempts < MAX_VALIDATION_FIX_ATTEMPTS) {
+            log.warn("  Code validation found {} violations, routing to shared CodeFixNode",
+                    violations.size());
+            fixState.requestFix = true;
+            fixState.attempts++;
+            fixState.originalCodeBeforeFix = code;
+            fixState.originalViolationCount = violations.size();
+            fixState.validationIssues = new ArrayList<>(violations);
         }
 
         CodeResult result = new CodeResult(
                 code,
                 sceneName,
-                "Manim animation for " + narrative.getTargetConcept(),
-                narrative.getTargetConcept(),
-                narrative.getTargetDescription()
+                "Manim animation for " + targetConcept,
+                targetConcept,
+                targetDescription
         );
-        result.setToolCalls(toolCalls);
+        result.setToolCalls(toolCalls + fixState.fixToolCalls + fixState.generationToolCallsCarryover);
 
         log.info("Code generated: {} lines, scene={}", result.codeLineCount(), sceneName);
         return result;
@@ -202,7 +265,7 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
     }
 
     @Override
-    public String post(Map<String, Object> ctx, Narrative narrative, CodeResult codeResult) {
+    public String post(Map<String, Object> ctx, CodeGenerationInput input, CodeResult codeResult) {
         ctx.put(WorkflowKeys.CODE_RESULT, codeResult);
 
         Path outputDir = (Path) ctx.get(WorkflowKeys.OUTPUT_DIR);
@@ -210,6 +273,13 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
             FileOutputService.saveCodeResult(outputDir, codeResult);
         }
 
+        if (input.fixState().requestFix) {
+            input.fixState().generationToolCallsCarryover += toolCalls;
+            ctx.put(WorkflowKeys.CODE_FIX_REQUEST, buildValidationFixRequest(codeResult, input.fixState()));
+            return WorkflowActions.FIX_CODE;
+        }
+
+        input.fixState().reset();
         return null;
     }
 
@@ -265,28 +335,38 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         return violations;
     }
 
-    private String attemptAiFix(String code, List<String> violations, String sceneName) {
-        try {
-            String violationList = String.join("\n- ", violations);
-            String fixPrompt = String.format(
-                    "The following code violates validation rules:\n\n"
-                    + "```python\n%s\n```\n\n"
-                    + "Problems found:\n- %s\n\n"
-                    + "Use `%s` as the scene class name exactly.\n"
-                    + "Ensure that all class names, function names, method names, and variable names"
-                    + " use ASCII English identifiers only.",
-                    code, violationList, sceneName);
+    private CodeFixRequest buildValidationFixRequest(CodeResult codeResult, GenerationFixState fixState) {
+        CodeFixRequest request = new CodeFixRequest();
+        request.setSource(CodeFixSource.GENERATION_VALIDATION);
+        request.setReturnAction(WorkflowActions.RETRY_CODE_GENERATION);
+        request.setCode(codeResult.getManimCode());
+        request.setErrorReason(String.join("\n", fixState.validationIssues));
+        request.setTargetConcept(codeResult.getTargetConcept());
+        request.setTargetDescription(codeResult.getTargetDescription());
+        request.setSceneName(codeResult.getSceneName());
+        request.setExpectedSceneName(EXPECTED_SCENE_NAME);
+        return request;
+    }
 
-            conversationContext.addUserMessage(fixPrompt);
-            String response = aiClient.chatAsync(conversationContext).join();
-            conversationContext.addAssistantMessage(response);
-            toolCalls++;
-            return JsonUtils.extractCodeBlock(response);
-        } catch (CompletionException e) {
-            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
-            log.debug("  AI fix attempt failed: {}", cause.getMessage());
-            return null;
+    private CodeFixResult consumeFixResult(Map<String, Object> ctx, CodeFixSource expectedSource) {
+        CodeFixResult result = (CodeFixResult) ctx.get(WorkflowKeys.CODE_FIX_RESULT);
+        if (result != null && result.getSource() == expectedSource) {
+            ctx.remove(WorkflowKeys.CODE_FIX_RESULT);
+            return result;
         }
+        return null;
+    }
+
+    private String extractRetriedCode(CodeGenerationInput input) {
+        if (input.existingCodeResult() != null
+                && input.existingCodeResult().getManimCode() != null
+                && !input.existingCodeResult().getManimCode().isBlank()) {
+            return input.existingCodeResult().getManimCode();
+        }
+        if (input.previousFixResult() != null) {
+            return input.previousFixResult().getFixedCode();
+        }
+        return "";
     }
 
     private String enforceMainSceneClassName(String code) {
@@ -295,6 +375,30 @@ public class CodeGenerationNode extends PocketFlow.Node<Narrative, CodeResult, S
         }
         return ANY_SCENE_CLASS.matcher(code)
                 .replaceFirst("class MainScene($1)");
+    }
+
+    static final class GenerationFixState {
+        private int attempts;
+        private int fixToolCalls;
+        private int generationToolCallsCarryover;
+        private boolean requestFix;
+        private String originalCodeBeforeFix;
+        private int originalViolationCount;
+        private List<String> validationIssues = new ArrayList<>();
+
+        void clearPending() {
+            requestFix = false;
+            originalCodeBeforeFix = null;
+            originalViolationCount = 0;
+            validationIssues = new ArrayList<>();
+        }
+
+        void reset() {
+            attempts = 0;
+            fixToolCalls = 0;
+            generationToolCallsCarryover = 0;
+            clearPending();
+        }
     }
 
     private static final class CodeDraft {

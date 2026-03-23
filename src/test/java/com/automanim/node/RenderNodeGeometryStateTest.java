@@ -3,10 +3,12 @@ package com.automanim.node;
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
 import com.automanim.model.RenderResult;
+import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.ManimRendererService;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.github.the_pocket.PocketFlow;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -71,7 +73,12 @@ class RenderNodeGeometryStateTest {
         ctx.put(WorkflowKeys.OUTPUT_DIR, tempDir);
         ctx.put(WorkflowKeys.AI_CLIENT, new StubAiClient());
 
-        new RenderNode(renderer).run(ctx);
+        RenderNode renderNode = new RenderNode(renderer);
+        CodeFixNode codeFixNode = new CodeFixNode();
+        renderNode.next(codeFixNode, WorkflowActions.FIX_CODE);
+        codeFixNode.next(renderNode, WorkflowActions.RETRY_RENDER);
+
+        new PocketFlow.Flow<>(renderNode).run(ctx);
 
         RenderResult renderResult = (RenderResult) ctx.get(WorkflowKeys.RENDER_RESULT);
         assertNotNull(renderResult);

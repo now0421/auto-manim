@@ -29,11 +29,22 @@ public final class WorkflowKeys {
     // ---- Stage 2: Code generation output ----
     public static final String CODE_RESULT = "codeResult";
 
+    // ---- Shared code-fix routing state ----
+    public static final String CODE_FIX_REQUEST = "codeFixRequest";
+    public static final String CODE_FIX_RESULT = "codeFixResult";
+    public static final String CODE_GENERATION_FIX_STATE = "codeGenerationFixState";
+    public static final String CODE_EVALUATION_FIX_STATE = "codeEvaluationFixState";
+    public static final String RENDER_RETRY_STATE = "renderRetryState";
+    public static final String SCENE_EVALUATION_RETRY_STATE = "sceneEvaluationRetryState";
+
     // ---- Stage 3: Code evaluation output ----
     public static final String CODE_EVALUATION_RESULT = "codeEvaluationResult";
 
     // ---- Stage 4: Render output ----
     public static final String RENDER_RESULT = "renderResult";
+
+    // ---- Stage 5: Scene evaluation output ----
+    public static final String SCENE_EVALUATION_RESULT = "sceneEvaluationResult";
 
     // ---- Metrics ----
     public static final String STAGE_TIMES = "stageTimes";

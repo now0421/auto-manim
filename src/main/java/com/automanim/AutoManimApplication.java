@@ -7,6 +7,7 @@ import com.automanim.model.CodeResult;
 import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.RenderResult;
 import com.automanim.model.CodeEvaluationResult;
+import com.automanim.model.SceneEvaluationResult;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
@@ -242,6 +243,8 @@ public class AutoManimApplication {
         CodeEvaluationResult codeEvaluationResult =
                 (CodeEvaluationResult) ctx.get(WorkflowKeys.CODE_EVALUATION_RESULT);
         RenderResult renderResult = (RenderResult) ctx.get(WorkflowKeys.RENDER_RESULT);
+        SceneEvaluationResult sceneEvaluationResult =
+                (SceneEvaluationResult) ctx.get(WorkflowKeys.SCENE_EVALUATION_RESULT);
         int apiCalls = (int) ctx.getOrDefault(WorkflowKeys.EXPLORATION_API_CALLS, 0);
         apiCalls += (int) ctx.getOrDefault(WorkflowKeys.ENRICHMENT_TOOL_CALLS, 0);
 
@@ -289,6 +292,20 @@ public class AutoManimApplication {
             summary.put("geometry_path", renderResult.getGeometryPath());
         }
 
+        if (sceneEvaluationResult != null) {
+            apiCalls += sceneEvaluationResult.getToolCalls();
+            summary.put("scene_evaluation_evaluated", sceneEvaluationResult.isEvaluated());
+            summary.put("scene_evaluation_approved", sceneEvaluationResult.isApproved());
+            summary.put("scene_evaluation_revision_triggered", sceneEvaluationResult.isRevisionTriggered());
+            summary.put("scene_evaluation_revision_attempts", sceneEvaluationResult.getRevisionAttempts());
+            summary.put("scene_evaluation_gate_reason", sceneEvaluationResult.getGateReason());
+            summary.put("scene_evaluation_sample_count", sceneEvaluationResult.getSampleCount());
+            summary.put("scene_evaluation_issue_samples", sceneEvaluationResult.getIssueSampleCount());
+            summary.put("scene_evaluation_total_issues", sceneEvaluationResult.getTotalIssueCount());
+            summary.put("scene_evaluation_overlap_issues", sceneEvaluationResult.getOverlapIssueCount());
+            summary.put("scene_evaluation_offscreen_issues", sceneEvaluationResult.getOffscreenIssueCount());
+        }
+
         summary.put("total_api_calls_estimate", apiCalls);
         summary.put("duration_human", formatDuration(elapsed));
         return summary;
@@ -332,6 +349,21 @@ public class AutoManimApplication {
             }
             if (summary.get("geometry_path") != null) {
                 log.info("  Geometry: {}", summary.get("geometry_path"));
+            }
+        }
+        if (summary.containsKey("scene_evaluation_approved")) {
+            log.info("  Scene Evaluation: {} (evaluated={}, revision_triggered={}, attempts={})",
+                    Boolean.TRUE.equals(summary.get("scene_evaluation_approved")) ? "APPROVED" : "BLOCKED",
+                    summary.get("scene_evaluation_evaluated"),
+                    summary.get("scene_evaluation_revision_triggered"),
+                    summary.get("scene_evaluation_revision_attempts"));
+            log.info("  Scene Issues: samples={}, total={}, overlap={}, offscreen={}",
+                    summary.get("scene_evaluation_issue_samples"),
+                    summary.get("scene_evaluation_total_issues"),
+                    summary.get("scene_evaluation_overlap_issues"),
+                    summary.get("scene_evaluation_offscreen_issues"));
+            if (summary.get("scene_evaluation_gate_reason") != null) {
+                log.info("  Scene Gate: {}", summary.get("scene_evaluation_gate_reason"));
             }
         }
         log.info("  Total API calls: ~{}", summary.get("total_api_calls_estimate"));

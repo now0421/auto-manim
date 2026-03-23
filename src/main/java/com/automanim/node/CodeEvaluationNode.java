@@ -1,6 +1,9 @@
 package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
+import com.automanim.model.CodeFixRequest;
+import com.automanim.model.CodeFixResult;
+import com.automanim.model.CodeFixSource;
 import com.automanim.model.CodeResult;
 import com.automanim.model.Narrative;
 import com.automanim.model.Narrative.Storyboard;
@@ -10,6 +13,7 @@ import com.automanim.model.CodeEvaluationResult;
 import com.automanim.model.CodeEvaluationResult.ReviewSnapshot;
 import com.automanim.model.CodeEvaluationResult.StaticAnalysis;
 import com.automanim.model.CodeEvaluationResult.StaticFinding;
+import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
@@ -51,7 +55,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
     private static final int MIN_PACING_SCORE = 6;
     private static final int MAX_CLUTTER_RISK = 4;
     private static final int MAX_OFFSCREEN_RISK = 4;
-    private static final int MAX_REVISION_ATTEMPTS = 3;
+    private static final int MAX_REVISION_ATTEMPTS = 2;
 
     private static final Pattern SCENE_CLASS = Pattern.compile("class\\s+(\\w+)\\s*\\(.*?Scene.*?\\)");
     private static final Pattern TO_EDGE_PATTERN = Pattern.compile("\\.to_edge\\(");
@@ -109,7 +113,6 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
     private AiClient aiClient;
     private WorkflowConfig workflowConfig;
     private NodeConversationContext reviewConversationContext;
-    private NodeConversationContext revisionConversationContext;
     private int toolCalls;
 
     public CodeEvaluationNode() {
@@ -121,21 +124,29 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         private final Narrative narrative;
         private final WorkflowConfig config;
         private final Path outputDir;
+        private final CodeFixResult previousFixResult;
+        private final EvaluationFixState fixState;
 
         public CodeEvaluationInput(CodeResult codeResult,
                                    Narrative narrative,
                                    WorkflowConfig config,
-                                   Path outputDir) {
+                                   Path outputDir,
+                                   CodeFixResult previousFixResult,
+                                   EvaluationFixState fixState) {
             this.codeResult = codeResult;
             this.narrative = narrative;
             this.config = config;
             this.outputDir = outputDir;
+            this.previousFixResult = previousFixResult;
+            this.fixState = fixState;
         }
 
         public CodeResult codeResult() { return codeResult; }
         public Narrative narrative() { return narrative; }
         public WorkflowConfig config() { return config; }
         public Path outputDir() { return outputDir; }
+        public CodeFixResult previousFixResult() { return previousFixResult; }
+        public EvaluationFixState fixState() { return fixState; }
     }
 
     @Override
@@ -143,11 +154,28 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
         this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         this.toolCalls = 0;
+
+        EvaluationFixState fixState = (EvaluationFixState) ctx.get(WorkflowKeys.CODE_EVALUATION_FIX_STATE);
+        if (fixState == null) {
+            fixState = new EvaluationFixState();
+            ctx.put(WorkflowKeys.CODE_EVALUATION_FIX_STATE, fixState);
+        }
+
+        CodeFixResult previousFixResult = consumeFixResult(ctx, CodeFixSource.EVALUATION_REVIEW);
+        if (previousFixResult != null) {
+            fixState.fixToolCalls += previousFixResult.getToolCalls();
+            if (previousFixResult.isApplied()) {
+                fixState.revisedCodeApplied = true;
+            }
+        }
+
         return new CodeEvaluationInput(
                 (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT),
                 (Narrative) ctx.get(WorkflowKeys.NARRATIVE),
                 (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG),
-                (Path) ctx.get(WorkflowKeys.OUTPUT_DIR)
+                (Path) ctx.get(WorkflowKeys.OUTPUT_DIR),
+                previousFixResult,
+                fixState
         );
     }
 
@@ -158,11 +186,17 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
         CodeResult codeResult = input.codeResult();
         Narrative narrative = input.narrative();
+        EvaluationFixState fixState = input.fixState();
+        fixState.requestFix = false;
 
         CodeEvaluationResult result = new CodeEvaluationResult();
         if (codeResult == null || !codeResult.hasCode()) {
             result.setApprovedForRender(false);
             result.setGateReason("No code available for code evaluation");
+            result.setRevisionAttempts(fixState.attempts);
+            result.setRevisionTriggered(fixState.attempts > 0);
+            result.setRevisedCodeApplied(fixState.revisedCodeApplied);
+            result.setToolCalls(toolCalls + fixState.fixToolCalls + fixState.reviewToolCallsCarryover);
             result.setExecutionTimeSeconds(toSeconds(start));
             return result;
         }
@@ -182,41 +216,20 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         result.setFinalReview(initialReview);
 
         boolean approved = passesGate(initialReview, initialStatic);
-        if (!approved) {
-            result.setRevisionTriggered(true);
-            log.warn("Code evaluation flagged scene {}, triggering advisory code revision passes (max={})",
-                    sceneName, MAX_REVISION_ATTEMPTS);
-        }
-
-        for (int attempt = 0; !approved && attempt < MAX_REVISION_ATTEMPTS; attempt++) {
-            result.setRevisionAttempts(attempt + 1);
-            String revisedCode = requestCodeRevision(
-                    narrative, codeResult, sceneName, currentCode, initialStatic, initialReview);
-
-            if (revisedCode == null || revisedCode.isBlank()
-                    || normalizeCode(revisedCode).equals(normalizeCode(currentCode))) {
-                log.warn("Visual revision attempt {} produced no meaningful code change", attempt + 1);
-                break;
-            }
-
-            currentCode = revisedCode;
-            sceneName = extractSceneName(currentCode, sceneName);
-            codeResult.setManimCode(currentCode);
-            codeResult.setSceneName(sceneName);
-            result.setSceneName(sceneName);
-            result.setRevisedCodeApplied(true);
-
-            StaticAnalysis revisedStatic = analyzeStaticQuality(narrative, codeResult, currentCode);
-            ReviewSnapshot revisedReview = requestCodeReview(
-                    narrative, codeResult, sceneName, currentCode, revisedStatic);
-
-            result.setFinalStaticAnalysis(revisedStatic);
-            result.setFinalReview(revisedReview);
-            approved = passesGate(revisedReview, revisedStatic);
+        if (!approved && input.previousFixResult() == null && fixState.attempts < MAX_REVISION_ATTEMPTS) {
+            fixState.requestFix = true;
+            fixState.attempts++;
+            log.warn("Code evaluation flagged scene {}, routing to shared CodeFixNode (attempt {}/{})",
+                    sceneName, fixState.attempts, MAX_REVISION_ATTEMPTS);
+        } else if (!approved && input.previousFixResult() != null && !input.previousFixResult().isApplied()) {
+            log.warn("Code evaluation re-run received no meaningful code change from CodeFixNode");
         }
 
         result.setApprovedForRender(approved);
-        result.setToolCalls(toolCalls);
+        result.setRevisionAttempts(fixState.attempts);
+        result.setRevisionTriggered(fixState.attempts > 0 || fixState.requestFix || fixState.revisedCodeApplied);
+        result.setRevisedCodeApplied(fixState.revisedCodeApplied);
+        result.setToolCalls(toolCalls + fixState.fixToolCalls + fixState.reviewToolCallsCarryover);
         result.setGateReason(buildGateReason(approved, result.getFinalStaticAnalysis(), result.getFinalReview()));
         result.setExecutionTimeSeconds(toSeconds(start));
 
@@ -242,6 +255,13 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             FileOutputService.saveCodeEvaluation(outputDir, result, input.codeResult());
         }
 
+        if (input.fixState().requestFix) {
+            input.fixState().reviewToolCallsCarryover += toolCalls;
+            ctx.put(WorkflowKeys.CODE_FIX_REQUEST, buildEvaluationFixRequest(input, result));
+            return WorkflowActions.FIX_CODE;
+        }
+
+        input.fixState().reset();
         return null;
     }
 
@@ -314,41 +334,6 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         return fallbackReviewFromStaticAnalysis(analysis);
     }
 
-    private String requestCodeRevision(Narrative narrative,
-                                       CodeResult codeResult,
-                                       String sceneName,
-                                       String code,
-                                       StaticAnalysis analysis,
-                                       ReviewSnapshot review) {
-        String targetConcept = codeResult.getTargetConcept() != null
-                ? codeResult.getTargetConcept()
-                : sceneName;
-        String storyboardJson = narrative != null && narrative.hasStoryboard()
-                ? JsonUtils.toPrettyJson(narrative.getStoryboard())
-                : "{\"scenes\":[]}";
-        String staticAnalysisJson = JsonUtils.toPrettyJson(analysis);
-        String reviewJson = JsonUtils.toPrettyJson(review);
-        String userPrompt = PromptTemplates.codeRevisionUserPrompt(
-                targetConcept,
-                sceneName,
-                storyboardJson,
-                staticAnalysisJson,
-                reviewJson,
-                code);
-
-        try {
-            String response = requestTextResponse(revisionConversationContext, userPrompt);
-            return JsonUtils.extractCodeBlock(response);
-        } catch (CompletionException e) {
-            Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
-            log.warn("Code revision request failed: {}", cause.getMessage());
-            return null;
-        } catch (Exception e) {
-            log.warn("Code revision request failed: {}", e.getMessage());
-            return null;
-        }
-    }
-
     private void initializeConversationContexts(CodeResult codeResult, String fallbackSceneName) {
         String targetConcept = codeResult != null && codeResult.getTargetConcept() != null
                 ? codeResult.getTargetConcept()
@@ -361,29 +346,38 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         this.reviewConversationContext = new NodeConversationContext(maxInputTokens);
         this.reviewConversationContext.setSystemMessage(
                 PromptTemplates.codeEvaluationSystemPrompt(targetConcept, targetDescription));
-
-        this.revisionConversationContext = new NodeConversationContext(maxInputTokens);
-        this.revisionConversationContext.setSystemMessage(
-                PromptTemplates.codeRevisionSystemPrompt(targetConcept, targetDescription));
     }
 
-    private String requestTextResponse(NodeConversationContext context, String userPrompt) {
-        NodeConversationContext.TurnReservation reservation = context.reserveTurn(userPrompt);
-        List<NodeConversationContext.Message> snapshot = reservation.getSnapshot();
-        NodeConversationContext.trimSnapshotToFitBudget(snapshot, context.getMaxInputTokens());
+    private CodeFixRequest buildEvaluationFixRequest(CodeEvaluationInput input,
+                                                     CodeEvaluationResult result) {
+        CodeResult codeResult = input.codeResult();
+        Narrative narrative = input.narrative();
+        String sceneName = result.getSceneName() != null ? result.getSceneName() : codeResult.getSceneName();
 
-        try {
-            String response = aiClient.chatAsync(snapshot).join();
-            toolCalls++;
-            context.appendReservedTurn(reservation.getSequence(), userPrompt, response);
-            return response;
-        } catch (CompletionException e) {
-            context.cancelReservedTurn(reservation.getSequence());
-            throw e;
-        } catch (RuntimeException e) {
-            context.cancelReservedTurn(reservation.getSequence());
-            throw e;
+        CodeFixRequest request = new CodeFixRequest();
+        request.setSource(CodeFixSource.EVALUATION_REVIEW);
+        request.setReturnAction(WorkflowActions.RETRY_CODE_EVALUATION);
+        request.setCode(codeResult.getManimCode());
+        request.setErrorReason(result.getGateReason());
+        request.setTargetConcept(codeResult.getTargetConcept());
+        request.setTargetDescription(codeResult.getTargetDescription());
+        request.setSceneName(sceneName);
+        request.setExpectedSceneName(sceneName);
+        request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
+                ? JsonUtils.toPrettyJson(narrative.getStoryboard())
+                : "{\"scenes\":[]}");
+        request.setStaticAnalysisJson(JsonUtils.toPrettyJson(result.getFinalStaticAnalysis()));
+        request.setReviewJson(JsonUtils.toPrettyJson(result.getFinalReview()));
+        return request;
+    }
+
+    private CodeFixResult consumeFixResult(Map<String, Object> ctx, CodeFixSource expectedSource) {
+        CodeFixResult result = (CodeFixResult) ctx.get(WorkflowKeys.CODE_FIX_RESULT);
+        if (result != null && result.getSource() == expectedSource) {
+            ctx.remove(WorkflowKeys.CODE_FIX_RESULT);
+            return result;
         }
+        return null;
     }
 
     private boolean passesGate(ReviewSnapshot review, StaticAnalysis analysis) {
@@ -958,5 +952,21 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
     private double toSeconds(Instant start) {
         return Duration.between(start, Instant.now()).toMillis() / 1000.0;
+    }
+
+    static final class EvaluationFixState {
+        private int attempts;
+        private int fixToolCalls;
+        private int reviewToolCallsCarryover;
+        private boolean requestFix;
+        private boolean revisedCodeApplied;
+
+        void reset() {
+            attempts = 0;
+            fixToolCalls = 0;
+            reviewToolCallsCarryover = 0;
+            requestFix = false;
+            revisedCodeApplied = false;
+        }
     }
 }

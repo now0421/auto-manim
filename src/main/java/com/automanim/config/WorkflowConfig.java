@@ -27,6 +27,7 @@ public class WorkflowConfig {
     private boolean renderEnabled;
     private String renderQuality;
     private int renderMaxRetries;
+    private int sceneEvaluationMaxRetries = 2;
     private String inputMode = INPUT_MODE_AUTO;
     private String model;
     @JsonIgnore
@@ -87,6 +88,10 @@ public class WorkflowConfig {
     public void setRenderQuality(String renderQuality) { this.renderQuality = renderQuality; }
     public int getRenderMaxRetries() { return renderMaxRetries; }
     public void setRenderMaxRetries(int renderMaxRetries) { this.renderMaxRetries = renderMaxRetries; }
+    public int getSceneEvaluationMaxRetries() { return sceneEvaluationMaxRetries; }
+    public void setSceneEvaluationMaxRetries(int sceneEvaluationMaxRetries) {
+        this.sceneEvaluationMaxRetries = sceneEvaluationMaxRetries;
+    }
     public String getInputMode() { return inputMode; }
     public void setInputMode(String inputMode) { this.inputMode = normalizeInputMode(inputMode); }
     public String getModel() { return model; }

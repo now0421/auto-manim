@@ -42,6 +42,16 @@ _RESULT_ONLY_ANIMATION_TYPES = {
     "GrowArrow",
     "DrawBorderThenFill",
 }
+_PRE_REMOVAL_ANIMATION_TYPES = {
+    "FadeOut",
+    "Uncreate",
+    "Unwrite",
+    "ShrinkToCenter",
+    "FadeTransform",
+    "FadeTransformPieces",
+    "ReplacementTransform",
+    "RemoveTextLetterByLetter",
+}
 _SEMANTIC_NAME_SOURCE_RANK = {
     "class_name": 0,
     "display_text": 1,
@@ -147,6 +157,7 @@ def patch_scene_for_geometry_export(scene_cls):
             )
             animation_summary = _summarize_play_args(args, play_argument_hints)
             priority_sampling = _is_priority_animation_summary(animation_summary)
+            pre_removal_descriptors = _pre_removal_descriptors(args, play_argument_hints)
             play_record = {
                 "play_index": self._automanim_play_index,
                 "play_type": _detect_play_type(args),
@@ -182,6 +193,24 @@ def patch_scene_for_geometry_export(scene_cls):
                     scene_time=getattr(self, "time", 0.0),
                 )
                 play_record["_last_visible_signature"] = start_collected["visible_signature"]
+                if (
+                    play_record["play_type"] != "wait"
+                    and _has_pre_removal_animation_summary(animation_summary)
+                ):
+                    pre_removal_collected = self._automanim_collect_visible_objects(
+                        source_hint=source_hint,
+                        play_index=play_record["play_index"],
+                        scene_time=getattr(self, "time", 0.0),
+                        extra_descriptors=pre_removal_descriptors,
+                    )
+                    self._automanim_capture_sample(
+                        sample_role="pre_removal",
+                        trigger="play_pre_removal",
+                        animation_time=0.0,
+                        scene_time=getattr(self, "time", 0.0),
+                        source_hint=source_hint,
+                        precollected=pre_removal_collected,
+                    )
 
                 return super().play(
                     *args,
@@ -368,13 +397,24 @@ def patch_scene_for_geometry_export(scene_cls):
 
             return self._automanim_object_registry[stable_id]
 
-        def _automanim_collect_visible_objects(self, source_hint, play_index, scene_time):
+        def _automanim_collect_visible_objects(
+            self,
+            source_hint,
+            play_index,
+            scene_time,
+            extra_descriptors=None,
+        ):
             roots = _unique_roots(self)
             foreground_ids = {id(mobject) for mobject in getattr(self, "foreground_mobjects", [])}
             elements = []
             visible_object_ids = []
-            for sample_order, mobject in enumerate(roots):
+            seen_object_ids = set()
+            sample_order = 0
+            for mobject in roots:
                 if not _should_track_object(mobject):
+                    continue
+                object_id = id(mobject)
+                if object_id in seen_object_ids:
                     continue
                 root_entry = self._automanim_register_mobject(
                     mobject,
@@ -382,7 +422,7 @@ def patch_scene_for_geometry_export(scene_cls):
                     play_index=play_index,
                     scene_time=_safe_float(scene_time),
                 )
-                self._automanim_collect_layout_elements(
+                added = self._automanim_collect_layout_elements(
                     mobject=mobject,
                     registry_entry=root_entry,
                     source_hint=source_hint,
@@ -396,6 +436,42 @@ def patch_scene_for_geometry_export(scene_cls):
                     element_path=str(sample_order),
                     require_visible=True,
                 )
+                if added:
+                    seen_object_ids.add(object_id)
+                    sample_order += 1
+
+            for descriptor in extra_descriptors or []:
+                mobject = descriptor.get("mobject")
+                if not _should_track_object(mobject):
+                    continue
+                object_id = id(mobject)
+                if object_id in seen_object_ids:
+                    continue
+                extra_entry = self._automanim_register_mobject(
+                    mobject,
+                    source_hint=source_hint,
+                    play_index=play_index,
+                    scene_time=_safe_float(scene_time),
+                    semantic_hint=descriptor.get("semantic_name"),
+                    semantic_hint_source="source_argument",
+                )
+                added = self._automanim_collect_layout_elements(
+                    mobject=mobject,
+                    registry_entry=extra_entry,
+                    source_hint=source_hint,
+                    play_index=play_index,
+                    scene_time=scene_time,
+                    foreground_ids=foreground_ids,
+                    elements=elements,
+                    visible_object_ids=visible_object_ids,
+                    top_level_entry=extra_entry,
+                    top_level_order=sample_order,
+                    element_path=str(sample_order),
+                    require_visible=False,
+                )
+                if added:
+                    seen_object_ids.add(object_id)
+                    sample_order += 1
 
             return {
                 "elements": elements,
@@ -425,7 +501,7 @@ def patch_scene_for_geometry_export(scene_cls):
                 require_visible=require_visible,
             )
             if record is None:
-                return
+                return False
 
             child_descriptors = []
             for child_index, child in enumerate(getattr(mobject, "submobjects", []) or []):
@@ -463,7 +539,7 @@ def patch_scene_for_geometry_export(scene_cls):
                     )
 
                 if len(elements) > before_count:
-                    return
+                    return True
 
             record["element_path"] = element_path
             record["parent_element_path"] = element_path.rsplit(".", 1)[0] if "." in element_path else None
@@ -474,6 +550,7 @@ def patch_scene_for_geometry_export(scene_cls):
             elements.append(record)
             if record.get("visible"):
                 visible_object_ids.append(registry_entry["stable_id"])
+            return True
 
         def _automanim_detect_visibility_change(self, current_play, visible_signature):
             previous_signature = current_play.get("_last_visible_signature")
@@ -729,6 +806,24 @@ def _is_priority_animation_summary(animation_summary):
         if entry.get("animation_type") in _PRIORITY_ANIMATION_TYPES:
             return True
     return False
+
+
+def _has_pre_removal_animation_summary(animation_summary):
+    for entry in animation_summary or []:
+        if entry.get("animation_type") in _PRE_REMOVAL_ANIMATION_TYPES:
+            return True
+    return False
+
+
+def _pre_removal_descriptors(args, play_argument_hints=None):
+    descriptors = []
+    play_argument_hints = play_argument_hints or []
+    for index, arg in enumerate(args):
+        if arg is None or arg.__class__.__name__ not in _PRE_REMOVAL_ANIMATION_TYPES:
+            continue
+        semantic_hint = play_argument_hints[index] if index < len(play_argument_hints) else None
+        descriptors.extend(_iter_mobject_descriptors_from_arg(arg, semantic_hint=semantic_hint))
+    return descriptors
 
 
 def _iter_target_descriptors(args, play_argument_hints=None):

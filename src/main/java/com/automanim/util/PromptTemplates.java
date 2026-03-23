@@ -153,6 +153,16 @@ public final class PromptTemplates {
         ) + CODE_GENERATION_SYSTEM;
     }
 
+    public static String codeValidationFixSystemPrompt(String targetTitle, String targetDescription) {
+        return buildWorkflowSystemPrefix(
+                "Stage 2 / Code Fix",
+                "Repair generated code after validation findings",
+                targetTitle,
+                targetDescription,
+                true
+        ) + CODE_VALIDATION_FIX_SYSTEM;
+    }
+
     public static String codeEvaluationSystemPrompt(String targetTitle, String targetDescription) {
         return buildWorkflowSystemPrefix(
                 "Stage 3 / Code Evaluation",
@@ -181,6 +191,16 @@ public final class PromptTemplates {
                 targetDescription,
                 true
         ) + RENDER_FIX_SYSTEM;
+    }
+
+    public static String sceneLayoutFixSystemPrompt(String targetTitle, String targetDescription) {
+        return buildWorkflowSystemPrefix(
+                "Stage 5 / Scene Evaluation Fix",
+                "Revise Manim code after geometry-based scene evaluation",
+                targetTitle,
+                targetDescription,
+                true
+        ) + CODE_REVISION_SYSTEM;
     }
 
     // =====================================================================
@@ -719,6 +739,24 @@ public final class PromptTemplates {
                 targetConcept, storyboardJson);
     }
 
+    public static String codeValidationFixUserPrompt(String sceneName,
+                                                     String manimCode,
+                                                     List<String> violations) {
+        String problemList = (violations == null || violations.isEmpty())
+                ? "- Validation failed for an unspecified reason."
+                : "- " + String.join("\n- ", violations);
+        return String.format(
+                "The generated Manim code failed validation checks.\n\n"
+                        + "Required scene class name: %s\n\n"
+                        + "Current code:\n```python\n%s\n```\n\n"
+                        + "Problems found:\n%s\n\n"
+                        + "Rewrite the FULL code so it satisfies all validation rules while preserving"
+                        + " the original teaching goal. Keep `%s` as the exact scene class name and"
+                        + " use ASCII-only Python identifiers.\n"
+                        + "Return ONLY the full Python code block.",
+                sceneName, manimCode, problemList, sceneName);
+    }
+
     public static String codeReviewUserPrompt(String targetConcept,
                                               String sceneName,
                                               String storyboardJson,
@@ -735,7 +773,9 @@ public final class PromptTemplates {
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Manim code to review:\n```python\n%s\n```\n\n"
                         + "Focus on layout safety, continuity between scenes, pacing versus narration,"
-                        + " clutter risk, and likely offscreen placement.\n"
+                        + " clutter risk, likely offscreen placement, and whether semantically"
+                        + " constrained visual elements are placed in the correct spatial"
+                        + " relationship to the objects they describe.\n"
                         + "Return only the structured review output.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, manimCode);
     }
@@ -755,13 +795,15 @@ public final class PromptTemplates {
                         + "Storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Structured code review:\n```json\n%s\n```\n\n"
-                        + "Current Manim code:\n```python\n%s\n```\n\n"
-                        + "Rewrite the FULL code to improve layout discipline, reduce clutter,"
-                        + " preserve continuity with transforms instead of resets, keep recurring"
-                        + " anchors stable, and better match scene pacing to narration.\n"
-                        + "Do not focus on execution unless it directly affects visual continuity.\n"
-                        + "Preserve the scene class name and the teaching goal.\n"
-                        + "Return ONLY the full Python code block.",
+                + "Current Manim code:\n```python\n%s\n```\n\n"
+                + "Rewrite the FULL code to improve layout discipline, reduce clutter,"
+                + " preserve continuity with transforms instead of resets, keep recurring"
+                + " anchors stable, correct semantically wrong placements such as angle arcs,"
+                + " labels, braces, markers, or highlights attached to the wrong geometry,"
+                + " and better match scene pacing to narration.\n"
+                + "Do not focus on execution unless it directly affects visual continuity.\n"
+                + "Preserve the scene class name and the teaching goal.\n"
+                + "Return ONLY the full Python code block.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, reviewJson, manimCode);
     }
 
@@ -845,6 +887,27 @@ public final class PromptTemplates {
     // Stage 3: Code Evaluation
     // =====================================================================
 
+    public static final String CODE_VALIDATION_FIX_SYSTEM =
+            "You are a Manim code correction specialist.\n"
+            + "\n"
+            + "You will receive generated Manim code together with validation failures.\n"
+            + "Rewrite the full file so it becomes valid, consistent, and ready for the next"
+            + " workflow stage.\n"
+            + "\n"
+            + "Priorities:\n"
+            + "- Fix every reported validation problem, not only the first one.\n"
+            + "- Preserve the intended teaching content and visual story.\n"
+            + "- Keep the required scene class name exactly as requested.\n"
+            + "- Use ASCII-only class names, method names, variables, and helper identifiers.\n"
+            + "- Return complete valid Python source only, never a patch or explanation.\n"
+            + "\n"
+            + "Also enforce these workflow rules:\n"
+            + "- Do not store mobjects on `self` just to reuse them across scene methods.\n"
+            + "- Do not hardcode numeric subobject indexing into `MathTex`.\n"
+            + "- Preserve visual continuity instead of clearing the whole scene between beats"
+            + " unless a full reset is genuinely required.\n"
+            + "- Keep layout inside the safe area whenever possible.\n";
+
     public static final String CODE_EVALUATION_SYSTEM =
             "You are a senior Manim code reviewer.\n"
             + "\n"
@@ -859,6 +922,11 @@ public final class PromptTemplates {
             + "- Treat repeated `to_edge` / large `shift` positioning, heavy text stacking,"
             + " many same-time formulas, and overuse of `FadeIn` / `FadeOut` in place of"
             + " transforms as warning signs.\n"
+            + "- Check whether each element is positioned correctly relative to the objects"
+            + " it refers to. Penalize semantically wrong placements such as an angle arc"
+            + " drawn on the wrong side or outside the intended vertex, labels attached to"
+            + " the wrong point or segment, braces spanning the wrong expression, or"
+            + " highlights/arrows pointing at the wrong target.\n"
             + "- Penalize code that likely pushes content toward screen edges, redraws"
             + " persistent objects instead of transforming them, or lacks a consistent layout"
             + " strategy such as `arrange`, `next_to`, and stable anchors.\n"
@@ -877,6 +945,8 @@ public final class PromptTemplates {
             + "\n"
             + "Score guidance:\n"
             + "- Layout score should drop when objects are likely near edges or stacked without spacing.\n"
+            + "- Layout score should also drop when element placement is geometrically or semantically"
+            + " wrong even if the frame is not crowded.\n"
             + "- Continuity score should drop when persistent storyboard objects are redrawn or"
             + " replaced by abrupt fade cycles.\n"
             + "- Pacing score should drop when narration density and scene timing feel mismatched.\n"
@@ -898,6 +968,9 @@ public final class PromptTemplates {
             + "- Reduce clutter by simplifying what is shown at one time.\n"
             + "- Preserve continuity with `Transform`, `ReplacementTransform`,"
             + " `FadeTransform`, and stable anchors.\n"
+            + "- Correct geometrically or semantically wrong placements so each visual marker"
+            + " stays attached to the object, side, point, angle, or expression it is meant"
+            + " to describe.\n"
             + "- Avoid pushing many objects to the frame edge with repeated `to_edge` or large `shift`.\n"
             + "- Use consistent spacing helpers such as `VGroup(...).arrange(...)`, `next_to`,"
             + " aligned edges, and safe-area scaling.\n"
@@ -971,6 +1044,48 @@ public final class PromptTemplates {
         sb.append("\nPlease fix the reported error and also inspect nearby and structurally"
                 + " similar code paths for the same root cause. If the same kind of failure could"
                 + " happen elsewhere in this file, fix those places too in the returned full code.\n"
+                + "\nRemember: Return ONLY the single Python code block containing the full file. No explanation.\n");
+
+        if (fixHistory != null && !fixHistory.isEmpty()) {
+            sb.append("\nPrevious fix attempts to avoid repeating:\n");
+            for (int i = 0; i < fixHistory.size(); i++) {
+                sb.append(String.format("  Attempt %d: %s\n", i + 1,
+                        fixHistory.get(i).length() > 100
+                                ? fixHistory.get(i).substring(0, 100) + "..."
+                                : fixHistory.get(i)));
+            }
+        }
+
+        return sb.toString();
+    }
+
+    public static String sceneLayoutFixUserPrompt(String code,
+                                                  String issueSummary,
+                                                  String sceneEvaluationJson,
+                                                  List<String> fixHistory) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format(
+                "The following Manim code rendered, but post-render scene evaluation found layout"
+                + " issues in sampled frames.\n\n"
+                + "```python\n"
+                + "%s\n"
+                + "```\n\n"
+                + "Issue summary:\n"
+                + "```\n"
+                + "%s\n"
+                + "```\n\n"
+                + "Scene evaluation report excerpt:\n"
+                + "```json\n"
+                + "%s\n"
+                + "```\n",
+                code,
+                issueSummary,
+                sceneEvaluationJson));
+
+        sb.append("\nPlease fix the code so the reported sampled frames no longer have elements"
+                + " overlapping or going outside the frame. Preserve the intended teaching flow"
+                + " and animation meaning. Prefer adjusting positioning, scaling, layout grouping,"
+                + " and spacing instead of deleting explanatory content.\n"
                 + "\nRemember: Return ONLY the single Python code block containing the full file. No explanation.\n");
 
         if (fixHistory != null && !fixHistory.isEmpty()) {

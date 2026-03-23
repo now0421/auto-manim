@@ -5,6 +5,7 @@ import com.automanim.model.CodeResult;
 import com.automanim.model.RenderResult;
 import com.automanim.model.CodeEvaluationResult;
 import com.automanim.model.WorkflowKeys;
+import com.automanim.service.ManimRendererService;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -18,9 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RenderNodeCodeGateTest {
 
     @Test
-    void skipsRenderWhenCodeEvaluationBlocksIt() {
+    void continuesRenderWhenCodeEvaluationOnlyAdvisesAgainstRender() {
         WorkflowConfig config = new WorkflowConfig();
         config.setRenderEnabled(true);
+        config.setRenderMaxRetries(0);
 
         CodeResult codeResult = new CodeResult(
                 String.join("\n",
@@ -43,12 +45,19 @@ class RenderNodeCodeGateTest {
         ctx.put(WorkflowKeys.CODE_RESULT, codeResult);
         ctx.put(WorkflowKeys.CODE_EVALUATION_RESULT, codeEvaluationResult);
 
-        new RenderNode().run(ctx);
+        ManimRendererService renderer = new ManimRendererService() {
+            @Override
+            public RenderAttemptResult render(String code, String sceneName, String quality, java.nio.file.Path outputDir) {
+                return new RenderAttemptResult(false, "", "render failed", null, null);
+            }
+        };
+
+        new RenderNode(renderer).run(ctx);
 
         RenderResult renderResult = (RenderResult) ctx.get(WorkflowKeys.RENDER_RESULT);
         assertNotNull(renderResult);
         assertFalse(renderResult.isSuccess());
-        assertEquals(0, renderResult.getAttempts());
-        assertTrue(renderResult.getLastError().contains("Code evaluation blocked render"));
+        assertEquals(1, renderResult.getAttempts());
+        assertTrue(renderResult.getLastError().contains("render failed"));
     }
 }
