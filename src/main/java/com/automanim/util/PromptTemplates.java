@@ -1,11 +1,20 @@
 package com.automanim.util;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
 public final class PromptTemplates {
 
+    private static final String MANIM_SYNTAX_MANUAL_RESOURCE = "llm/manim_syntax_manual.md";
+
     private PromptTemplates() {}
+
+    private static final class ManimSyntaxManualHolder {
+        private static final String VALUE = loadPromptResource(MANIM_SYNTAX_MANUAL_RESOURCE);
+    }
 
     private static final String WORKFLOW_OVERVIEW =
             "Stage 0 Exploration -> Stage 1a Mathematical Enrichment -> Stage 1b Visual Design"
@@ -37,6 +46,25 @@ public final class PromptTemplates {
                 + sanitizePromptText(targetDescription, "No explicit target description is available yet.")
                 + "\n"
                 + "Keep the full target in mind, but perform only the responsibility of the current substep.\n\n";
+    }
+
+    private static String appendManimSyntaxManual(String systemPrompt) {
+        return systemPrompt
+                + "\n\n"
+                + "Manim syntax reference manual:\n"
+                + "Follow the guidance below whenever you generate or revise Manim code.\n\n"
+                + ManimSyntaxManualHolder.VALUE;
+    }
+
+    private static String loadPromptResource(String resourceName) {
+        try (InputStream input = PromptTemplates.class.getClassLoader().getResourceAsStream(resourceName)) {
+            if (input == null) {
+                throw new IllegalStateException("Classpath resource not found: " + resourceName);
+            }
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load classpath resource: " + resourceName, e);
+        }
     }
 
     public static String workflowTargetDescription(String targetConcept,
@@ -144,23 +172,23 @@ public final class PromptTemplates {
     }
 
     public static String codeGenerationSystemPrompt(String targetTitle, String targetDescription) {
-        return buildWorkflowSystemPrefix(
+        return appendManimSyntaxManual(buildWorkflowSystemPrefix(
                 "Stage 2 / Code Generation",
                 "Generate executable Manim code",
                 targetTitle,
                 targetDescription,
                 true
-        ) + CODE_GENERATION_SYSTEM;
+        ) + CODE_GENERATION_SYSTEM);
     }
 
     public static String codeValidationFixSystemPrompt(String targetTitle, String targetDescription) {
-        return buildWorkflowSystemPrefix(
+        return appendManimSyntaxManual(buildWorkflowSystemPrefix(
                 "Stage 2 / Code Fix",
                 "Repair generated code after validation findings",
                 targetTitle,
                 targetDescription,
                 true
-        ) + CODE_VALIDATION_FIX_SYSTEM;
+        ) + CODE_VALIDATION_FIX_SYSTEM);
     }
 
     public static String codeEvaluationSystemPrompt(String targetTitle, String targetDescription) {
@@ -174,33 +202,33 @@ public final class PromptTemplates {
     }
 
     public static String codeRevisionSystemPrompt(String targetTitle, String targetDescription) {
-        return buildWorkflowSystemPrefix(
+        return appendManimSyntaxManual(buildWorkflowSystemPrefix(
                 "Stage 3 / Code Evaluation",
                 "Revise Manim code after code evaluation before render",
                 targetTitle,
                 targetDescription,
                 true
-        ) + CODE_REVISION_SYSTEM;
+        ) + CODE_REVISION_SYSTEM);
     }
 
     public static String renderFixSystemPrompt(String targetTitle, String targetDescription) {
-        return buildWorkflowSystemPrefix(
+        return appendManimSyntaxManual(buildWorkflowSystemPrefix(
                 "Stage 4 / Render Fix",
                 "Repair Manim code after render failure",
                 targetTitle,
                 targetDescription,
                 true
-        ) + RENDER_FIX_SYSTEM;
+        ) + RENDER_FIX_SYSTEM);
     }
 
     public static String sceneLayoutFixSystemPrompt(String targetTitle, String targetDescription) {
-        return buildWorkflowSystemPrefix(
+        return appendManimSyntaxManual(buildWorkflowSystemPrefix(
                 "Stage 5 / Scene Evaluation Fix",
                 "Revise Manim code after geometry-based scene evaluation",
                 targetTitle,
                 targetDescription,
                 true
-        ) + CODE_REVISION_SYSTEM;
+        ) + CODE_REVISION_SYSTEM);
     }
 
     // =====================================================================
@@ -481,22 +509,29 @@ public final class PromptTemplates {
             + "Do not invent new givens, helper claims, or alternative solution branches that"
             + " are not supported by the provided problem context and step graph.\n"
             + "\n"
-            + "Canvas constraints for a 16:9 frame (roughly 14x8 units):\n"
+            + "Screen-space constraints for a 16:9 frame (roughly 14x8 units):\n"
             + "- Keep important content within x in [-6.5, 6.5] and y in [-3.5, 3.5].\n"
             + "- Leave at least 1 unit of margin from the frame edge.\n"
             + "- A scene should usually contain no more than 6 to 8 main visual elements.\n"
-            + "- The layout field must describe concrete spatial placement.\n"
+            + "- The layout field must describe concrete projected placement.\n"
+            + "- If the idea truly needs spatial depth, set `scene_mode` to `3d`, describe the"
+            + " projected layout, add a concise `camera_plan`, and use"
+            + " `screen_overlay_plan` for text that should stay fixed in frame.\n"
             + "\n"
             + "Return a JSON object containing:\n"
             + "- \"visual_description\": describe what visual elements appear in the scene, such"
             + " as geometry, labels, highlights, axes, arrows, or formula blocks. Focus on what"
             + " is shown and what mathematical relation is being made visible, not on color"
             + " assignment, exact placement, or animation order.\n"
+            + "- \"scene_mode\" when useful: return `2d` or `3d`.\n"
+            + "- \"camera_plan\" when useful: give a concise camera orientation or motion plan.\n"
+            + "- \"screen_overlay_plan\" when useful: state what text or formulas remain fixed in"
+            + " frame.\n"
             + "- \"color_scheme\": describe the visual styling of those elements, especially which"
             + " colors or emphasis styles belong to the main objects, highlights, labels, and"
             + " supporting annotations.\n"
-            + "- \"layout\": describe the spatial arrangement on the 16:9 canvas, including where"
-            + " each important element is placed and how the composition avoids overflow.\n"
+            + "- \"layout\": describe the projected arrangement on the 16:9 frame, including where"
+            + " each important element appears on screen and how the composition avoids overflow.\n"
             + "- \"animation_description\" when useful: describe the animation order, motion,"
             + " emphasis changes, and how the scene evolves over time so the reasoning becomes"
             + " visually legible.\n"
@@ -538,9 +573,12 @@ public final class PromptTemplates {
             + "      \"goal\": \"what this scene teaches\",\n"
             + "      \"narration\": \"short narration for this beat\",\n"
             + "      \"duration_seconds\": 8,\n"
+            + "      \"scene_mode\": \"2d|3d\",\n"
             + "      \"camera_anchor\": \"main visual anchor or focus region\",\n"
+            + "      \"camera_plan\": \"camera orientation or motion for this scene\",\n"
             + "      \"layout_goal\": \"explicit spatial arrangement\",\n"
-            + "      \"safe_area_plan\": \"how this scene stays inside x in [-6.5, 6.5] and y in [-3.5, 3.5]\",\n"
+            + "      \"safe_area_plan\": \"how the projected screen layout stays inside x in [-6.5, 6.5] and y in [-3.5, 3.5]\",\n"
+            + "      \"screen_overlay_plan\": \"text or formulas that stay fixed in frame when needed\",\n"
             + "      \"step_refs\": [\"relevant step or node names\"],\n"
             + "      \"entering_objects\": [\n"
             + "        {\n"
@@ -557,7 +595,7 @@ public final class PromptTemplates {
             + "      \"actions\": [\n"
             + "        {\n"
             + "          \"order\": 1,\n"
-            + "          \"type\": \"create|transform|move|highlight|fade_out|camera_focus\",\n"
+            + "          \"type\": \"create|transform|move|highlight|fade_out|camera_focus|camera_move|camera_rotate\",\n"
             + "          \"targets\": [\"formula_main\"],\n"
             + "          \"description\": \"precise visual action in order\"\n"
             + "        }\n"
@@ -584,11 +622,14 @@ public final class PromptTemplates {
             + "      \"goal\": \"Introduce the main objects and the question.\",\n"
             + "      \"narration\": \"Draw the base figure and state what we want to prove.\",\n"
             + "      \"duration_seconds\": 8,\n"
+            + "      \"scene_mode\": \"2d\",\n"
             + "      \"camera_anchor\": \"center\",\n"
+            + "      \"camera_plan\": \"Static 2D camera.\",\n"
             + "      \"layout_goal\": \"Keep the diagram centered and reserve the upper-right"
             + " corner for one short formula.\",\n"
             + "      \"safe_area_plan\": \"Keep the diagram inside the central safe area and leave"
             + " a one-unit margin from all edges.\",\n"
+            + "      \"screen_overlay_plan\": \"No fixed screen overlay needed.\",\n"
             + "      \"step_refs\": [\"original problem statement\"],\n"
             + "      \"entering_objects\": [\n"
             + "        {\n"
@@ -639,14 +680,17 @@ public final class PromptTemplates {
             + "- prefers intuitive visual understanding before the strict final justification when"
             + " that improves teaching clarity\n"
             + "\n"
-            + "Canvas constraints for storyboard design:\n"
-            + "- Treat the canvas as a 16:9 frame with important content kept inside"
+            + "Screen-space constraints for storyboard design:\n"
+            + "- Treat the frame as 16:9 with important projected content kept inside"
             + " x in [-6.5, 6.5] and y in [-3.5, 3.5].\n"
             + "- Leave about 1 unit of margin from the frame edge.\n"
             + "- Keep the number of simultaneous main visual elements to about 6 to 8.\n"
             + "- Put large formulas near an edge or corner rather than over the main geometry.\n"
             + "- If a layout would overflow, split it into multiple scenes or reduce what is shown.\n"
             + "- Every scene must include `safe_area_plan` explaining how the layout avoids overflow.\n"
+            + "- If a scene genuinely needs depth, mark `scene_mode` as `3d`, keep `layout_goal`"
+            + " about projected screen placement, add a concise `camera_plan`, and use"
+            + " `screen_overlay_plan` for any text that must stay fixed in frame.\n"
             + "\n"
             + "Important selection rule:\n"
             + "- Mathematical enrichment fields such as equations, definitions, interpretations,"
@@ -663,6 +707,7 @@ public final class PromptTemplates {
             + " centered triangle, left axis, or bottom caption.\n"
             + "- Every scene must include ordered actions, not just a general summary.\n"
             + "- Use camera_anchor and layout_goal to prevent accidental layout drift.\n"
+            + "- `camera_plan` should be explicit whenever the scene is 3D.\n"
             + "- Use safe_area_plan to state the anti-overflow strategy for each scene.\n"
             + "- Prefer 3 to 5 strong scenes for problem-solving workflows unless the lesson truly"
             + " needs more.\n"
@@ -729,6 +774,10 @@ public final class PromptTemplates {
                         + " mobject instead of redrawing it from scratch.\n"
                         + "- Remove only the objects listed in exiting_objects unless a full reset is"
                         + " explicitly required by the storyboard.\n"
+                        + "- If a scene uses `scene_mode` = `3d`, use `ThreeDScene`, follow"
+                        + " `camera_plan`, and judge layout in projected screen space.\n"
+                        + "- Use `screen_overlay_plan` with `add_fixed_in_frame_mobjects` for"
+                        + " text or formulas that must stay readable during camera motion.\n"
                         + "- Respect camera_anchor, layout_goal, and notes_for_codegen when placing"
                         + " formulas, labels, and diagrams.\n"
                         + "- Respect safe_area_plan so content stays inside the storyboard's intended"
@@ -776,6 +825,8 @@ public final class PromptTemplates {
                         + " clutter risk, likely offscreen placement, and whether semantically"
                         + " constrained visual elements are placed in the correct spatial"
                         + " relationship to the objects they describe.\n"
+                        + "For 3D scenes, focus on projected screen layout, camera readability, and"
+                        + " fixed-in-frame overlays for explanatory text.\n"
                         + "Return only the structured review output.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, manimCode);
     }
@@ -800,7 +851,8 @@ public final class PromptTemplates {
                 + " preserve continuity with transforms instead of resets, keep recurring"
                 + " anchors stable, correct semantically wrong placements such as angle arcs,"
                 + " labels, braces, markers, or highlights attached to the wrong geometry,"
-                + " and better match scene pacing to narration.\n"
+                + " better match scene pacing to narration, and in 3D scenes keep the camera"
+                + " readable while fixing overlays that should stay fixed in frame.\n"
                 + "Do not focus on execution unless it directly affects visual continuity.\n"
                 + "Preserve the scene class name and the teaching goal.\n"
                 + "Return ONLY the full Python code block.",
@@ -863,6 +915,14 @@ public final class PromptTemplates {
             + "- Method definitions must be syntactically correct.\n"
             + "- Do not output broken quotes, brackets, or malformed definitions.\n"
             + "\n"
+            + "3D scene rules:\n"
+            + "- If the storyboard marks a scene as `3d` or the content truly needs spatial depth,"
+            + " use `ThreeDScene`.\n"
+            + "- Apply the requested camera orientation or motion explicitly.\n"
+            + "- In 3D scenes, keep explanatory text and formulas fixed with"
+            + " `add_fixed_in_frame_mobjects` unless the storyboard says otherwise.\n"
+            + "- Judge layout in projected screen space, not raw world coordinates.\n"
+            + "\n"
             + "Layout rules:\n"
             + "- Keep content within x in [-6.5, 6.5] and y in [-3.5, 3.5].\n"
             + "- Prefer `VGroup(...).arrange(...)` for multi-element layouts.\n"
@@ -906,7 +966,9 @@ public final class PromptTemplates {
             + "- Do not hardcode numeric subobject indexing into `MathTex`.\n"
             + "- Preserve visual continuity instead of clearing the whole scene between beats"
             + " unless a full reset is genuinely required.\n"
-            + "- Keep layout inside the safe area whenever possible.\n";
+            + "- Keep layout inside the safe area whenever possible.\n"
+            + "- In 3D scenes, preserve readable camera setup and keep overlay text fixed in"
+            + " frame when appropriate.\n";
 
     public static final String CODE_EVALUATION_SYSTEM =
             "You are a senior Manim code reviewer.\n"
@@ -919,6 +981,9 @@ public final class PromptTemplates {
             + "The storyboard JSON is the source of truth.\n"
             + "- Compare the code against the storyboard's object continuity, safe-area plan,"
             + " layout goals, and scene pacing.\n"
+            + "- For 3D scenes, judge the projected screen image, camera readability, whether"
+            + " overlay text/formulas are fixed in frame when needed, and whether `ThreeDScene`"
+            + " is used when the scene contains 3D objects or surfaces.\n"
             + "- Treat repeated `to_edge` / large `shift` positioning, heavy text stacking,"
             + " many same-time formulas, and overuse of `FadeIn` / `FadeOut` in place of"
             + " transforms as warning signs.\n"
@@ -971,6 +1036,8 @@ public final class PromptTemplates {
             + "- Correct geometrically or semantically wrong placements so each visual marker"
             + " stays attached to the object, side, point, angle, or expression it is meant"
             + " to describe.\n"
+            + "- In 3D scenes, preserve a readable camera plan and keep overlay text fixed in"
+            + " frame when it should not rotate with the world.\n"
             + "- Avoid pushing many objects to the frame edge with repeated `to_edge` or large `shift`.\n"
             + "- Use consistent spacing helpers such as `VGroup(...).arrange(...)`, `next_to`,"
             + " aligned edges, and safe-area scaling.\n"

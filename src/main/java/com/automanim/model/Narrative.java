@@ -149,14 +149,23 @@ public class Narrative {
         @JsonProperty("duration_seconds")
         private int durationSeconds;
 
+        @JsonProperty("scene_mode")
+        private String sceneMode;
+
         @JsonProperty("camera_anchor")
         private String cameraAnchor;
+
+        @JsonProperty("camera_plan")
+        private String cameraPlan;
 
         @JsonProperty("layout_goal")
         private String layoutGoal;
 
         @JsonProperty("safe_area_plan")
         private String safeAreaPlan;
+
+        @JsonProperty("screen_overlay_plan")
+        private String screenOverlayPlan;
 
         @JsonProperty("step_refs")
         private List<String> stepRefs = new ArrayList<>();
@@ -193,14 +202,25 @@ public class Narrative {
         public int getDurationSeconds() { return durationSeconds; }
         public void setDurationSeconds(int durationSeconds) { this.durationSeconds = durationSeconds; }
 
+        public String getSceneMode() { return sceneMode; }
+        public void setSceneMode(String sceneMode) { this.sceneMode = sceneMode; }
+
         public String getCameraAnchor() { return cameraAnchor; }
         public void setCameraAnchor(String cameraAnchor) { this.cameraAnchor = cameraAnchor; }
+
+        public String getCameraPlan() { return cameraPlan; }
+        public void setCameraPlan(String cameraPlan) { this.cameraPlan = cameraPlan; }
 
         public String getLayoutGoal() { return layoutGoal; }
         public void setLayoutGoal(String layoutGoal) { this.layoutGoal = layoutGoal; }
 
         public String getSafeAreaPlan() { return safeAreaPlan; }
         public void setSafeAreaPlan(String safeAreaPlan) { this.safeAreaPlan = safeAreaPlan; }
+
+        public String getScreenOverlayPlan() { return screenOverlayPlan; }
+        public void setScreenOverlayPlan(String screenOverlayPlan) {
+            this.screenOverlayPlan = screenOverlayPlan;
+        }
 
         public List<String> getStepRefs() { return stepRefs; }
         public void setStepRefs(List<String> stepRefs) { this.stepRefs = stepRefs; }

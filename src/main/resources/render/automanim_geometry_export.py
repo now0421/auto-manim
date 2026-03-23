@@ -498,6 +498,7 @@ def patch_scene_for_geometry_export(scene_cls):
                 mobject=mobject,
                 registry_entry=registry_entry,
                 foreground_ids=foreground_ids,
+                camera=getattr(self, "camera", None),
                 require_visible=require_visible,
             )
             if record is None:
@@ -635,7 +636,7 @@ def patch_scene_for_geometry_export(scene_cls):
             payload = {
                 "scene_name": self.__class__.__name__,
                 "report_type": "sampled_frame_elements_report",
-                "report_version": 5,
+                "report_version": 6,
                 "manim_version": getattr(manim, "__version__", None),
                 "frame_size": {
                     "width": _safe_float(config["frame_width"]),
@@ -644,6 +645,7 @@ def patch_scene_for_geometry_export(scene_cls):
                     "y_radius": _safe_float(config["frame_y_radius"]),
                 },
                 "frame_bounds": _frame_bounds_from_config(),
+                "element_bounds_space": "screen",
                 "sample_count": len(self._automanim_samples),
                 "samples": self._automanim_samples,
             }
@@ -1172,7 +1174,13 @@ def _unique_roots(scene):
     return roots
 
 
-def _build_semantic_mobject_record(mobject, registry_entry, foreground_ids, require_visible=True):
+def _build_semantic_mobject_record(
+    mobject,
+    registry_entry,
+    foreground_ids,
+    camera=None,
+    require_visible=True,
+):
     points = _safe_points(mobject)
     width = _safe_float(getattr(mobject, "width", None))
     height = _safe_float(getattr(mobject, "height", None))
@@ -1180,7 +1188,7 @@ def _build_semantic_mobject_record(mobject, registry_entry, foreground_ids, requ
     opacity_values = _opacity_values(mobject)
     max_opacity = max(opacity_values) if opacity_values else None
     stroke_width = _safe_float(_call_with_optional_bool(mobject, "get_stroke_width"))
-    bounds = _compute_bounds(
+    world_bounds = _compute_bounds(
         points=points,
         center=_safe_point(_safe_call(mobject, "get_center")),
         width=width,
@@ -1188,9 +1196,18 @@ def _build_semantic_mobject_record(mobject, registry_entry, foreground_ids, requ
         depth=depth,
     )
 
-    if bounds is None:
+    if world_bounds is None:
         return None
-    visible = _is_visible(int(points.shape[0]), bounds, max_opacity)
+    screen_bounds = _compute_display_bounds(
+        camera=camera,
+        mobject=mobject,
+        points=points,
+        world_bounds=world_bounds,
+    )
+    if screen_bounds is None:
+        screen_bounds = world_bounds
+
+    visible = _is_visible(int(points.shape[0]), world_bounds, max_opacity)
     if require_visible and not visible:
         return None
 
@@ -1206,19 +1223,39 @@ def _build_semantic_mobject_record(mobject, registry_entry, foreground_ids, requ
         "is_foreground": id(mobject) in foreground_ids,
         "submobject_count": len(getattr(mobject, "submobjects", []) or []),
         "z_index": _safe_float(getattr(mobject, "z_index", 0.0)),
-        "center": bounds["center"],
+        "center": screen_bounds["center"],
+        "screen_center": screen_bounds["center"],
+        "world_center": world_bounds["center"],
         "bounds": {
-            "min": bounds["min"],
-            "max": bounds["max"],
+            "min": screen_bounds["min"],
+            "max": screen_bounds["max"],
+        },
+        "screen_bounds": {
+            "min": screen_bounds["min"],
+            "max": screen_bounds["max"],
+        },
+        "world_bounds": {
+            "min": world_bounds["min"],
+            "max": world_bounds["max"],
         },
         "size": {
-            "width": bounds["width"],
-            "height": bounds["height"],
-            "depth": bounds["depth"],
+            "width": screen_bounds["width"],
+            "height": screen_bounds["height"],
+            "depth": screen_bounds["depth"],
+        },
+        "screen_size": {
+            "width": screen_bounds["width"],
+            "height": screen_bounds["height"],
+            "depth": screen_bounds["depth"],
+        },
+        "world_size": {
+            "width": world_bounds["width"],
+            "height": world_bounds["height"],
+            "depth": world_bounds["depth"],
         },
         "occupancy": {
-            "area_2d": _safe_float(bounds["width"] * bounds["height"]),
-            "volume_3d": _safe_float(bounds["width"] * bounds["height"] * bounds["depth"]),
+            "area_2d": _safe_float(screen_bounds["width"] * screen_bounds["height"]),
+            "volume_3d": _safe_float(world_bounds["width"] * world_bounds["height"] * world_bounds["depth"]),
         },
         "points_count": int(points.shape[0]),
         "opacity": max_opacity,
@@ -1594,6 +1631,55 @@ def _compute_bounds(points, center, width, height, depth):
         "height": _safe_float(height) or 0.0,
         "depth": _safe_float(depth) or 0.0,
     }
+
+
+def _compute_display_bounds(camera, mobject, points, world_bounds):
+    display_points = _display_points(camera, mobject, points, world_bounds)
+    if display_points.size <= 0:
+        return None
+    return _compute_bounds(
+        points=display_points,
+        center=None,
+        width=None,
+        height=None,
+        depth=None,
+    )
+
+
+def _display_points(camera, mobject, points, world_bounds):
+    base_points = points
+    if base_points.size <= 0:
+        base_points = _bounds_corner_points(world_bounds)
+    if base_points.size <= 0:
+        return base_points
+
+    transform = getattr(camera, "transform_points_pre_display", None)
+    if not callable(transform):
+        return base_points
+
+    try:
+        transformed = transform(mobject, np.array(base_points, dtype=float))
+    except Exception:
+        return base_points
+    return _safe_points(transformed)
+
+
+def _bounds_corner_points(bounds):
+    if bounds is None:
+        return np.zeros((0, 3))
+
+    min_corner = bounds.get("min")
+    max_corner = bounds.get("max")
+    if min_corner is None or max_corner is None:
+        return np.zeros((0, 3))
+
+    min_corner = np.array(min_corner, dtype=float)
+    max_corner = np.array(max_corner, dtype=float)
+    xs = [min_corner[0], max_corner[0]]
+    ys = [min_corner[1], max_corner[1]]
+    zs = [min_corner[2], max_corner[2]]
+    corners = [[x, y, z] for x in xs for y in ys for z in zs]
+    return np.array(corners, dtype=float)
 
 
 def _is_visible(points_count, bounds, max_opacity):

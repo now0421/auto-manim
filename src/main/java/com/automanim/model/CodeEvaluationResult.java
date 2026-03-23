@@ -86,6 +86,13 @@ public class CodeEvaluationResult {
         private int nextToCount;
         private int mathTexCount;
         private int textCount;
+        private boolean threeDScene;
+        private int threeDStoryboardSceneCount;
+        private int threeDObjectCount;
+        private int cameraOrientationCount;
+        private int cameraMotionCount;
+        private int fixedInFrameCount;
+        private int fixedOrientationCount;
         private int maxEnteringObjects;
         private int maxVisibleObjects;
         private int maxVisibleTextualObjects;
@@ -142,6 +149,37 @@ public class CodeEvaluationResult {
 
         public int getTextCount() { return textCount; }
         public void setTextCount(int textCount) { this.textCount = textCount; }
+
+        public boolean isThreeDScene() { return threeDScene; }
+        public void setThreeDScene(boolean threeDScene) { this.threeDScene = threeDScene; }
+
+        public int getThreeDStoryboardSceneCount() { return threeDStoryboardSceneCount; }
+        public void setThreeDStoryboardSceneCount(int threeDStoryboardSceneCount) {
+            this.threeDStoryboardSceneCount = threeDStoryboardSceneCount;
+        }
+
+        public int getThreeDObjectCount() { return threeDObjectCount; }
+        public void setThreeDObjectCount(int threeDObjectCount) { this.threeDObjectCount = threeDObjectCount; }
+
+        public int getCameraOrientationCount() { return cameraOrientationCount; }
+        public void setCameraOrientationCount(int cameraOrientationCount) {
+            this.cameraOrientationCount = cameraOrientationCount;
+        }
+
+        public int getCameraMotionCount() { return cameraMotionCount; }
+        public void setCameraMotionCount(int cameraMotionCount) {
+            this.cameraMotionCount = cameraMotionCount;
+        }
+
+        public int getFixedInFrameCount() { return fixedInFrameCount; }
+        public void setFixedInFrameCount(int fixedInFrameCount) {
+            this.fixedInFrameCount = fixedInFrameCount;
+        }
+
+        public int getFixedOrientationCount() { return fixedOrientationCount; }
+        public void setFixedOrientationCount(int fixedOrientationCount) {
+            this.fixedOrientationCount = fixedOrientationCount;
+        }
 
         public int getMaxEnteringObjects() { return maxEnteringObjects; }
         public void setMaxEnteringObjects(int maxEnteringObjects) {

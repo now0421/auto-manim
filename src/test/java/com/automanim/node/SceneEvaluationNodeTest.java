@@ -73,6 +73,24 @@ class SceneEvaluationNodeTest {
         assertTrue(request.getSceneEvaluationJson().contains("\"issue_sample_count\""));
     }
 
+    @Test
+    void prefersProjectedScreenBoundsWhenPresent() throws IOException {
+        Path geometryPath = tempDir.resolve("5_mobject_geometry.json");
+        Files.writeString(geometryPath, projectedGeometryJson());
+
+        Map<String, Object> ctx = buildContext(geometryPath);
+        SceneEvaluationNode node = new SceneEvaluationNode();
+
+        SceneEvaluationNode.SceneEvaluationInput input = node.prep(ctx);
+        SceneEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertTrue(result.isEvaluated());
+        assertTrue(result.isApproved());
+        assertEquals(0, result.getTotalIssueCount());
+        assertNull(action);
+    }
+
     private Map<String, Object> buildContext(Path geometryPath) {
         WorkflowConfig config = new WorkflowConfig();
         config.setRenderEnabled(true);
@@ -189,6 +207,39 @@ class SceneEvaluationNodeTest {
                 "          \"bounds\": {",
                 "            \"min\": [6.8, 3.2, 0.0],",
                 "            \"max\": [7.5, 4.4, 0.0]",
+                "          }",
+                "        }",
+                "      ]",
+                "    }",
+                "  ]",
+                "}");
+    }
+
+    private String projectedGeometryJson() {
+        return String.join("\n",
+                "{",
+                "  \"scene_name\": \"MainScene\",",
+                "  \"frame_bounds\": {",
+                "    \"min\": [-7.111111, -4.0, 0.0],",
+                "    \"max\": [7.111111, 4.0, 0.0]",
+                "  },",
+                "  \"samples\": [",
+                "    {",
+                "      \"sample_id\": \"sample-0001\",",
+                "      \"sample_role\": \"scene_final\",",
+                "      \"elements\": [",
+                "        {",
+                "          \"stable_id\": \"surface\",",
+                "          \"semantic_name\": \"surface\",",
+                "          \"class_name\": \"Surface\",",
+                "          \"visible\": true,",
+                "          \"bounds\": {",
+                "            \"min\": [9.0, 9.0, -2.0],",
+                "            \"max\": [12.0, 12.0, 2.0]",
+                "          },",
+                "          \"screen_bounds\": {",
+                "            \"min\": [-1.5, -1.0, -0.2],",
+                "            \"max\": [1.5, 1.0, 0.2]",
                 "          }",
                 "        }",
                 "      ]",

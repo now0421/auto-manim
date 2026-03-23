@@ -47,6 +47,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     private static final double OFFSCREEN_TOLERANCE = 0.03;
     private static final double MIN_OVERLAP_AREA = 0.015;
     private static final double MIN_OVERLAP_RATIO = 0.08;
+    private static final double SPATIAL_BUCKET_SIZE = 1.25;
     private static final int DEFAULT_MAX_FIX_ATTEMPTS = 2;
     private static final int MAX_FIX_REPORT_SAMPLES = 12;
     private static final int MAX_ISSUES_PER_SAMPLE_IN_FIX_REPORT = 6;
@@ -303,31 +304,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             offscreenCount++;
         }
 
-        for (int i = 0; i < elements.size(); i++) {
-            ElementGeometry left = elements.get(i);
-            for (int j = i + 1; j < elements.size(); j++) {
-                ElementGeometry right = elements.get(j);
-                if (!shouldCheckOverlap(left, right)) {
-                    continue;
-                }
-                OverlapMetrics overlap = overlap(left, right);
-                if (overlap == null) {
-                    continue;
-                }
-                LayoutIssue issue = new LayoutIssue();
-                issue.setType("overlap");
-                issue.setMessage(String.format(
-                        "Elements %s and %s overlap in sampled frame",
-                        left.displayName(),
-                        right.displayName()));
-                issue.setPrimaryElement(toElementRef(left, sample.getSampleRole()));
-                issue.setSecondaryElement(toElementRef(right, sample.getSampleRole()));
-                issue.setIntersectionArea(overlap.area);
-                issue.setIntersectionBounds(toBounds(overlap.min, overlap.max));
-                issues.add(issue);
-                overlapCount++;
-            }
-        }
+        List<LayoutIssue> overlapIssues = evaluateOverlapIssues(elements, sample.getSampleRole());
+        issues.addAll(overlapIssues);
+        overlapCount = overlapIssues.size();
 
         sample.setIssues(issues);
         sample.setOffscreenIssueCount(offscreenCount);
@@ -344,8 +323,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         }
 
         for (JsonNode elementNode : elementsNode) {
-            double[] min = readPoint(elementNode.path("bounds").path("min"), null);
-            double[] max = readPoint(elementNode.path("bounds").path("max"), null);
+            JsonNode boundsNode = preferredBoundsNode(elementNode);
+            double[] min = readPoint(boundsNode.path("min"), null);
+            double[] max = readPoint(boundsNode.path("max"), null);
             if (min == null || max == null) {
                 continue;
             }
@@ -369,6 +349,19 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         return elements;
     }
 
+    private JsonNode preferredBoundsNode(JsonNode elementNode) {
+        if (elementNode == null || elementNode.isMissingNode()) {
+            return MAPPER.createObjectNode();
+        }
+        JsonNode screenBounds = elementNode.path("screen_bounds");
+        if (screenBounds.isObject()
+                && screenBounds.has("min")
+                && screenBounds.has("max")) {
+            return screenBounds;
+        }
+        return elementNode.path("bounds");
+    }
+
     private OverflowMetrics frameOverflow(ElementGeometry element, double[] frameMin, double[] frameMax) {
         double left = Math.max(frameMin[0] - element.min[0], 0.0);
         double right = Math.max(element.max[0] - frameMax[0], 0.0);
@@ -378,6 +371,89 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             return null;
         }
         return new OverflowMetrics(left, right, top, bottom);
+    }
+
+    private List<LayoutIssue> evaluateOverlapIssues(List<ElementGeometry> elements, String sampleRole) {
+        List<LayoutIssue> issues = new ArrayList<>();
+        if (elements.size() < 2) {
+            return issues;
+        }
+
+        Map<Long, List<Integer>> buckets = buildSpatialBuckets(elements);
+        for (int i = 0; i < elements.size(); i++) {
+            ElementGeometry left = elements.get(i);
+            BucketRange range = bucketRange(left);
+            Set<Integer> seenCandidates = new LinkedHashSet<>();
+
+            for (int bucketX = range.minX; bucketX <= range.maxX; bucketX++) {
+                for (int bucketY = range.minY; bucketY <= range.maxY; bucketY++) {
+                    List<Integer> bucketElements = buckets.get(bucketKey(bucketX, bucketY));
+                    if (bucketElements == null || bucketElements.isEmpty()) {
+                        continue;
+                    }
+                    for (Integer candidateIndex : bucketElements) {
+                        if (candidateIndex == null
+                                || candidateIndex <= i
+                                || !seenCandidates.add(candidateIndex)) {
+                            continue;
+                        }
+
+                        ElementGeometry right = elements.get(candidateIndex);
+                        if (!shouldCheckOverlap(left, right)) {
+                            continue;
+                        }
+
+                        OverlapMetrics overlap = overlap(left, right);
+                        if (overlap == null) {
+                            continue;
+                        }
+
+                        LayoutIssue issue = new LayoutIssue();
+                        issue.setType("overlap");
+                        issue.setMessage(String.format(
+                                "Elements %s and %s overlap in sampled frame",
+                                left.displayName(),
+                                right.displayName()));
+                        issue.setPrimaryElement(toElementRef(left, sampleRole));
+                        issue.setSecondaryElement(toElementRef(right, sampleRole));
+                        issue.setIntersectionArea(overlap.area);
+                        issue.setIntersectionBounds(toBounds(overlap.min, overlap.max));
+                        issues.add(issue);
+                    }
+                }
+            }
+        }
+        return issues;
+    }
+
+    private Map<Long, List<Integer>> buildSpatialBuckets(List<ElementGeometry> elements) {
+        Map<Long, List<Integer>> buckets = new LinkedHashMap<>();
+        for (int index = 0; index < elements.size(); index++) {
+            BucketRange range = bucketRange(elements.get(index));
+            for (int bucketX = range.minX; bucketX <= range.maxX; bucketX++) {
+                for (int bucketY = range.minY; bucketY <= range.maxY; bucketY++) {
+                    long key = bucketKey(bucketX, bucketY);
+                    buckets.computeIfAbsent(key, ignored -> new ArrayList<>()).add(index);
+                }
+            }
+        }
+        return buckets;
+    }
+
+    private BucketRange bucketRange(ElementGeometry element) {
+        return new BucketRange(
+                bucketIndex(element.min[0]),
+                bucketIndex(element.max[0]),
+                bucketIndex(element.min[1]),
+                bucketIndex(element.max[1]));
+    }
+
+    private int bucketIndex(double value) {
+        return (int) Math.floor(value / SPATIAL_BUCKET_SIZE);
+    }
+
+    private long bucketKey(int bucketX, int bucketY) {
+        return (((long) bucketX) << 32) ^ (bucketY & 0xffffffffL);
     }
 
     private boolean shouldCheckOverlap(ElementGeometry left, ElementGeometry right) {
@@ -736,6 +812,20 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             this.area = area;
             this.min = min;
             this.max = max;
+        }
+    }
+
+    private static final class BucketRange {
+        private final int minX;
+        private final int maxX;
+        private final int minY;
+        private final int maxY;
+
+        private BucketRange(int minX, int maxX, int minY, int maxY) {
+            this.minX = minX;
+            this.maxX = maxX;
+            this.minY = minY;
+            this.maxY = maxY;
         }
     }
 }

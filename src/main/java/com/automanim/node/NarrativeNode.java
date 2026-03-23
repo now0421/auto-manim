@@ -215,7 +215,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         sb.append("- Treat mathematical enrichment as optional supporting material.\n");
         sb.append("- Use equations, definitions, interpretations, and examples only when they help the main point.\n");
         sb.append("- It is acceptable to ignore optional math details that would make scenes crowded or repetitive.\n");
-        sb.append("- Keep important content inside the safe canvas area: x in [-6.5, 6.5], y in [-3.5, 3.5].\n");
+        sb.append("- Keep important screen-space content inside x in [-6.5, 6.5], y in [-3.5, 3.5].\n");
         sb.append("- If a planned layout would overflow, split content across scenes instead of squeezing it.\n");
         sb.append("- Follow the provided topological order when deciding what should be established before later beats.\n");
         if (problemMode) {
@@ -356,15 +356,25 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             if (scene.getDurationSeconds() <= 0) {
                 scene.setDurationSeconds(8);
             }
+            scene.setSceneMode(normalizeSceneMode(scene.getSceneMode()));
             if (scene.getCameraAnchor() == null || scene.getCameraAnchor().isBlank()) {
                 scene.setCameraAnchor("center");
+            }
+            if (scene.getCameraPlan() == null || scene.getCameraPlan().isBlank()) {
+                scene.setCameraPlan(isThreeDSceneMode(scene) ? "Set a readable 3D view before the main reveal."
+                        : "Static 2D camera.");
             }
             if (scene.getLayoutGoal() == null || scene.getLayoutGoal().isBlank()) {
                 scene.setLayoutGoal("Keep the layout stable and uncluttered.");
             }
             if (scene.getSafeAreaPlan() == null || scene.getSafeAreaPlan().isBlank()) {
                 scene.setSafeAreaPlan(
-                        "Keep important content inside x in [-6.5, 6.5] and y in [-3.5, 3.5] with edge margin.");
+                        "Keep important screen-space content inside x in [-6.5, 6.5] and y in [-3.5, 3.5] with edge margin.");
+            }
+            if (scene.getScreenOverlayPlan() == null || scene.getScreenOverlayPlan().isBlank()) {
+                scene.setScreenOverlayPlan(isThreeDSceneMode(scene)
+                        ? "Keep titles and formulas fixed in frame if they must stay readable during camera motion."
+                        : "No fixed screen overlay needed.");
             }
             if (scene.getStepRefs() == null) {
                 scene.setStepRefs(new ArrayList<>());
@@ -433,6 +443,17 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         }
         storyboard.setScenes(normalizedScenes);
         return storyboard;
+    }
+
+    private String normalizeSceneMode(String sceneMode) {
+        if (sceneMode == null || sceneMode.isBlank()) {
+            return "2d";
+        }
+        return sceneMode.trim().equalsIgnoreCase("3d") ? "3d" : "2d";
+    }
+
+    private boolean isThreeDSceneMode(StoryboardScene scene) {
+        return scene != null && "3d".equalsIgnoreCase(scene.getSceneMode());
     }
 
     private int calculateStoryboardDuration(Storyboard storyboard, int fallbackDuration) {

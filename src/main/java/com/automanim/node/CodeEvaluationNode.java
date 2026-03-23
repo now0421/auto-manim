@@ -76,6 +76,18 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
     private static final Pattern NEXT_TO_PATTERN = Pattern.compile("\\.next_to\\(");
     private static final Pattern MATH_TEX_PATTERN = Pattern.compile("\\bMathTex\\s*\\(");
     private static final Pattern TEXT_PATTERN = Pattern.compile("\\bText\\s*\\(");
+    private static final Pattern THREE_D_SCENE_PATTERN =
+            Pattern.compile("class\\s+\\w+\\s*\\(.*?ThreeDScene.*?\\)");
+    private static final Pattern THREE_D_OBJECT_PATTERN = Pattern.compile(
+            "\\b(?:ThreeDAxes|Dot3D|Surface|Sphere|Cube|Prism|Cone|Cylinder|Arrow3D|Line3D|Torus|ParametricSurface|OpenGLSurface|OpenGLSurfaceMesh)\\s*\\(");
+    private static final Pattern CAMERA_ORIENTATION_PATTERN =
+            Pattern.compile("\\b(?:set_camera_orientation|move_camera)\\s*\\(");
+    private static final Pattern CAMERA_MOTION_PATTERN =
+            Pattern.compile("\\b(?:begin_ambient_camera_rotation|begin_3dillusion_camera_rotation|move_camera)\\s*\\(");
+    private static final Pattern FIXED_IN_FRAME_PATTERN =
+            Pattern.compile("\\badd_fixed_in_frame_mobjects\\s*\\(");
+    private static final Pattern FIXED_ORIENTATION_PATTERN =
+            Pattern.compile("\\badd_fixed_orientation_mobjects\\s*\\(");
 
     private static final String CODE_REVIEW_TOOL = "["
             + "{"
@@ -282,10 +294,17 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         analysis.setNextToCount(countMatches(code, NEXT_TO_PATTERN));
         analysis.setMathTexCount(countMatches(code, MATH_TEX_PATTERN));
         analysis.setTextCount(countMatches(code, TEXT_PATTERN));
+        analysis.setThreeDScene(THREE_D_SCENE_PATTERN.matcher(code).find());
+        analysis.setThreeDObjectCount(countMatches(code, THREE_D_OBJECT_PATTERN));
+        analysis.setCameraOrientationCount(countMatches(code, CAMERA_ORIENTATION_PATTERN));
+        analysis.setCameraMotionCount(countMatches(code, CAMERA_MOTION_PATTERN));
+        analysis.setFixedInFrameCount(countMatches(code, FIXED_IN_FRAME_PATTERN));
+        analysis.setFixedOrientationCount(countMatches(code, FIXED_ORIENTATION_PATTERN));
 
         Storyboard storyboard = narrative != null ? narrative.getStoryboard() : null;
         if (storyboard != null && storyboard.getScenes() != null) {
             analysis.setSceneCount(storyboard.getScenes().size());
+            analysis.setThreeDStoryboardSceneCount(countThreeDStoryboardScenes(storyboard));
             populateStoryboardMetrics(analysis, storyboard);
             addStoryboardDrivenFindings(analysis, storyboard);
         }
@@ -476,6 +495,65 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             }
         }
         return count;
+    }
+
+    private int countThreeDStoryboardScenes(Storyboard storyboard) {
+        if (storyboard == null || storyboard.getScenes() == null) {
+            return 0;
+        }
+        int count = 0;
+        for (StoryboardScene scene : storyboard.getScenes()) {
+            if (isThreeDStoryboardScene(scene)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean isThreeDStoryboardScene(StoryboardScene scene) {
+        return scene != null && "3d".equalsIgnoreCase(scene.getSceneMode());
+    }
+
+    private boolean requestsDynamicThreeDCamera(StoryboardScene scene) {
+        if (!isThreeDStoryboardScene(scene)) {
+            return false;
+        }
+        String cameraPlan = scene.getCameraPlan();
+        if (cameraPlan == null || cameraPlan.isBlank()) {
+            return false;
+        }
+        String normalized = cameraPlan.toLowerCase(Locale.ROOT);
+        return normalized.contains("rotate")
+                || normalized.contains("orbit")
+                || normalized.contains("move")
+                || normalized.contains("phi")
+                || normalized.contains("theta")
+                || normalized.contains("gamma")
+                || normalized.contains("zoom")
+                || normalized.contains("ambient");
+    }
+
+    private boolean requiresFixedOverlay(StoryboardScene scene) {
+        if (!isThreeDStoryboardScene(scene)) {
+            return false;
+        }
+        String overlayPlan = scene.getScreenOverlayPlan();
+        if (overlayPlan != null && !overlayPlan.isBlank()) {
+            String normalized = overlayPlan.toLowerCase(Locale.ROOT);
+            if (normalized.contains("none") || normalized.contains("no fixed")) {
+                return false;
+            }
+            return true;
+        }
+        List<StoryboardObject> enteringObjects = scene.getEnteringObjects() != null
+                ? scene.getEnteringObjects()
+                : new ArrayList<>();
+        for (StoryboardObject object : enteringObjects) {
+            if (object != null && isTextualObject(object)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private double narrationWordsPerSecond(StoryboardScene scene) {
@@ -872,6 +950,54 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                     String.format(Locale.ROOT, "min_words_per_second=%.2f", analysis.getMinNarrationWordsPerSecond()));
         }
 
+        boolean dynamicThreeDCameraRequested = false;
+        boolean fixedOverlayRequested = false;
+        for (StoryboardScene scene : storyboard.getScenes()) {
+            dynamicThreeDCameraRequested |= requestsDynamicThreeDCamera(scene);
+            fixedOverlayRequested |= requiresFixedOverlay(scene);
+        }
+
+        if (analysis.getThreeDStoryboardSceneCount() > 0 && !analysis.isThreeDScene()) {
+            addFinding(analysis, "three_d_scene_required", "fail",
+                    "The storyboard requests 3D staging, but the code does not use `ThreeDScene`.",
+                    String.format(Locale.ROOT,
+                            "storyboard_3d_scenes=%d, code_uses_threedscene=%s",
+                            analysis.getThreeDStoryboardSceneCount(), analysis.isThreeDScene()));
+        } else if (analysis.getThreeDStoryboardSceneCount() > 0
+                && analysis.getCameraOrientationCount() == 0) {
+            addFinding(analysis, "three_d_camera_plan_missing", "warn",
+                    "The storyboard includes 3D scenes, but the code never sets an explicit camera view.",
+                    String.format(Locale.ROOT,
+                            "storyboard_3d_scenes=%d, camera_orientation_calls=%d",
+                            analysis.getThreeDStoryboardSceneCount(), analysis.getCameraOrientationCount()));
+        }
+
+        if (dynamicThreeDCameraRequested
+                && analysis.getCameraOrientationCount() == 0
+                && analysis.getCameraMotionCount() == 0) {
+            addFinding(analysis, "three_d_camera_motion_missing", "warn",
+                    "The storyboard requests 3D camera control, but the code shows no matching camera calls.",
+                    String.format(Locale.ROOT,
+                            "camera_orientation_calls=%d, camera_motion_calls=%d",
+                            analysis.getCameraOrientationCount(), analysis.getCameraMotionCount()));
+        }
+
+        if (fixedOverlayRequested
+                && analysis.getMathTexCount() + analysis.getTextCount() > 0
+                && analysis.getFixedInFrameCount() == 0
+                && analysis.getFixedOrientationCount() == 0) {
+            addFinding(analysis, dynamicThreeDCameraRequested ? "three_d_overlay_unfixed" : "three_d_overlay_missing",
+                    dynamicThreeDCameraRequested ? "fail" : "warn",
+                    dynamicThreeDCameraRequested
+                            ? "3D scenes with camera motion should keep explanatory text fixed in frame."
+                            : "3D storyboard scenes likely need fixed-in-frame overlays for readable text.",
+                    String.format(Locale.ROOT,
+                            "fixed_in_frame=%d, fixed_orientation=%d, text_like=%d",
+                            analysis.getFixedInFrameCount(),
+                            analysis.getFixedOrientationCount(),
+                            analysis.getMathTexCount() + analysis.getTextCount()));
+        }
+
         int continuityScenes = countContinuityScenes(storyboard);
         int transformLike = analysis.getTransformCount()
                 + analysis.getReplacementTransformCount()
@@ -893,6 +1019,53 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
     }
 
     private void addCodeDrivenFindings(StaticAnalysis analysis) {
+        if (analysis.getThreeDObjectCount() > 0 && !analysis.isThreeDScene()
+                && !hasRule(analysis, "three_d_scene_required")) {
+            addFinding(analysis, "three_d_scene_required", "fail",
+                    "The code creates 3D objects but does not declare a `ThreeDScene`.",
+                    String.format(Locale.ROOT,
+                            "three_d_objects=%d, code_uses_threedscene=%s",
+                            analysis.getThreeDObjectCount(), analysis.isThreeDScene()));
+        } else if (analysis.isThreeDScene()
+                && analysis.getThreeDObjectCount() > 0
+                && analysis.getCameraOrientationCount() == 0
+                && !hasRule(analysis, "three_d_camera_plan_missing")) {
+            addFinding(analysis, "three_d_camera_plan_missing", "warn",
+                    "The code uses 3D objects but never sets an explicit camera orientation.",
+                    String.format(Locale.ROOT,
+                            "three_d_objects=%d, camera_orientation_calls=%d",
+                            analysis.getThreeDObjectCount(), analysis.getCameraOrientationCount()));
+        }
+
+        if (analysis.isThreeDScene()
+                && analysis.getMathTexCount() + analysis.getTextCount() > 0
+                && analysis.getCameraMotionCount() > 0
+                && analysis.getFixedInFrameCount() == 0
+                && analysis.getFixedOrientationCount() == 0
+                && !hasRule(analysis, "three_d_overlay_unfixed")) {
+            addFinding(analysis, "three_d_overlay_unfixed", "fail",
+                    "Camera motion in a 3D scene should not leave explanatory text rotating with the world.",
+                    String.format(Locale.ROOT,
+                            "camera_motion_calls=%d, fixed_in_frame=%d, fixed_orientation=%d, text_like=%d",
+                            analysis.getCameraMotionCount(),
+                            analysis.getFixedInFrameCount(),
+                            analysis.getFixedOrientationCount(),
+                            analysis.getMathTexCount() + analysis.getTextCount()));
+        } else if (analysis.isThreeDScene()
+                && analysis.getMathTexCount() + analysis.getTextCount() > 0
+                && analysis.getFixedInFrameCount() == 0
+                && analysis.getFixedOrientationCount() == 0
+                && !hasRule(analysis, "three_d_overlay_missing")
+                && !hasRule(analysis, "three_d_overlay_unfixed")) {
+            addFinding(analysis, "three_d_overlay_missing", "warn",
+                    "3D explanatory text is easier to read when it is fixed in frame or fixed in orientation.",
+                    String.format(Locale.ROOT,
+                            "fixed_in_frame=%d, fixed_orientation=%d, text_like=%d",
+                            analysis.getFixedInFrameCount(),
+                            analysis.getFixedOrientationCount(),
+                            analysis.getMathTexCount() + analysis.getTextCount()));
+        }
+
         if (analysis.getToEdgeCount() >= 7 || analysis.getLargeShiftCount() >= 5) {
             addFinding(analysis, "edge_push_abuse", "fail",
                     "The code heavily relies on edge pushes or large shifts, which raises drift/offscreen risk.",

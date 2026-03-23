@@ -89,11 +89,65 @@ class CodeEvaluationNodeTest {
                 || result.getGateReason().contains("clutter_risk="));
     }
 
+    @Test
+    void fallbackReviewFlagsMissingThreeDSceneWhenStoryboardAndCodeAreThreeDimensional() {
+        Map<String, Object> ctx = buildContext(
+                new FailingReviewAiClient(),
+                String.join("\n",
+                        "from manim import *",
+                        "",
+                        "class DemoScene(Scene):",
+                        "    def construct(self):",
+                        "        axes = ThreeDAxes()",
+                        "        label = Text(\"3D\")",
+                        "        self.add(axes, label)"),
+                buildThreeDNarrative()
+        );
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+
+        assertFalse(result.isApprovedForRender());
+        assertTrue(result.getInitialStaticAnalysis().getFindings().stream()
+                .anyMatch(finding -> "three_d_scene_required".equals(finding.getRuleId())));
+    }
+
+    @Test
+    void fallbackReviewFlagsUnfixedTextInMovingThreeDScene() {
+        Map<String, Object> ctx = buildContext(
+                new FailingReviewAiClient(),
+                String.join("\n",
+                        "from manim import *",
+                        "",
+                        "class DemoScene(ThreeDScene):",
+                        "    def construct(self):",
+                        "        axes = ThreeDAxes()",
+                        "        title = Text(\"Orbit\")",
+                        "        self.set_camera_orientation(phi=75 * DEGREES, theta=-45 * DEGREES)",
+                        "        self.begin_ambient_camera_rotation(rate=0.2)",
+                        "        self.add(axes, title)"),
+                buildThreeDNarrative()
+        );
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+
+        assertFalse(result.isApprovedForRender());
+        assertTrue(result.getInitialStaticAnalysis().getFindings().stream()
+                .anyMatch(finding -> "three_d_overlay_unfixed".equals(finding.getRuleId())));
+    }
+
     private static Map<String, Object> buildContext(AiClient aiClient, String code) {
+        return buildContext(aiClient, code, buildNarrative());
+    }
+
+    private static Map<String, Object> buildContext(AiClient aiClient, String code, Narrative narrative) {
         Map<String, Object> ctx = new LinkedHashMap<>();
         ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
         ctx.put(WorkflowKeys.CONFIG, createWorkflowConfig());
-        ctx.put(WorkflowKeys.NARRATIVE, buildNarrative());
+        ctx.put(WorkflowKeys.NARRATIVE, narrative);
         ctx.put(WorkflowKeys.CODE_RESULT, new CodeResult(
                 code,
                 "DemoScene",
@@ -146,6 +200,42 @@ class CodeEvaluationNodeTest {
         Narrative narrative = new Narrative();
         narrative.setTargetConcept("Demo concept");
         narrative.setTargetDescription("Test code evaluation");
+        narrative.setStoryboard(storyboard);
+        return narrative;
+    }
+
+    private static Narrative buildThreeDNarrative() {
+        Narrative.Storyboard storyboard = new Narrative.Storyboard();
+
+        Narrative.StoryboardScene scene = new Narrative.StoryboardScene();
+        scene.setSceneId("scene_1");
+        scene.setTitle("3D View");
+        scene.setGoal("Show the spatial setup.");
+        scene.setNarration("Orbit around the 3D axes while keeping the title readable.");
+        scene.setDurationSeconds(8);
+        scene.setSceneMode("3d");
+        scene.setCameraAnchor("center");
+        scene.setCameraPlan("Set an oblique view, then orbit slowly.");
+        scene.setLayoutGoal("Keep the 3D object centered in projected screen space.");
+        scene.setSafeAreaPlan("Keep the projected geometry inside the safe frame.");
+        scene.setScreenOverlayPlan("Keep the title fixed in frame.");
+        scene.getEnteringObjects().add(object("axes_3d", "geometry", "3D axes"));
+        scene.getEnteringObjects().add(object("title", "text", "title"));
+        scene.getPersistentObjects().add("axes_3d");
+        scene.getPersistentObjects().add("title");
+
+        Narrative.StoryboardAction action = new Narrative.StoryboardAction();
+        action.setOrder(1);
+        action.setType("camera_rotate");
+        action.getTargets().add("axes_3d");
+        action.setDescription("Rotate the camera around the axes.");
+        scene.getActions().add(action);
+
+        storyboard.getScenes().add(scene);
+
+        Narrative narrative = new Narrative();
+        narrative.setTargetConcept("3D demo");
+        narrative.setTargetDescription("Check 3D review rules");
         narrative.setStoryboard(storyboard);
         return narrative;
     }
@@ -237,6 +327,25 @@ class CodeEvaluationNodeTest {
                                                                  String systemPrompt,
                                                                  String toolsJson) {
             return CompletableFuture.completedFuture(toolResponses.removeFirst());
+        }
+
+        @Override
+        public String providerName() {
+            return "test";
+        }
+    }
+
+    private static final class FailingReviewAiClient implements AiClient {
+        @Override
+        public String chat(String userMessage, String systemPrompt) {
+            return "";
+        }
+
+        @Override
+        public CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
+                                                                 String systemPrompt,
+                                                                 String toolsJson) {
+            return CompletableFuture.failedFuture(new RuntimeException("review unavailable"));
         }
 
         @Override
