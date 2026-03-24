@@ -1,5 +1,12 @@
 package com.automanim.util;
 
+import com.automanim.model.Narrative.Storyboard;
+import com.automanim.model.Narrative.StoryboardAction;
+import com.automanim.model.Narrative.StoryboardObject;
+import com.automanim.model.Narrative.StoryboardScene;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -693,8 +700,8 @@ public final class PromptTemplates {
             + " `screen_overlay_plan` for any text that must stay fixed in frame.\n"
             + "\n"
             + "Important selection rule:\n"
-            + "- Mathematical enrichment fields such as equations, definitions, interpretations,"
-            + " and examples are optional supporting material.\n"
+            + "- Mathematical enrichment fields such as equations and definitions are optional"
+            + " supporting material.\n"
             + "- Use them only when they sharpen the explanation, the proof, or the visual focus.\n"
             + "- It is correct to ignore optional math details that would make the animation"
             + " redundant, overcrowded, or unfocused.\n"
@@ -764,11 +771,17 @@ public final class PromptTemplates {
                 problemStatement, solvingContext, targetSceneCount);
     }
 
+    public static String storyboardCodegenPrompt(String targetConcept, Storyboard storyboard) {
+        return storyboardCodegenPrompt(targetConcept, buildCompactStoryboardJsonForCodegen(storyboard));
+    }
+
     public static String storyboardCodegenPrompt(String targetConcept, String storyboardJson) {
         return String.format(
                 "Target concept: %s\n\n"
-                        + "Use the following storyboard JSON as the source of truth for staging,\n"
-                        + "object identity, continuity, and layout.\n"
+                        + "Use the following compact storyboard JSON as the source of truth for staging,\n"
+                        + "object identity, continuity, and scene execution.\n"
+                        + "The payload is intentionally reduced for code generation, so focus on the\n"
+                        + " scene list, object flow, actions, and safety constraints.\n"
                         + "- Treat every object id as a stable visual identity.\n"
                         + "- If an id persists into the next scene, keep or transform the same"
                         + " mobject instead of redrawing it from scratch.\n"
@@ -778,14 +791,107 @@ public final class PromptTemplates {
                         + " `camera_plan`, and judge layout in projected screen space.\n"
                         + "- Use `screen_overlay_plan` with `add_fixed_in_frame_mobjects` for"
                         + " text or formulas that must stay readable during camera motion.\n"
-                        + "- Respect camera_anchor, layout_goal, and notes_for_codegen when placing"
-                        + " formulas, labels, and diagrams.\n"
+                        + "- Respect camera_anchor, entering_objects placements, and notes_for_codegen"
+                        + " when placing formulas, labels, and diagrams.\n"
                         + "- Respect safe_area_plan so content stays inside the storyboard's intended"
                         + " safe frame.\n"
                         + "- Preserve the storyboard's scene order and teaching intent.\n\n"
-                        + "Storyboard JSON:\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON:\n```json\n%s\n```\n\n"
                         + "Remember: Return ONLY the single Python code block. No explanation.",
                 targetConcept, storyboardJson);
+    }
+
+    public static String buildCompactStoryboardJsonForCodegen(Storyboard storyboard) {
+        ObjectNode root = JsonUtils.mapper().createObjectNode();
+        if (storyboard == null) {
+            root.putArray("scenes");
+            return JsonUtils.toPrettyJson(root);
+        }
+
+        putNonBlank(root, "continuity_plan", storyboard.getContinuityPlan());
+        putTrimmedStringArray(root, "global_visual_rules", storyboard.getGlobalVisualRules());
+
+        ArrayNode scenesArray = root.putArray("scenes");
+        if (storyboard.getScenes() != null) {
+            for (StoryboardScene scene : storyboard.getScenes()) {
+                if (scene == null) {
+                    continue;
+                }
+
+                ObjectNode sceneNode = scenesArray.addObject();
+                putNonBlank(sceneNode, "scene_id", scene.getSceneId());
+                putNonBlank(sceneNode, "title", scene.getTitle());
+                putNonBlank(sceneNode, "narration", scene.getNarration());
+                if (scene.getDurationSeconds() > 0) {
+                    sceneNode.put("duration_seconds", scene.getDurationSeconds());
+                }
+                putNonBlank(sceneNode, "scene_mode", scene.getSceneMode());
+                putNonBlank(sceneNode, "camera_anchor", scene.getCameraAnchor());
+                putNonBlank(sceneNode, "camera_plan", scene.getCameraPlan());
+                putNonBlank(sceneNode, "safe_area_plan", scene.getSafeAreaPlan());
+                putNonBlank(sceneNode, "screen_overlay_plan", scene.getScreenOverlayPlan());
+                putTrimmedStringArray(sceneNode, "step_refs", scene.getStepRefs());
+
+                ArrayNode enteringObjects = sceneNode.putArray("entering_objects");
+                if (scene.getEnteringObjects() != null) {
+                    for (StoryboardObject object : scene.getEnteringObjects()) {
+                        if (object == null) {
+                            continue;
+                        }
+                        ObjectNode objectNode = enteringObjects.addObject();
+                        putNonBlank(objectNode, "id", object.getId());
+                        putNonBlank(objectNode, "kind", object.getKind());
+                        putNonBlank(objectNode, "content", object.getContent());
+                        putNonBlank(objectNode, "placement", object.getPlacement());
+                        putNonBlank(objectNode, "style", object.getStyle());
+                        putNonBlank(objectNode, "source_node", object.getSourceNode());
+                    }
+                }
+
+                putTrimmedStringArray(sceneNode, "persistent_objects", scene.getPersistentObjects());
+                putTrimmedStringArray(sceneNode, "exiting_objects", scene.getExitingObjects());
+
+                ArrayNode actions = sceneNode.putArray("actions");
+                if (scene.getActions() != null) {
+                    for (StoryboardAction action : scene.getActions()) {
+                        if (action == null) {
+                            continue;
+                        }
+                        ObjectNode actionNode = actions.addObject();
+                        if (action.getOrder() > 0) {
+                            actionNode.put("order", action.getOrder());
+                        }
+                        putNonBlank(actionNode, "type", action.getType());
+                        putTrimmedStringArray(actionNode, "targets", action.getTargets());
+                        putNonBlank(actionNode, "description", action.getDescription());
+                    }
+                }
+
+                putTrimmedStringArray(sceneNode, "notes_for_codegen", scene.getNotesForCodegen());
+            }
+        }
+
+        return JsonUtils.toPrettyJson(root);
+    }
+
+    private static void putNonBlank(ObjectNode node, String fieldName, String value) {
+        String normalized = sanitizePromptText(value, "");
+        if (!normalized.isEmpty()) {
+            node.put(fieldName, normalized);
+        }
+    }
+
+    private static void putTrimmedStringArray(ObjectNode node, String fieldName, List<String> values) {
+        ArrayNode array = node.putArray(fieldName);
+        if (values == null) {
+            return;
+        }
+        for (String value : values) {
+            String normalized = sanitizePromptText(value, "");
+            if (!normalized.isEmpty()) {
+                array.add(normalized);
+            }
+        }
     }
 
     public static String codeValidationFixUserPrompt(String sceneName,
@@ -818,7 +924,7 @@ public final class PromptTemplates {
                         + "Do NOT judge whether the code can execute. Judge whether it is likely to feel"
                         + " crowded, drift visually, feel discontinuous, or mismatch the storyboard pacing.\n"
                         + "\n"
-                        + "Storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Manim code to review:\n```python\n%s\n```\n\n"
                         + "Focus on layout safety, continuity between scenes, pacing versus narration,"
@@ -843,7 +949,7 @@ public final class PromptTemplates {
                         + "The current Manim code is not approved for render because it likely has"
                         + " presentation-quality problems, not runtime problems.\n"
                         + "\n"
-                        + "Storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Structured code review:\n```json\n%s\n```\n\n"
                 + "Current Manim code:\n```python\n%s\n```\n\n"

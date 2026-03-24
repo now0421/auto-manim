@@ -114,9 +114,8 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             throw new RuntimeException("Narrative composition failed: " + cause.getMessage(), cause);
         }
 
-        String storyboardJson = JsonUtils.toPrettyJson(storyboard);
         String codegenPrompt = PromptTemplates.storyboardCodegenPrompt(
-                graph.getTargetConcept(), storyboardJson);
+                graph.getTargetConcept(), storyboard);
 
         Narrative narrative = new Narrative(
                 graph.getTargetConcept(),
@@ -211,9 +210,9 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         StringBuilder sb = new StringBuilder();
         sb.append("Narrative context rules:\n");
         sb.append("- Treat visual specifications as primary staging guidance.\n");
-        sb.append("- Treat node reasons from earlier planning stages as the intended teaching job of each node.\n");
-        sb.append("- Treat mathematical enrichment as optional supporting material.\n");
-        sb.append("- Use equations, definitions, interpretations, and examples only when they help the main point.\n");
+        sb.append("- Treat each node's step as the teaching beat to stage in order.\n");
+        sb.append("- Treat equations and definitions as optional supporting material.\n");
+        sb.append("- Use equations and definitions only when they help the main point.\n");
         sb.append("- It is acceptable to ignore optional math details that would make scenes crowded or repetitive.\n");
         sb.append("- Keep important screen-space content inside x in [-6.5, 6.5], y in [-3.5, 3.5].\n");
         sb.append("- If a planned layout would overflow, split content across scenes instead of squeezing it.\n");
@@ -228,7 +227,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
 
         for (int i = 0; i < orderedNodes.size(); i++) {
             KnowledgeNode node = orderedNodes.get(i);
-            sb.append(formatNodeContext(i + 1, node, problemMode));
+            sb.append(formatNodeContext(i + 1, node));
         }
 
         return sb.toString();
@@ -467,81 +466,44 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         return total > 0 ? total : fallbackDuration;
     }
 
-    private String formatNodeContext(int index,
-                                     KnowledgeNode node,
-                                     boolean problemMode) {
+    private String formatNodeContext(int index, KnowledgeNode node) {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("%n--- Node %d: %s (type=%s, depth=%d) ---%n",
-                index, node.getStep(), node.getNodeType(), node.getMinDepth()));
+        sb.append(String.format("%n--- Node %d ---%n", index));
+        sb.append("step: ").append(node.getStep()).append("\n");
 
-        sb.append("Core node identity:\n");
-        sb.append("  id: ").append(node.getId()).append("\n");
-        sb.append("  step: ").append(node.getStep()).append("\n");
-        sb.append("  node_type: ").append(node.getNodeType()).append("\n");
-        sb.append("  min_depth: ").append(node.getMinDepth()).append("\n");
-        sb.append("  is_foundation: ").append(node.isFoundation()).append("\n");
-
-        if (node.getReason() != null && !node.getReason().isBlank()) {
-            sb.append("Planning reason from previous stage:\n");
-            sb.append("  ").append(node.getReason()).append("\n");
-        }
-
-        boolean problemStatementNode = problemMode
-                && KnowledgeNode.NODE_TYPE_PROBLEM.equalsIgnoreCase(node.getNodeType());
-
-        if (problemStatementNode) {
-            sb.append("Narrative role:\n");
-            sb.append("  Use this node only to introduce the problem setup, givens, and goal.\n");
-            sb.append("  Do not reveal the reflection trick, final formula, or optimality proof yet.\n");
-        } else if (problemMode) {
-            sb.append("Narrative role:\n");
-            sb.append("  Use this node only if it advances the main solution path.\n");
-            sb.append("  Prefer brief support over a standalone detour when possible.\n");
-        }
-
-        Map<String, Object> spec = node.getVisualSpec();
-        if (spec != null && !spec.isEmpty()) {
-            sb.append("Primary visual guidance:\n");
-            List<String> preferredKeys = problemStatementNode
-                    ? Arrays.asList("visual_description", "layout", "animation_description",
-                    "duration", "color_scheme", "color_palette", "transitions")
-                    : Arrays.asList("visual_description", "color_scheme", "layout",
-                    "animation_description", "transitions", "duration", "color_palette");
-            appendVisualSpec(sb, spec, preferredKeys);
-        }
-
-        boolean hasOptionalMath = (node.getEquations() != null && !node.getEquations().isEmpty())
-                || (node.getDefinitions() != null && !node.getDefinitions().isEmpty())
-                || (node.getInterpretation() != null && !node.getInterpretation().isBlank())
-                || (node.getExamples() != null && !node.getExamples().isEmpty());
-
-        if (hasOptionalMath) {
-            sb.append("Optional mathematical enrichment (use only if helpful):\n");
-        }
-
-        if (node.getEquations() != null && !node.getEquations().isEmpty()) {
-            sb.append("  equations:\n");
+        sb.append("equations:\n");
+        if (node.getEquations() == null || node.getEquations().isEmpty()) {
+            sb.append("  []\n");
+        } else {
             for (String eq : node.getEquations()) {
-                sb.append("    ").append(eq).append("\n");
+                sb.append("  - ").append(eq).append("\n");
             }
         }
 
-        if (node.getDefinitions() != null && !node.getDefinitions().isEmpty()) {
-            sb.append("  definitions:\n");
+        sb.append("definitions:\n");
+        if (node.getDefinitions() == null || node.getDefinitions().isEmpty()) {
+            sb.append("  {}\n");
+        } else {
             node.getDefinitions().forEach((sym, def) ->
-                    sb.append("    ").append(sym).append(": ").append(def).append("\n")
+                    sb.append("  ").append(sym).append(": ").append(def).append("\n")
             );
         }
 
-        if (node.getInterpretation() != null && !node.getInterpretation().isBlank()) {
-            sb.append("  interpretation: ").append(node.getInterpretation()).append("\n");
-        }
-
-        if (node.getExamples() != null && !node.getExamples().isEmpty()) {
-            sb.append("  examples:\n");
-            for (String ex : node.getExamples()) {
-                sb.append("    - ").append(ex).append("\n");
-            }
+        sb.append("visual_spec:\n");
+        Map<String, Object> spec = node.getVisualSpec();
+        if (spec == null || spec.isEmpty()) {
+            sb.append("  {}\n");
+        } else {
+            List<String> preferredKeys = Arrays.asList(
+                    "visual_description",
+                    "color_scheme",
+                    "layout",
+                    "animation_description",
+                    "transitions",
+                    "duration",
+                    "color_palette"
+            );
+            appendVisualSpec(sb, spec, preferredKeys);
         }
 
         return sb.toString();
@@ -654,7 +616,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         return PromptTemplates.workflowTargetDescription(
                 graph.getTargetConcept(),
                 root != null ? root.getStep() : "",
-                root != null ? root.getReason() : "",
+                "",
                 problemMode);
     }
 

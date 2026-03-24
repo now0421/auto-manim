@@ -175,9 +175,6 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             return CompletableFuture.completedFuture(null);
         }
 
-        String equationsInfo = node.getEquations() != null && !node.getEquations().isEmpty()
-                ? String.join(", ", node.getEquations()) : "none";
-
         String prerequisiteSpecContext = buildPrerequisiteSpecContext(node);
 
         List<String> paletteSnapshot = snapshotPalette();
@@ -187,7 +184,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                   + ". Prefer harmonious contrast and avoid unnecessary repetition.";
 
         StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append(buildCurrentStepPrompt(node, equationsInfo));
+        userPrompt.append(buildCurrentStepPrompt(node));
         String problemDesignContext = buildProblemDesignContext(node);
         if (!problemDesignContext.isBlank()) {
             userPrompt.append("\n\n").append(problemDesignContext);
@@ -289,9 +286,6 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             StringBuilder sb = new StringBuilder();
             appendLabeledLine(sb, "Original problem", graph.getTargetConcept());
             appendLabeledLine(sb, "Final conclusion", root != null ? root.getStep() : "");
-            if (root != null && root.getReason() != null && !root.getReason().isBlank()) {
-                appendLabeledLine(sb, "Conclusion reason", root.getReason());
-            }
             String solutionChain = buildProblemSolutionChainSummary();
             if (!solutionChain.isBlank()) {
                 if (sb.length() > 0) {
@@ -307,19 +301,25 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         return PromptTemplates.workflowTargetDescription(
                 graph != null ? graph.getTargetConcept() : "",
                 root != null ? root.getStep() : "",
-                root != null ? root.getReason() : "",
+                "",
                 graph != null && graph.isProblemMode());
     }
 
-    private String buildCurrentStepPrompt(KnowledgeNode node, String equationsInfo) {
+    private String buildCurrentStepPrompt(KnowledgeNode node) {
         StringBuilder sb = new StringBuilder();
         sb.append("Current step:\n");
         sb.append("- Step: ").append(node.getStep()).append("\n");
-        sb.append("- Node type: ").append(node.getNodeType()).append("\n");
-        sb.append("- Depth: ").append(node.getMinDepth()).append("\n");
-        sb.append("- Relevant equations: ").append(equationsInfo).append("\n");
-        if (node.getReason() != null && !node.getReason().isBlank()) {
-            sb.append("- Reason from Stage 0: ").append(node.getReason().trim()).append("\n");
+        if (node.getEquations() != null && !node.getEquations().isEmpty()) {
+            sb.append("Equations:\n");
+            for (String equation : node.getEquations()) {
+                sb.append("- ").append(equation).append("\n");
+            }
+        }
+        if (node.getDefinitions() != null && !node.getDefinitions().isEmpty()) {
+            sb.append("Definitions:\n");
+            node.getDefinitions().forEach((symbol, definition) ->
+                    sb.append("- ").append(symbol).append(": ").append(definition).append("\n")
+            );
         }
         if (graph != null && graph.isProblemMode()) {
             sb.append("- Target problem: ").append(graph.getTargetConcept()).append("\n");
@@ -350,11 +350,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         if (!prerequisites.isEmpty()) {
             sb.append("Direct prerequisite steps for this node:\n");
             for (KnowledgeNode prerequisite : prerequisites) {
-                sb.append(String.format("- [%s] %s", prerequisite.getNodeType(), prerequisite.getStep()));
-                if (prerequisite.getReason() != null && !prerequisite.getReason().isBlank()) {
-                    sb.append(" - ").append(prerequisite.getReason().trim());
-                }
-                sb.append("\n");
+                appendStepLine(sb, prerequisite);
             }
         }
 
@@ -388,13 +384,8 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             String marker = currentStep != null && step.getId().equals(currentStep.getId()) ? "-> " : "   ";
             sb.append(marker)
                     .append(i + 1)
-                    .append(". [")
-                    .append(step.getNodeType())
-                    .append("] ")
+                    .append(". ")
                     .append(step.getStep());
-            if (step.getReason() != null && !step.getReason().isBlank()) {
-                sb.append(" - ").append(step.getReason().trim());
-            }
             sb.append("\n");
         }
         return sb.toString();
@@ -411,14 +402,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         if (sb == null || step == null) {
             return;
         }
-        sb.append("- [")
-                .append(step.getNodeType())
-                .append("] ")
-                .append(step.getStep());
-        if (step.getReason() != null && !step.getReason().isBlank()) {
-            sb.append(" - ").append(step.getReason().trim());
-        }
-        sb.append("\n");
+        sb.append("- ").append(step.getStep()).append("\n");
     }
 
     private void applyVisualSpec(KnowledgeNode node, JsonNode data) {

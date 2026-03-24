@@ -22,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,8 +62,41 @@ class NarrativeNodeTest {
         assertEquals(0, aiClient.chatCallCount.get());
     }
 
+    @Test
+    void narrativeContextOnlyIncludesCoreStepMathAndVisualFields() {
+        SequentialAiClient aiClient = new SequentialAiClient(List.of(validStoryboardResponse()));
+        Map<String, Object> ctx = buildContext(aiClient, createNarrativeInputNode());
+
+        new NarrativeNode().run(ctx);
+
+        String userPrompt = aiClient.lastUserMessage;
+        assertNotNull(userPrompt);
+        assertTrue(userPrompt.contains("step: Reflect A across line l"));
+        assertTrue(userPrompt.contains("equations:"));
+        assertTrue(userPrompt.contains("definitions:"));
+        assertTrue(userPrompt.contains("visual_spec:"));
+        assertTrue(userPrompt.contains("AP = A'P"));
+        assertTrue(userPrompt.contains("A': reflection of A across l"));
+        assertTrue(userPrompt.contains("visual_description: Show A mirrored across l."));
+
+        assertFalse(userPrompt.contains("min_depth:"));
+        assertFalse(userPrompt.contains("is_foundation:"));
+        assertFalse(userPrompt.contains("interpretation:"));
+        assertFalse(userPrompt.contains("examples:"));
+        assertFalse(userPrompt.contains("node_type:"));
+        assertFalse(userPrompt.contains("id:"));
+        assertFalse(userPrompt.contains("Planning reason from previous stage"));
+        assertFalse(userPrompt.contains("Optional mathematical enrichment"));
+
+        assertNotNull(aiClient.lastSystemPrompt);
+        assertFalse(aiClient.lastSystemPrompt.contains("Use symmetry to convert a broken path into a straight-line comparison."));
+    }
+
     private static Map<String, Object> buildContext(AiClient aiClient) {
-        KnowledgeNode root = new KnowledgeNode("root", "Target concept", 0, false);
+        return buildContext(aiClient, createBasicRootNode());
+    }
+
+    private static Map<String, Object> buildContext(AiClient aiClient, KnowledgeNode root) {
         root.setReason("Introduce the target concept with one clear visual.");
 
         Map<String, KnowledgeNode> nodes = new LinkedHashMap<>();
@@ -80,6 +114,26 @@ class NarrativeNodeTest {
         ctx.put(WorkflowKeys.CONFIG, createWorkflowConfig());
         ctx.put(WorkflowKeys.KNOWLEDGE_GRAPH, graph);
         return ctx;
+    }
+
+    private static KnowledgeNode createBasicRootNode() {
+        return new KnowledgeNode("root", "Target concept", 0, false);
+    }
+
+    private static KnowledgeNode createNarrativeInputNode() {
+        KnowledgeNode node = new KnowledgeNode("mirror", "Reflect A across line l", 3, true);
+        node.setNodeType(KnowledgeNode.NODE_TYPE_CONSTRUCTION);
+        node.setReason("Use symmetry to convert a broken path into a straight-line comparison.");
+        node.setEquations(List.of("AP = A'P"));
+        node.setDefinitions(Map.of("A'", "reflection of A across l"));
+        node.setInterpretation("Reflection preserves distance to line l.");
+        node.setExamples(List.of("If P lies on l, then AP and A'P are equal."));
+
+        Map<String, Object> visualSpec = new LinkedHashMap<>();
+        visualSpec.put("visual_description", "Show A mirrored across l.");
+        visualSpec.put("layout", "Keep the river centered and place A' below it.");
+        node.setVisualSpec(visualSpec);
+        return node;
     }
 
     private static WorkflowConfig createWorkflowConfig() {
@@ -164,6 +218,9 @@ class NarrativeNodeTest {
         private final List<Object> toolResponses;
         private final AtomicInteger toolRequestCount = new AtomicInteger(0);
         private final AtomicInteger chatCallCount = new AtomicInteger(0);
+        private String lastUserMessage;
+        private String lastSystemPrompt;
+        private String lastToolsJson;
 
         private SequentialAiClient(List<Object> toolResponses) {
             this.toolResponses = toolResponses;
@@ -179,6 +236,9 @@ class NarrativeNodeTest {
         public CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
                                                                  String systemPrompt,
                                                                  String toolsJson) {
+            lastUserMessage = userMessage;
+            lastSystemPrompt = systemPrompt;
+            lastToolsJson = toolsJson;
             int index = toolRequestCount.getAndIncrement();
             Object response = index < toolResponses.size()
                     ? toolResponses.get(index)

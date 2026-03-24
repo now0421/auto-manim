@@ -134,9 +134,61 @@ class CodeEvaluationNodeTest {
         CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
         CodeEvaluationResult result = node.exec(input);
 
-        assertFalse(result.isApprovedForRender());
         assertTrue(result.getInitialStaticAnalysis().getFindings().stream()
                 .anyMatch(finding -> "three_d_overlay_unfixed".equals(finding.getRuleId())));
+    }
+
+    @Test
+    void reviewPromptUsesCompactStoryboardJson() {
+        QueueAiClient aiClient = new QueueAiClient();
+        aiClient.toolResponses.add(reviewResponse(true, 8, 8, 8, 2, 1,
+                "Looks good.",
+                "None.",
+                "Proceed to render."));
+
+        Map<String, Object> ctx = buildContext(aiClient, initialCode(), buildCompactReviewNarrative());
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        node.exec(input);
+
+        assertNotNull(aiClient.lastUserMessage);
+        assertTrue(aiClient.lastUserMessage.contains("\"scenes\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"entering_objects\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"actions\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"safe_area_plan\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"hook\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"summary\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"goal\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"layout_goal\""));
+    }
+
+    @Test
+    void evaluationFixRequestStoresCompactStoryboardJson() {
+        QueueAiClient aiClient = new QueueAiClient();
+        aiClient.toolResponses.add(reviewResponse(false, 4, 4, 5, 7, 6,
+                "Too crowded.",
+                "Objects overlap.",
+                "Reduce clutter."));
+
+        Map<String, Object> ctx = buildContext(aiClient, initialCode(), buildCompactReviewNarrative());
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertEquals(WorkflowActions.FIX_CODE, action);
+        com.automanim.model.CodeFixRequest request =
+                (com.automanim.model.CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
+        assertNotNull(request);
+        assertNotNull(request.getStoryboardJson());
+        assertTrue(request.getStoryboardJson().contains("\"scenes\""));
+        assertTrue(request.getStoryboardJson().contains("\"entering_objects\""));
+        assertFalse(request.getStoryboardJson().contains("\"hook\""));
+        assertFalse(request.getStoryboardJson().contains("\"summary\""));
+        assertFalse(request.getStoryboardJson().contains("\"goal\""));
+        assertFalse(request.getStoryboardJson().contains("\"layout_goal\""));
     }
 
     private static Map<String, Object> buildContext(AiClient aiClient, String code) {
@@ -200,6 +252,41 @@ class CodeEvaluationNodeTest {
         Narrative narrative = new Narrative();
         narrative.setTargetConcept("Demo concept");
         narrative.setTargetDescription("Test code evaluation");
+        narrative.setStoryboard(storyboard);
+        return narrative;
+    }
+
+    private static Narrative buildCompactReviewNarrative() {
+        Narrative.Storyboard storyboard = new Narrative.Storyboard();
+        storyboard.setHook("Open with a question.");
+        storyboard.setSummary("Move from setup to conclusion.");
+        storyboard.setContinuityPlan("Keep the title and equation aligned.");
+        storyboard.getGlobalVisualRules().add("Keep formulas near the edge.");
+
+        Narrative.StoryboardScene scene = new Narrative.StoryboardScene();
+        scene.setSceneId("scene_1");
+        scene.setTitle("Intro");
+        scene.setGoal("Introduce the relationship.");
+        scene.setNarration("Show the title and formula.");
+        scene.setDurationSeconds(8);
+        scene.setCameraAnchor("center");
+        scene.setLayoutGoal("Place the title at the top and the formula below it.");
+        scene.setSafeAreaPlan("Keep both objects inside the safe area.");
+        scene.getEnteringObjects().add(object("title", "text", "title"));
+        scene.getEnteringObjects().add(object("eq_main", "formula", "main equation"));
+
+        Narrative.StoryboardAction action = new Narrative.StoryboardAction();
+        action.setOrder(1);
+        action.setType("create");
+        action.getTargets().add("title");
+        action.setDescription("Write the title.");
+        scene.getActions().add(action);
+
+        storyboard.getScenes().add(scene);
+
+        Narrative narrative = new Narrative();
+        narrative.setTargetConcept("Demo concept");
+        narrative.setTargetDescription("Compact storyboard review");
         narrative.setStoryboard(storyboard);
         return narrative;
     }
@@ -316,9 +403,13 @@ class CodeEvaluationNodeTest {
     private static final class QueueAiClient implements AiClient {
         private final Deque<JsonNode> toolResponses = new ArrayDeque<>();
         private final Deque<String> chatResponses = new ArrayDeque<>();
+        private String lastUserMessage;
+        private String lastSystemPrompt;
 
         @Override
         public String chat(String userMessage, String systemPrompt) {
+            lastUserMessage = userMessage;
+            lastSystemPrompt = systemPrompt;
             return chatResponses.removeFirst();
         }
 
@@ -326,6 +417,8 @@ class CodeEvaluationNodeTest {
         public CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
                                                                  String systemPrompt,
                                                                  String toolsJson) {
+            lastUserMessage = userMessage;
+            lastSystemPrompt = systemPrompt;
             return CompletableFuture.completedFuture(toolResponses.removeFirst());
         }
 

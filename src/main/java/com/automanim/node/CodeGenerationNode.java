@@ -288,7 +288,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         if (narrative.hasStoryboard()) {
             basePrompt = PromptTemplates.storyboardCodegenPrompt(
                     narrative.getTargetConcept(),
-                    JsonUtils.toPrettyJson(narrative.getStoryboard()));
+                    narrative.getStoryboard());
         } else {
             basePrompt = narrative.getVerbosePrompt();
         }

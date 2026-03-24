@@ -322,7 +322,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 ? codeResult.getTargetConcept()
                 : sceneName;
         String storyboardJson = narrative != null && narrative.hasStoryboard()
-                ? JsonUtils.toPrettyJson(narrative.getStoryboard())
+                ? PromptTemplates.buildCompactStoryboardJsonForCodegen(narrative.getStoryboard())
                 : "{\"scenes\":[]}";
         String staticAnalysisJson = JsonUtils.toPrettyJson(analysis);
         String userPrompt = PromptTemplates.codeReviewUserPrompt(
@@ -383,7 +383,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         request.setSceneName(sceneName);
         request.setExpectedSceneName(sceneName);
         request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
-                ? JsonUtils.toPrettyJson(narrative.getStoryboard())
+                ? PromptTemplates.buildCompactStoryboardJsonForCodegen(narrative.getStoryboard())
                 : "{\"scenes\":[]}");
         request.setStaticAnalysisJson(JsonUtils.toPrettyJson(result.getFinalStaticAnalysis()));
         request.setReviewJson(JsonUtils.toPrettyJson(result.getFinalReview()));

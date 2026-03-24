@@ -3,6 +3,10 @@ package com.automanim.node;
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
 import com.automanim.model.Narrative;
+import com.automanim.model.Narrative.Storyboard;
+import com.automanim.model.Narrative.StoryboardAction;
+import com.automanim.model.Narrative.StoryboardObject;
+import com.automanim.model.Narrative.StoryboardScene;
 import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
@@ -14,8 +18,10 @@ import io.github.the_pocket.PocketFlow;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -63,12 +69,95 @@ class CodeGenerationNodeRoutingTest {
         assertEquals(2, codeResult.getToolCalls());
     }
 
+    @Test
+    void codegenPromptUsesCompactStoryboardFocusedOnSceneExecution() {
+        QueueAiClient aiClient = new QueueAiClient();
+        aiClient.toolResponses.add(codegenResponse(String.join("\n",
+                "from manim import *",
+                "",
+                "class MainScene(Scene):",
+                "    def construct(self):",
+                "        title = Text(\"ok\")",
+                "        self.play(Write(title))")));
+
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
+        ctx.put(WorkflowKeys.CONFIG, new WorkflowConfig());
+        ctx.put(WorkflowKeys.NARRATIVE, buildStoryboardNarrative());
+
+        new CodeGenerationNode().run(ctx);
+
+        assertNotNull(aiClient.lastUserMessage);
+        assertTrue(aiClient.lastUserMessage.contains("\"scenes\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"entering_objects\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"actions\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"continuity_plan\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"safe_area_plan\""));
+
+        assertFalse(aiClient.lastUserMessage.contains("\"hook\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"summary\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"goal\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"layout_goal\""));
+    }
+
     private static Narrative buildNarrative() {
         Narrative narrative = new Narrative();
         narrative.setTargetConcept("Demo concept");
         narrative.setTargetDescription("Demo description");
         narrative.setVerbosePrompt("Generate a minimal demo scene.");
         return narrative;
+    }
+
+    private static Narrative buildStoryboardNarrative() {
+        Narrative narrative = new Narrative();
+        narrative.setTargetConcept("Demo concept");
+        narrative.setTargetDescription("Demo description");
+        narrative.setStoryboard(buildStoryboard());
+        return narrative;
+    }
+
+    private static Storyboard buildStoryboard() {
+        Storyboard storyboard = new Storyboard();
+        storyboard.setHook("Open with a motivating question.");
+        storyboard.setSummary("Show one scene clearly.");
+        storyboard.setContinuityPlan("Keep the same title object alive.");
+        storyboard.setGlobalVisualRules(List.of("Keep the title in the safe area."));
+
+        StoryboardScene scene = new StoryboardScene();
+        scene.setSceneId("scene_1");
+        scene.setTitle("Intro");
+        scene.setGoal("Introduce the main idea.");
+        scene.setNarration("Write the title and pause.");
+        scene.setDurationSeconds(6);
+        scene.setSceneMode("2d");
+        scene.setCameraAnchor("center");
+        scene.setCameraPlan("Static 2D camera.");
+        scene.setLayoutGoal("Place the title near the top.");
+        scene.setSafeAreaPlan("Leave a top margin and keep all text centered.");
+        scene.setScreenOverlayPlan("No fixed overlay needed.");
+        scene.setStepRefs(List.of("problem"));
+
+        StoryboardObject title = new StoryboardObject();
+        title.setId("title_main");
+        title.setKind("text");
+        title.setContent("Demo title");
+        title.setPlacement("top-center, y = 3.0");
+        title.setStyle("WHITE, scale 0.9");
+        title.setSourceNode("problem");
+        scene.setEnteringObjects(List.of(title));
+        scene.setPersistentObjects(List.of("title_main"));
+        scene.setExitingObjects(new ArrayList<>());
+
+        StoryboardAction action = new StoryboardAction();
+        action.setOrder(1);
+        action.setType("create");
+        action.setTargets(List.of("title_main"));
+        action.setDescription("Write the title.");
+        scene.setActions(List.of(action));
+        scene.setNotesForCodegen(List.of("Keep the title anchored near the top."));
+
+        storyboard.setScenes(List.of(scene));
+        return storyboard;
     }
 
     private static JsonNode codegenResponse(String code) {
@@ -94,9 +183,14 @@ class CodeGenerationNodeRoutingTest {
     private static final class QueueAiClient implements AiClient {
         private final Deque<JsonNode> toolResponses = new ArrayDeque<>();
         private final Deque<String> chatResponses = new ArrayDeque<>();
+        private String lastUserMessage;
+        private String lastSystemPrompt;
+        private String lastToolsJson;
 
         @Override
         public String chat(String userMessage, String systemPrompt) {
+            lastUserMessage = userMessage;
+            lastSystemPrompt = systemPrompt;
             return chatResponses.removeFirst();
         }
 
@@ -104,6 +198,9 @@ class CodeGenerationNodeRoutingTest {
         public CompletableFuture<JsonNode> chatWithToolsRawAsync(String userMessage,
                                                                  String systemPrompt,
                                                                  String toolsJson) {
+            lastUserMessage = userMessage;
+            lastSystemPrompt = systemPrompt;
+            lastToolsJson = toolsJson;
             return CompletableFuture.completedFuture(toolResponses.removeFirst());
         }
 
