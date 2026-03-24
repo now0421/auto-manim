@@ -487,6 +487,73 @@ Principles:
 
 ## 1. Basic Style Functions
 
+### Whitelisted Color Constants
+
+When generating code, use only the following known-safe Manim color constants from the current environment.
+
+Base colors:
+
+* `BLACK`
+* `WHITE`
+* `BLUE`
+* `GREEN`
+* `YELLOW`
+* `RED`
+* `PURPLE`
+* `PINK`
+* `ORANGE`
+* `TEAL`
+* `GOLD`
+* `MAROON`
+* `GRAY`
+* `GREY`
+* `DARK_BLUE`
+* `DARK_BROWN`
+* `DARK_GRAY`
+* `DARK_GREY`
+* `DARKER_GRAY`
+* `DARKER_GREY`
+* `LIGHT_BROWN`
+* `LIGHT_GRAY`
+* `LIGHT_GREY`
+* `LIGHTER_GRAY`
+* `LIGHTER_GREY`
+* `LIGHT_PINK`
+* `GRAY_BROWN`
+* `GREY_BROWN`
+
+Variant families:
+
+* `BLUE_A`, `BLUE_B`, `BLUE_C`, `BLUE_D`, `BLUE_E`
+* `GREEN_A`, `GREEN_B`, `GREEN_C`, `GREEN_D`, `GREEN_E`
+* `YELLOW_A`, `YELLOW_B`, `YELLOW_C`, `YELLOW_D`, `YELLOW_E`
+* `RED_A`, `RED_B`, `RED_C`, `RED_D`, `RED_E`
+* `PURPLE_A`, `PURPLE_B`, `PURPLE_C`, `PURPLE_D`, `PURPLE_E`
+* `TEAL_A`, `TEAL_B`, `TEAL_C`, `TEAL_D`, `TEAL_E`
+* `GOLD_A`, `GOLD_B`, `GOLD_C`, `GOLD_D`, `GOLD_E`
+* `MAROON_A`, `MAROON_B`, `MAROON_C`, `MAROON_D`, `MAROON_E`
+* `GRAY_A`, `GRAY_B`, `GRAY_C`, `GRAY_D`, `GRAY_E`
+* `GREY_A`, `GREY_B`, `GREY_C`, `GREY_D`, `GREY_E`
+
+Pure colors:
+
+* `PURE_RED`
+* `PURE_GREEN`
+* `PURE_BLUE`
+* `PURE_YELLOW`
+* `PURE_CYAN`
+* `PURE_MAGENTA`
+
+Logo colors:
+
+* `LOGO_BLACK`
+* `LOGO_WHITE`
+* `LOGO_BLUE`
+* `LOGO_GREEN`
+* `LOGO_RED`
+
+Use only names from this whitelist when assigning Manim colors.
+
 ### `set_color`
 
 Set the overall color:
