@@ -526,9 +526,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         }
         return review.getLayoutScore() >= MIN_LAYOUT_SCORE
                 && review.getContinuityScore() >= MIN_CONTINUITY_SCORE
-                && review.getPacingScore() >= MIN_PACING_SCORE
-                && review.getClutterRisk() <= MAX_CLUTTER_RISK
-                && review.getLikelyOffscreenRisk() <= MAX_OFFSCREEN_RISK;
+                && review.getPacingScore() >= MIN_PACING_SCORE;
     }
 
     private String buildGateReason(boolean approved,
@@ -558,13 +556,6 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             if (review.getPacingScore() < MIN_PACING_SCORE) {
                 reasons.add("pacing_score=" + safeScore(review.getPacingScore()) + " < " + MIN_PACING_SCORE);
             }
-            if (review.getClutterRisk() > MAX_CLUTTER_RISK) {
-                reasons.add("clutter_risk=" + safeScore(review.getClutterRisk()) + " > " + MAX_CLUTTER_RISK);
-            }
-            if (review.getLikelyOffscreenRisk() > MAX_OFFSCREEN_RISK) {
-                reasons.add("likely_offscreen_risk=" + safeScore(review.getLikelyOffscreenRisk())
-                        + " > " + MAX_OFFSCREEN_RISK);
-            }
             if (review.getBlockingIssues() != null) {
                 for (String issue : review.getBlockingIssues()) {
                     if (issue != null && !issue.isBlank()) {
@@ -575,6 +566,11 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         }
 
         if (reasons.isEmpty()) {
+            if (review != null
+                    && (review.getClutterRisk() > MAX_CLUTTER_RISK
+                    || review.getLikelyOffscreenRisk() > MAX_OFFSCREEN_RISK)) {
+                return "Semantic review passed; layout-risk heuristics are advisory and deferred to Stage 5 scene evaluation.";
+            }
             return "Advisory review suggests visual refinements before render.";
         }
         return String.join("; ", reasons.subList(0, Math.min(3, reasons.size())));
@@ -923,29 +919,35 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
     private ReviewSnapshot fallbackReviewFromStaticAnalysis(StaticAnalysis analysis) {
         ReviewSnapshot review = new ReviewSnapshot();
-        int failCount = countFindingsBySeverity(analysis, "fail");
-        int warningCount = countFindingsBySeverity(analysis, "warn");
         List<String> blockingIssues = new ArrayList<>();
         List<String> directives = new ArrayList<>();
 
         for (StaticFinding finding : analysis.getFindings()) {
-            if ("fail".equalsIgnoreCase(finding.getSeverity())) {
+            if (isStage3BlockingRule(finding.getRuleId())
+                    && "fail".equalsIgnoreCase(finding.getSeverity())) {
                 blockingIssues.add(finding.getSummary());
             }
             directives.add(finding.getSummary());
         }
 
-        review.setLayoutScore(Math.max(2, 8 - failCount - (warningCount / 2)));
+        int semanticPenalty = 0;
+        semanticPenalty += hasRuleWithSeverity(analysis, "three_d_scene_required", "fail") ? 3 : 0;
+        semanticPenalty += hasRuleWithSeverity(analysis, "three_d_overlay_unfixed", "fail") ? 2 : 0;
+        semanticPenalty += hasRuleWithSeverity(analysis, "three_d_camera_plan_missing", "warn") ? 1 : 0;
+        semanticPenalty += hasRuleWithSeverity(analysis, "three_d_camera_motion_missing", "warn") ? 1 : 0;
+        semanticPenalty += hasRuleWithSeverity(analysis, "three_d_overlay_missing", "warn") ? 1 : 0;
+        review.setLayoutScore(Math.max(2, 8 - semanticPenalty));
         review.setContinuityScore(Math.max(2,
                 8 - (hasRuleWithSeverity(analysis, "weak_transform_continuity", "fail") ? 2 : 0)
                         - (hasRuleWithSeverity(analysis, "weak_transform_continuity", "warn") ? 1 : 0)
-                        - (warningCount / 2)));
+                        - (hasRuleWithSeverity(analysis, "code_bloat", "warn") ? 1 : 0)));
         review.setPacingScore(Math.max(2,
                 8 - (hasRuleWithSeverity(analysis, "pacing_mismatch_dense", "fail") ? 2 : 0)
                         - (hasRuleWithSeverity(analysis, "pacing_mismatch_dense", "warn") ? 1 : 0)
                         - (hasRuleWithSeverity(analysis, "pacing_mismatch_sparse", "warn") ? 1 : 0)));
         review.setClutterRisk(Math.min(10,
-                2 + failCount
+                2 + (hasRuleWithSeverity(analysis, "scene_object_overload", "fail") ? 2 : 0)
+                        + (hasRuleWithSeverity(analysis, "scene_object_overload", "warn") ? 1 : 0)
                         + (hasRuleWithSeverity(analysis, "text_stack_clutter", "fail") ? 2 : 0)
                         + (hasRuleWithSeverity(analysis, "text_stack_clutter", "warn") ? 1 : 0)
                         + (hasRuleWithSeverity(analysis, "visible_object_overload", "fail") ? 2 : 0)
@@ -957,13 +959,18 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                         + (hasRuleWithSeverity(analysis, "edge_push_abuse", "warn") ? 1 : 0)));
         review.setBlockingIssues(blockingIssues);
         review.setRevisionDirectives(directives);
-        review.setSummary("Fallback review synthesized from static visual analysis.");
+        review.setSummary("Fallback Stage 3 review synthesized from static semantic, continuity, pacing, and 3D-readability heuristics.");
         review.setApprovedForRender(review.getLayoutScore() >= MIN_LAYOUT_SCORE
                 && review.getContinuityScore() >= MIN_CONTINUITY_SCORE
-                && review.getPacingScore() >= MIN_PACING_SCORE
-                && review.getClutterRisk() <= MAX_CLUTTER_RISK
-                && review.getLikelyOffscreenRisk() <= MAX_OFFSCREEN_RISK);
+                && review.getPacingScore() >= MIN_PACING_SCORE);
         return review;
+    }
+
+    private boolean isStage3BlockingRule(String ruleId) {
+        return "weak_transform_continuity".equalsIgnoreCase(ruleId)
+                || "pacing_mismatch_dense".equalsIgnoreCase(ruleId)
+                || "three_d_scene_required".equalsIgnoreCase(ruleId)
+                || "three_d_overlay_unfixed".equalsIgnoreCase(ruleId);
     }
 
     private void populateStoryboardMetrics(StaticAnalysis analysis, Storyboard storyboard) {
