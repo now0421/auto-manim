@@ -77,6 +77,9 @@ public class ModelConfig {
         if (normalizedModel.contains("kimi") || normalizedModel.contains("moonshot")) {
             return "moonshot";
         }
+        if (normalizedModel.contains("glm") || normalizedModel.contains("bigmodel")) {
+            return "zhipu";
+        }
         if (normalizedModel.startsWith("gpt-")
                 || normalizedModel.startsWith("o1")
                 || normalizedModel.startsWith("o3")

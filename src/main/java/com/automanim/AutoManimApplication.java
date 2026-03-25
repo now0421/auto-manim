@@ -232,6 +232,7 @@ public class AutoManimApplication {
                 return new GeminiAiClient(modelConfig);
             case "moonshot":
             case "deepseek":
+            case "zhipu":
             case "openai":
                 return new OpenAiCompatibleAiClient(modelConfig);
             default:

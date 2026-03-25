@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -27,6 +28,7 @@ import java.util.function.Function;
 public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
 
     protected static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Logger traceLog = LoggerFactory.getLogger("com.automanim.ai.trace");
     private static final int EMPTY_RESPONSE_RETRIES = 2;
     private static final int TRANSIENT_FAILURE_RETRIES = 2;
     private static final long RETRY_BASE_DELAY_MILLIS = 1_000L;
@@ -434,16 +436,16 @@ public abstract class AbstractOpenAiCompatibleAiClient implements AiClient {
         if (attempt == 0) {
             log.debug("{} request: model={}, messages={}, tools={}, url={}",
                     clientName, modelConfig.getModel(), messageCount, toolCount, url);
-            log.debug("{} request body:\n{}", clientName, abbreviateForLog(body.toPrettyString()));
+            traceLog.debug("{} request body:\n{}", clientName, abbreviateForLog(body.toPrettyString()));
             return;
         }
 
-        log.debug("{} retry request: attempt={}, model={}, messages={}, tools={}, url={}",
+        traceLog.debug("{} retry request: attempt={}, model={}, messages={}, tools={}, url={}",
                 clientName, attempt + 1, modelConfig.getModel(), messageCount, toolCount, url);
     }
 
     private void logResponse(HttpResponse<String> response) {
-        log.debug("{} raw response: http={}, body=\n{}",
+        traceLog.debug("{} raw response: http={}, body=\n{}",
                 clientName, response.statusCode(), abbreviateForLog(response.body()));
     }
 
