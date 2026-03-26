@@ -31,7 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Stage 1c: Narrative Composition - composes an animation script
+ * Stage 1c: Narrative Composition - composes a storyboard
  * from the enriched knowledge graph, with length adapted to graph complexity.
  */
 public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, String> {
@@ -42,6 +42,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
     private AiClient aiClient;
     private int toolCalls = 0;
     private WorkflowConfig workflowConfig;
+    private String outputTarget = WorkflowConfig.OUTPUT_TARGET_MANIM;
 
     public NarrativeNode() {
         super(2, 2000);
@@ -53,6 +54,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         WorkflowConfig config = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         if (config != null) {
             this.workflowConfig = config;
+            this.outputTarget = config.getOutputTarget();
         }
         this.toolCalls = 0;
         return (KnowledgeGraph) ctx.get(WorkflowKeys.KNOWLEDGE_GRAPH);
@@ -71,9 +73,9 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         String workflowTargetDetails = buildWorkflowTargetDescription(graph, problemMode);
         String workflowTarget = graph.getTargetConcept();
         String systemPrompt = NarrativePrompts.systemPrompt(
-                workflowTarget, workflowTargetDetails);
+                workflowTarget, workflowTargetDetails, outputTarget);
 
-        log.info("  Narrative mode: {}, order: {}", resolvedMode, stepOrder);
+        log.info("  Narrative mode: {}, output_target: {}, order: {}", resolvedMode, outputTarget, stepOrder);
 
         int sceneCount = estimateSceneCount(ordered, problemMode);
         String promptTarget = graph.getTargetConcept();
@@ -192,6 +194,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                                 boolean problemMode) {
         StringBuilder sb = new StringBuilder();
         sb.append("Narrative context rules:\n");
+        sb.append("- Output target backend: ").append(outputTarget).append(".\n");
         sb.append("- Treat visual specifications as primary staging guidance for object roles, relative layout, and continuity.\n");
         sb.append("- Treat each node's step as the teaching beat to stage in order.\n");
         sb.append("- Treat equations and definitions as optional supporting material.\n");
@@ -346,7 +349,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             }
             if (scene.getCameraPlan() == null || scene.getCameraPlan().isBlank()) {
                 scene.setCameraPlan(isThreeDSceneMode(scene) ? "Set a readable 3D view before the main reveal."
-                        : "Static 2D camera.");
+                        : "Static 2D view.");
             }
             if (scene.getLayoutGoal() == null || scene.getLayoutGoal().isBlank()) {
                 scene.setLayoutGoal("Keep the layout stable and uncluttered.");
@@ -357,8 +360,8 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             }
             if (scene.getScreenOverlayPlan() == null || scene.getScreenOverlayPlan().isBlank()) {
                 scene.setScreenOverlayPlan(isThreeDSceneMode(scene)
-                        ? "Keep titles and formulas fixed in frame if they must stay readable during camera motion."
-                        : "No fixed screen overlay needed.");
+                        ? "Keep titles and formulas visually separate if they must stay readable during viewpoint changes."
+                        : "No separate overlay needed.");
             }
             if (scene.getStepRefs() == null) {
                 scene.setStepRefs(new ArrayList<>());

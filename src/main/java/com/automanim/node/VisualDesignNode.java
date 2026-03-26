@@ -45,6 +45,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     private final AtomicInteger toolCalls = new AtomicInteger(0);
     private boolean parallelEnabled = true;
     private int maxConcurrent = 4;
+    private String outputTarget = WorkflowConfig.OUTPUT_TARGET_MANIM;
     private final java.util.Set<String> globalColorPalette = ConcurrentHashMap.newKeySet();
     private ConcurrencyUtils.AsyncLimiter aiCallLimiter;
     private String globalStyleGuide = "";
@@ -62,6 +63,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         if (workflowConfig != null) {
             this.parallelEnabled = workflowConfig.isParallelVisualDesign();
             this.maxConcurrent = workflowConfig.getMaxConcurrent();
+            this.outputTarget = workflowConfig.getOutputTarget();
         }
         return (KnowledgeGraph) ctx.get(WorkflowKeys.KNOWLEDGE_GRAPH);
     }
@@ -69,8 +71,8 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     @Override
     public KnowledgeGraph exec(KnowledgeGraph graph) {
         int concurrency = parallelEnabled ? maxConcurrent : 1;
-        log.info("=== Stage 1b: Visual Design (parallel={}, concurrency={}) ===",
-                parallelEnabled, concurrency);
+        log.info("=== Stage 1b: Visual Design (output_target={}, parallel={}, concurrency={}) ===",
+                outputTarget, parallelEnabled, concurrency);
         toolCalls.set(0);
         globalColorPalette.clear();
         aiCallLimiter = new ConcurrencyUtils.AsyncLimiter(concurrency);
@@ -82,7 +84,8 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         this.conversationContext = new NodeConversationContext(maxInputTokens);
         this.conversationContext.setSystemMessage(VisualDesignPrompts.systemPrompt(
                 workflowTarget,
-                TargetDescriptionBuilder.build(graph, null)));
+                TargetDescriptionBuilder.build(graph, null),
+                outputTarget));
 
         try {
             return designGraph(graph);
@@ -191,7 +194,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     private String buildPrerequisiteSpecContext(KnowledgeNode node) {
         List<KnowledgeNode> prerequisites = getNearestPrerequisites(node);
         if (prerequisites.isEmpty()) {
-            return "This is a foundation step. Keep the scene concrete, intuitive, and reusable later.";
+            return "This is a foundation step. Keep the visual state concrete, intuitive, and reusable later.";
         }
 
         StringBuilder sb = new StringBuilder();
@@ -213,7 +216,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                 sb.append("  Motion: ").append(prerequisiteSpec.get("motion_plan")).append("\n");
             }
         }
-        sb.append("Reuse motifs from these prerequisites so the full animation feels like one system.");
+        sb.append("Reuse motifs from these prerequisites so the full presentation feels like one system.");
         return sb.toString();
     }
 
@@ -236,12 +239,13 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
 
     private String buildGlobalStyleGuide(KnowledgeGraph graph) {
         return String.format(
-                "Treat every scene as part of one coherent animation about %s. "
+                "Treat every step as part of one coherent visual presentation about %s for the %s backend. "
                 + "Start with concrete, approachable visuals for foundational ideas, then "
                 + "gradually increase abstraction toward the final teaching step. "
-                + "Keep layout grammar, motion rhythm, recurring shapes, and overall palette "
+                + "Keep layout grammar, state-transition rhythm, recurring shapes, and overall palette "
                 + "consistent across all nodes.",
-                graph.getTargetConcept()
+                graph.getTargetConcept(),
+                outputTarget
         );
     }
 
@@ -252,6 +256,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     private String buildCurrentStepPrompt(KnowledgeNode node) {
         StringBuilder sb = new StringBuilder();
         sb.append("Current step:\n");
+        sb.append("- Output target: ").append(outputTarget).append("\n");
         sb.append("- Step: ").append(node.getStep()).append("\n");
         if (node.getEquations() != null && !node.getEquations().isEmpty()) {
             sb.append("Equations:\n");
@@ -278,6 +283,8 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         }
         sb.append("Design the visuals for this current step only, while staying consistent with"
                 + " the full problem and solution path.\n");
+        sb.append("Keep the plan backend-neutral where possible, but make it practical for the ")
+                .append(outputTarget).append(" output target.\n");
         return sb.toString().trim();
     }
 

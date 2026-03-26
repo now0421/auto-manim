@@ -8,8 +8,8 @@ import com.automanim.model.Narrative.Storyboard;
 public final class NarrativePrompts {
 
     private static final String SYSTEM =
-            "You are a STEM narrative designer writing a structured storyboard for a Manim animation.\n"
-                    + "Write a scene-by-scene storyboard that functions as an animation script rather than a written solution.\n"
+            "You are a STEM narrative designer writing a structured storyboard for a math teaching visualization.\n"
+                    + "Write a scene-by-scene storyboard that functions as a visual presentation plan rather than a written solution.\n"
                     + "Begin with a clear hook, introduce foundations before advanced content, and keep the storyboard continuity-safe.\n"
                     + "\n"
                     + "Layout rules:\n"
@@ -35,11 +35,11 @@ public final class NarrativePrompts {
                     + "Output format:\n"
                     + "Return a JSON object with this shape:\n"
                     + "{\n"
-                    + "  \"hook\": \"string, opening hook that creates curiosity and frames the animation\",\n"
+                    + "  \"hook\": \"string, opening hook that creates curiosity and frames the visualization\",\n"
                     + "  \"summary\": \"string, short overview of the full storyboard arc and teaching intent\",\n"
                     + "  \"continuity_plan\": \"string, how object identities, anchors, and layout stay stable across scenes\",\n"
                     + "  \"global_visual_rules\": [\n"
-                    + "    \"string, global staging rule that should hold across the whole animation\"\n"
+                    + "    \"string, global staging rule that should hold across the whole presentation\"\n"
                     + "  ],\n"
                     + "  \"scenes\": [\n"
                     + "    {\n"
@@ -83,11 +83,11 @@ public final class NarrativePrompts {
                     + "          \"targets\": [\n"
                     + "            \"string, object id mainly affected by the action\"\n"
                     + "          ],\n"
-                    + "          \"description\": \"string, precise animation intent and visible change\"\n"
+                    + "          \"description\": \"string, precise visual action intent and visible change\"\n"
                     + "        }\n"
                     + "      ],\n"
                     + "      \"notes_for_codegen\": [\n"
-                    + "        \"string, implementation hint that helps Manim code generation preserve intent\"\n"
+                    + "        \"string, implementation hint that helps downstream generation preserve intent\"\n"
                     + "      ]\n"
                     + "    }\n"
                     + "  ]\n"
@@ -151,14 +151,22 @@ public final class NarrativePrompts {
 
     private NarrativePrompts() {}
 
-    public static String systemPrompt(String targetConcept, String targetDescription) {
-        return SystemPrompts.ensureManimStyleReference(SystemPrompts.buildWorkflowPrefix(
+    public static String systemPrompt(String targetConcept,
+                                      String targetDescription,
+                                      String outputTarget) {
+        String prompt = SystemPrompts.buildWorkflowPrefix(
                 "Stage 1c / Narrative Composition",
                 "Storyboard composition",
                 targetConcept,
                 targetDescription,
                 true
-        ) + SYSTEM);
+        ) + "Output target backend: " + outputTarget + ".\n"
+                + "Keep the storyboard reusable, but make it practical for this backend.\n\n"
+                + SYSTEM;
+        if ("manim".equalsIgnoreCase(outputTarget)) {
+            return SystemPrompts.ensureManimStyleReference(prompt);
+        }
+        return prompt;
     }
 
     public static String conceptUserPrompt(String targetConcept, String stepContext) {
@@ -172,7 +180,7 @@ public final class NarrativePrompts {
                                            int targetSceneCount) {
         return String.format(
                 "Math problem to solve: %s\n\nOrdered solution-step graph context:\n%s\n\n"
-                        + "Write the animation as a structured problem-solving storyboard, not as a plain written solution.\n"
+                        + "Write the visualization as a structured problem-solving storyboard, not as a plain written solution.\n"
                         + "Start by establishing the problem situation, then move through the key solving beats in order.\n"
                         + "Target about %d scenes total, but merge nodes whenever that improves focus and continuity.\n"
                         + "Return storyboard JSON only.",
