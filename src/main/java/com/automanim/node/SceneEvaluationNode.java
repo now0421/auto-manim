@@ -52,6 +52,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     private static final double SPATIAL_BUCKET_SIZE = 1.25;
     private static final double GEOMETRIC_TOUCH_TOLERANCE = 0.12;
     private static final double GEOMETRIC_ENDPOINT_TOLERANCE = 0.18;
+    private static final double LINE_TEXT_INTERSECTION_TOLERANCE = 0.03;
     private static final int DEFAULT_MAX_FIX_ATTEMPTS = 2;
     private static final int MAX_FIX_REPORT_SAMPLES = 12;
     private static final int MAX_ISSUES_PER_SAMPLE_IN_FIX_REPORT = 6;
@@ -589,6 +590,10 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                                 text.displayName(), other.displayName()),
                         "ignore_or_adjust_label_buffer");
             }
+            if (other.isLineLike() && !lineIntersectsBounds(other, text.min, text.max,
+                    LINE_TEXT_INTERSECTION_TOLERANCE)) {
+                return ignoredDisposition();
+            }
             return blockingDisposition(
                     "TEXT_GEOMETRY_OVERLAP",
                     String.format("Text element %s overlaps geometry element %s",
@@ -608,12 +613,26 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             return ignoredDisposition();
         }
 
-        if (isLineLineSharedEndpoint(left, right) || isLineLineNearCollinear(left, right, overlap)) {
+        if (isPointLinePair(left, right)) {
+            return ignoredDisposition();
+        }
+
+        if (left.isLineLike() && right.isLineLike()) {
+            if (!linesActuallyInteract(left, right)) {
+                return ignoredDisposition();
+            }
+            if (isLineLineSharedEndpoint(left, right) || isLineLineNearCollinear(left, right, overlap)) {
+                return infoDisposition(
+                        "GEOMETRIC_LINE_CONTACT",
+                        String.format("Lines %s and %s make geometric contact that is acceptable in a proof scene",
+                                left.displayName(), right.displayName()),
+                        "ignore_unless_textual_occlusion");
+            }
             return infoDisposition(
-                    "GEOMETRIC_LINE_CONTACT",
-                    String.format("Lines %s and %s make geometric contact that is acceptable in a proof scene",
+                    "GEOMETRIC_LINE_INTERSECTION",
+                    String.format("Lines %s and %s intersect as part of the construction",
                             left.displayName(), right.displayName()),
-                    "ignore_unless_textual_occlusion");
+                    "keep_if_readable");
         }
 
         if (sameSemanticFamily(left, right)) {
@@ -658,6 +677,10 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
     private OverlapDisposition ignoredDisposition() {
         return new OverlapDisposition(true, "info", "IGNORED_GEOMETRIC_CONTACT", true, "ignore", null);
+    }
+
+    private boolean isPointLinePair(ElementGeometry left, ElementGeometry right) {
+        return (left.isPointLike() && right.isLineLike()) || (right.isPointLike() && left.isLineLike());
     }
 
     private boolean isPointLineContact(ElementGeometry left, ElementGeometry right) {
@@ -710,6 +733,20 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         boolean largeThinOverlap = overlap.area >= 0.15 && (left.height <= 0.25 || left.width <= 0.25
                 || right.height <= 0.25 || right.width <= 0.25);
         return nearlyParallel && largeThinOverlap;
+    }
+
+    private boolean linesActuallyInteract(ElementGeometry left, ElementGeometry right) {
+        if (!left.isLineLike() || !right.isLineLike() || left.start == null || left.end == null
+                || right.start == null || right.end == null) {
+            return false;
+        }
+        if (segmentsIntersect(left.start, left.end, right.start, right.end, GEOMETRIC_TOUCH_TOLERANCE)) {
+            return true;
+        }
+        return distancePointToSegment(left.start, right.start, right.end) <= GEOMETRIC_TOUCH_TOLERANCE
+                || distancePointToSegment(left.end, right.start, right.end) <= GEOMETRIC_TOUCH_TOLERANCE
+                || distancePointToSegment(right.start, left.start, left.end) <= GEOMETRIC_TOUCH_TOLERANCE
+                || distancePointToSegment(right.end, left.start, left.end) <= GEOMETRIC_TOUCH_TOLERANCE;
     }
 
     private boolean isOptimalPointAlignment(ElementGeometry left, ElementGeometry right) {
@@ -785,6 +822,74 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
     private boolean isPointOnSegment(double[] point, double[] start, double[] end, double tolerance) {
         return distancePointToSegment(point, start, end) <= tolerance;
+    }
+
+    private boolean lineIntersectsBounds(ElementGeometry line,
+                                         double[] boundsMin,
+                                         double[] boundsMax,
+                                         double tolerance) {
+        if (line == null || line.start == null || line.end == null || boundsMin == null || boundsMax == null) {
+            return false;
+        }
+        if (pointInsideBounds(line.start, boundsMin, boundsMax, tolerance)
+                || pointInsideBounds(line.end, boundsMin, boundsMax, tolerance)) {
+            return true;
+        }
+        double[] bottomLeft = new double[] {boundsMin[0], boundsMin[1], 0.0};
+        double[] bottomRight = new double[] {boundsMax[0], boundsMin[1], 0.0};
+        double[] topLeft = new double[] {boundsMin[0], boundsMax[1], 0.0};
+        double[] topRight = new double[] {boundsMax[0], boundsMax[1], 0.0};
+        return segmentsIntersect(line.start, line.end, bottomLeft, bottomRight, tolerance)
+                || segmentsIntersect(line.start, line.end, bottomRight, topRight, tolerance)
+                || segmentsIntersect(line.start, line.end, topRight, topLeft, tolerance)
+                || segmentsIntersect(line.start, line.end, topLeft, bottomLeft, tolerance);
+    }
+
+    private boolean pointInsideBounds(double[] point, double[] boundsMin, double[] boundsMax, double tolerance) {
+        if (point == null || boundsMin == null || boundsMax == null) {
+            return false;
+        }
+        return point[0] >= boundsMin[0] - tolerance && point[0] <= boundsMax[0] + tolerance
+                && point[1] >= boundsMin[1] - tolerance && point[1] <= boundsMax[1] + tolerance;
+    }
+
+    private boolean segmentsIntersect(double[] a1,
+                                      double[] a2,
+                                      double[] b1,
+                                      double[] b2,
+                                      double tolerance) {
+        if (a1 == null || a2 == null || b1 == null || b2 == null) {
+            return false;
+        }
+        double o1 = orientation(a1, a2, b1);
+        double o2 = orientation(a1, a2, b2);
+        double o3 = orientation(b1, b2, a1);
+        double o4 = orientation(b1, b2, a2);
+
+        if ((o1 > tolerance && o2 < -tolerance || o1 < -tolerance && o2 > tolerance)
+                && (o3 > tolerance && o4 < -tolerance || o3 < -tolerance && o4 > tolerance)) {
+            return true;
+        }
+
+        return isPointOnSegmentWithOrientation(b1, a1, a2, o1, tolerance)
+                || isPointOnSegmentWithOrientation(b2, a1, a2, o2, tolerance)
+                || isPointOnSegmentWithOrientation(a1, b1, b2, o3, tolerance)
+                || isPointOnSegmentWithOrientation(a2, b1, b2, o4, tolerance);
+    }
+
+    private boolean isPointOnSegmentWithOrientation(double[] point,
+                                                    double[] start,
+                                                    double[] end,
+                                                    double orientation,
+                                                    double tolerance) {
+        return Math.abs(orientation) <= tolerance && pointInsideBounds(point,
+                new double[] {Math.min(start[0], end[0]), Math.min(start[1], end[1]), 0.0},
+                new double[] {Math.max(start[0], end[0]), Math.max(start[1], end[1]), 0.0},
+                tolerance);
+    }
+
+    private double orientation(double[] a, double[] b, double[] c) {
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
     }
 
     private double distancePointToSegment(double[] point, double[] start, double[] end) {
@@ -876,14 +981,15 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
     private String buildIssueSummary(SceneEvaluationResult result) {
         StringBuilder sb = new StringBuilder();
+        int advisoryIssues = Math.max(result.getTotalIssueCount() - result.getBlockingIssueCount(), 0);
         sb.append(String.format(
-                "Scene evaluation found %d issues across %d/%d samples (%d blocking, %d overlap, %d offscreen).",
-                result.getTotalIssueCount(),
+                "Scene evaluation found %d blocking issues across %d/%d samples (%d overlap, %d offscreen, %d advisory observations).",
+                result.getBlockingIssueCount(),
                 result.getIssueSampleCount(),
                 result.getSampleCount(),
-                result.getBlockingIssueCount(),
                 result.getOverlapIssueCount(),
-                result.getOffscreenIssueCount()));
+                result.getOffscreenIssueCount(),
+                advisoryIssues));
 
         int listedSamples = 0;
         for (SampleEvaluation sample : result.getSamples()) {
@@ -899,9 +1005,23 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             if (sample.getSourceCode() != null && !sample.getSourceCode().isBlank()) {
                 sb.append(": ").append(sample.getSourceCode());
             }
-            for (int i = 0; i < Math.min(sample.getIssues().size(), 3); i++) {
+            int listedIssues = 0;
+            for (int i = 0; i < sample.getIssues().size(); i++) {
                 LayoutIssue issue = sample.getIssues().get(i);
+                if (!"blocking".equalsIgnoreCase(issue.getSeverity())) {
+                    continue;
+                }
                 sb.append("\n  * [").append(issue.getSeverity()).append("] ").append(issue.getMessage());
+                listedIssues++;
+                if (listedIssues >= 3) {
+                    break;
+                }
+            }
+            if (listedIssues == 0) {
+                for (int i = 0; i < Math.min(sample.getIssues().size(), 1); i++) {
+                    LayoutIssue issue = sample.getIssues().get(i);
+                    sb.append("\n  * [").append(issue.getSeverity()).append("] ").append(issue.getMessage());
+                }
             }
             if (listedSamples >= MAX_FIX_REPORT_SAMPLES) {
                 break;

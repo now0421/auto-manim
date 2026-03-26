@@ -12,6 +12,10 @@
         </encoder>
     </appender>
 
+    <logger name="com.automanim.ai.trace" level="DEBUG" additivity="false">
+        <appender-ref ref="FILE"/>
+    </logger>
+
     <logger name="com.automanim" level="DEBUG"/>
 
     <root level="INFO">

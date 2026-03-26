@@ -28,7 +28,9 @@ import java.util.concurrent.CompletionException;
 public class GeminiAiClient implements AiClient {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiAiClient.class);
+    private static final Logger traceLog = LoggerFactory.getLogger("com.automanim.ai.trace");
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static final int MAX_LOG_CHARS = 12000;
 
     private final String apiKey;
     private final ModelConfig modelConfig;
@@ -170,8 +172,12 @@ public class GeminiAiClient implements AiClient {
                 .build();
 
         log.debug("Gemini request: model={}", modelConfig.getModel());
+        traceLog.debug("Gemini request body: model={}, url={}\n{}",
+                modelConfig.getModel(), url, abbreviateForLog(body.toPrettyString()));
         return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
+                    traceLog.debug("Gemini raw response: http={}, body=\n{}",
+                            response.statusCode(), abbreviateForLog(response.body()));
                     if (response.statusCode() != 200) {
                         throw new CompletionException(new RuntimeException(
                                 "Gemini API returned HTTP " + response.statusCode()
@@ -217,5 +223,16 @@ public class GeminiAiClient implements AiClient {
         ObjectNode message = choice.putObject("message");
         message.put("content", text);
         return fake;
+    }
+
+    private String abbreviateForLog(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= MAX_LOG_CHARS) {
+            return text;
+        }
+        return text.substring(0, MAX_LOG_CHARS)
+                + "\n... [truncated " + (text.length() - MAX_LOG_CHARS) + " chars]";
     }
 }
