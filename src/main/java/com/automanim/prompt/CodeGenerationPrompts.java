@@ -24,6 +24,9 @@ public final class CodeGenerationPrompts {
                     + "- For angle markers or equal-angle arcs, prefer `Angle(...)` built from two lines/rays sharing the true vertex instead of hand-written `Arc(start_angle=..., angle=...)` formulas.\n"
                     + "- When an angle is measured against a normal, helper line, or moving segment, construct both rays from the shared point and keep the angle marker attached with `always_redraw(...)`.\n"
                     + "- If the storyboard intends the interior/smaller angle, keep that side stable as points move; do not place a free-floating arc by shifting/rotating it near the vertex.\n"
+                    + "- Treat storyboard `geometry_constraints` and object `constraint_note` fields as hard mathematical invariants.\n"
+                    + "- For reflected points, intersections, midpoints, feet of perpendiculars, equal-radius points, or similar derived geometry, compute them from source objects instead of assigning unrelated replacement coordinates.\n"
+                    + "- If content would overflow, prefer translating or uniformly scaling the whole constrained construction, or moving overlays away from it, rather than breaking the defining geometry.\n"
                     + "\n"
                     + "How to interpret the storyboard fields:\n"
                     + "- `continuity_plan` and `global_visual_rules` define global constraints that should shape the whole file.\n"
@@ -36,6 +39,8 @@ public final class CodeGenerationPrompts {
                     + "- `entering_objects[].behavior = derived` means the object depends on other moving geometry and must update whenever those dependencies move.\n"
                     + "- `entering_objects[].behavior = fixed_overlay` means keep it fixed in screen space when appropriate.\n"
                     + "- `dependency_note` gives concrete attachment or update intent and overrides vague defaults.\n"
+                    + "- `geometry_constraints` lists scene-level geometric invariants that must remain true after any layout adjustment.\n"
+                    + "- `constraint_note` gives object-level geometric meaning and should guide derived-coordinate construction.\n"
                     + "- `notes_for_codegen` are implementation hints and should be followed unless they conflict with Manim correctness.\n"
                     + "- `step_refs`, `title`, and `narration` explain the teaching purpose of the beat and should help you choose clear animation structure.\n"
                     + "\n"
@@ -116,17 +121,31 @@ public final class CodeGenerationPrompts {
     public static String validationFixUserPrompt(String sceneName,
                                                  String manimCode,
                                                  List<String> violations) {
+        return validationFixUserPrompt(sceneName, manimCode, violations, null);
+    }
+
+    public static String validationFixUserPrompt(String sceneName,
+                                                 String manimCode,
+                                                 List<String> violations,
+                                                 String storyboardJson) {
         String problemList = (violations == null || violations.isEmpty())
                 ? "- Validation failed for an unspecified reason."
                 : "- " + String.join("\n- ", violations);
+        String storyboardBlock = (storyboardJson == null || storyboardJson.isBlank())
+                ? ""
+                : "Compact storyboard JSON (source of truth):\n```json\n"
+                + storyboardJson
+                + "\n```\n\n";
         return String.format(
                 "The generated Manim code failed validation checks.\n\n"
+                        + "%s"
                         + "Required scene class name: %s\n\n"
                         + "Current code:\n```python\n%s\n```\n\n"
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL code so it satisfies all validation rules while preserving the teaching goal.\n"
+                        + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
                         + "Keep `%s` as the exact scene class name, use ASCII-only Python identifiers, and also fix nearby Python/Manim mistakes.\n"
                         + "Return ONLY the full Python code block.",
-                sceneName, manimCode, problemList, sceneName);
+                storyboardBlock, sceneName, manimCode, problemList, sceneName);
     }
 }

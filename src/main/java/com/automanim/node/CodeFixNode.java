@@ -223,7 +223,8 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             return CodeGenerationPrompts.validationFixUserPrompt(
                     firstNonBlank(request.getExpectedSceneName(), request.getSceneName(), "MainScene"),
                     request.getCode(),
-                    splitValidationProblems(request.getErrorReason())
+                    splitValidationProblems(request.getErrorReason()),
+                    defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}")
             );
         }
         if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
@@ -238,6 +239,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         return RenderFixPrompts.userPrompt(
                 request.getCode(),
                 firstNonBlank(request.getErrorReason(), "Unknown render failure"),
+                defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}"),
                 request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
         );
     }

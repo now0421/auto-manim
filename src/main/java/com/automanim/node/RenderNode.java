@@ -6,10 +6,12 @@ import com.automanim.model.CodeFixRequest;
 import com.automanim.model.CodeFixResult;
 import com.automanim.model.CodeFixSource;
 import com.automanim.model.CodeResult;
+import com.automanim.model.Narrative;
 import com.automanim.model.RenderResult;
 import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.node.support.FixRetryState;
+import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.service.ManimRendererService;
@@ -49,6 +51,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
     public static class RenderInput {
         private final CodeResult codeResult;
         private final CodeEvaluationResult codeEvaluationResult;
+        private final Narrative narrative;
         private final WorkflowConfig config;
         private final Path outputDir;
         private final CodeFixResult previousFixResult;
@@ -56,12 +59,14 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
         public RenderInput(CodeResult codeResult,
                            CodeEvaluationResult codeEvaluationResult,
+                           Narrative narrative,
                            WorkflowConfig config,
                            Path outputDir,
                            CodeFixResult previousFixResult,
                            RenderRetryState retryState) {
             this.codeResult = codeResult;
             this.codeEvaluationResult = codeEvaluationResult;
+            this.narrative = narrative;
             this.config = config;
             this.outputDir = outputDir;
             this.previousFixResult = previousFixResult;
@@ -70,6 +75,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
         public CodeResult codeResult() { return codeResult; }
         public CodeEvaluationResult codeEvaluationResult() { return codeEvaluationResult; }
+        public Narrative narrative() { return narrative; }
         public WorkflowConfig config() { return config; }
         public Path outputDir() { return outputDir; }
         public CodeFixResult previousFixResult() { return previousFixResult; }
@@ -99,10 +105,11 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         CodeEvaluationResult codeEvaluationResult =
                 (CodeEvaluationResult) ctx.get(WorkflowKeys.CODE_EVALUATION_RESULT);
+        Narrative narrative = (Narrative) ctx.get(WorkflowKeys.NARRATIVE);
         WorkflowConfig config = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         Path outputDir = (Path) ctx.get(WorkflowKeys.OUTPUT_DIR);
         deleteStaleSceneEvaluationArtifact(outputDir);
-        return new RenderInput(codeResult, codeEvaluationResult, config, outputDir, previousFixResult, retryState);
+        return new RenderInput(codeResult, codeEvaluationResult, narrative, config, outputDir, previousFixResult, retryState);
     }
 
     @Override
@@ -237,6 +244,9 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         request.setTargetDescription(codeResult.getTargetDescription());
         request.setSceneName(codeResult.getSceneName());
         request.setExpectedSceneName(CodeUtils.EXPECTED_SCENE_NAME);
+        request.setStoryboardJson(input.narrative() != null && input.narrative().hasStoryboard()
+                ? StoryboardJsonBuilder.buildForCodegen(input.narrative().getStoryboard())
+                : "{\"scenes\":[]}");
         request.setFixHistory(new ArrayList<>(retryState.fixHistory));
         return request;
     }

@@ -12,6 +12,7 @@ public final class CodeEvaluationPrompts {
                     + "\n"
                     + "The storyboard JSON is the source of truth.\n"
                     + "- Compare the code against storyboard continuity, safe-area intent, layout goals, and scene pacing.\n"
+                    + "- Compare the code against storyboard geometric invariants as well: reflection, symmetry, collinearity, intersections, equal-length constructions, and similar relationships must survive layout choices.\n"
                     + "- A later geometry-based stage will inspect rendered frames for actual overlap/offscreen issues. Do not duplicate that stage.\n"
                     + "- For 3D scenes, judge projected readability, camera clarity, and fixed-in-frame overlays.\n"
                     + "- Penalize semantically wrong placements such as angle arcs on the wrong side, labels attached to the wrong point or segment, braces spanning the wrong expression, or highlights pointing at the wrong target.\n"
@@ -70,6 +71,7 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full code so it is visually safer before render.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
                     + "For angle markers, replace brittle hand-built arc geometry with `Angle(...)` or another vertex-anchored construction whenever possible.\n"
+                    + "Preserve storyboard geometric invariants. If layout is unsafe, prefer moving/scaling whole constrained groups or recomputing derived points from source geometry, not editing derived coordinates independently.\n"
                     + "\n"
                     + "Output format:\n"
                     + "Return exactly one fenced Python code block containing the full corrected file.\n"
@@ -138,6 +140,7 @@ public final class CodeEvaluationPrompts {
                         + "Structured code review:\n```json\n%s\n```\n\n"
                         + "Current Manim code:\n```python\n%s\n```\n\n"
                         + "Rewrite the FULL code to reduce clutter, preserve continuity, correct semantically wrong placements such as angle arcs or labels attached to the wrong geometry, better match pacing to narration, and keep 3D overlays readable.\n"
+                        + "Preserve any storyboard geometric invariants such as symmetry, reflection, collinearity, and intersection definitions while making layout safer.\n"
                         + "Also fix nearby Python/Manim runtime mistakes. Preserve the scene class name and teaching goal.\n"
                         + "Return ONLY the full Python code block.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, reviewJson, manimCode);

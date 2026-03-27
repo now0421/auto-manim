@@ -363,6 +363,9 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                         ? "Keep titles and formulas visually separate if they must stay readable during viewpoint changes."
                         : "No separate overlay needed.");
             }
+            if (scene.getGeometryConstraints() == null) {
+                scene.setGeometryConstraints(new ArrayList<>());
+            }
             if (scene.getStepRefs() == null) {
                 scene.setStepRefs(new ArrayList<>());
             }
@@ -396,6 +399,9 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                 }
                 if (object.getContent() == null || object.getContent().isBlank()) {
                     object.setContent(object.getId());
+                }
+                if (object.getConstraintNote() == null) {
+                    object.setConstraintNote("");
                 }
                 normalizedObjects.add(object);
             }

@@ -61,6 +61,7 @@ public final class StoryboardJsonBuilder {
         putNonBlank(sceneNode, "camera_plan", scene.getCameraPlan());
         putNonBlank(sceneNode, "safe_area_plan", scene.getSafeAreaPlan());
         putNonBlank(sceneNode, "screen_overlay_plan", scene.getScreenOverlayPlan());
+        putTrimmedStringArray(sceneNode, "geometry_constraints", scene.getGeometryConstraints());
         putTrimmedStringArray(sceneNode, "step_refs", scene.getStepRefs());
 
         addEnteringObjects(sceneNode, scene.getEnteringObjects());
@@ -90,6 +91,7 @@ public final class StoryboardJsonBuilder {
             putNonBlank(objectNode, "behavior", object.getBehavior());
             putNonBlank(objectNode, "anchor_id", object.getAnchorId());
             putNonBlank(objectNode, "dependency_note", object.getDependencyNote());
+            putNonBlank(objectNode, "constraint_note", object.getConstraintNote());
         }
     }
 

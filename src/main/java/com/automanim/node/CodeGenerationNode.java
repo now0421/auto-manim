@@ -11,6 +11,7 @@ import com.automanim.model.WorkflowKeys;
 import com.automanim.node.support.FixRetryState;
 import com.automanim.prompt.CodeGenerationPrompts;
 import com.automanim.prompt.NarrativePrompts;
+import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.prompt.ToolSchemas;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
@@ -243,7 +244,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
         if (input.fixState().isRequestFix()) {
             input.fixState().addCarryoverToolCalls(toolCalls);
-            ctx.put(WorkflowKeys.CODE_FIX_REQUEST, buildValidationFixRequest(codeResult, input.fixState()));
+            ctx.put(WorkflowKeys.CODE_FIX_REQUEST, buildValidationFixRequest(input.narrative(), codeResult, input.fixState()));
             return WorkflowActions.FIX_CODE;
         }
 
@@ -272,7 +273,9 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                 + "\nDo not use Chinese, pinyin, mojibake, or any non-ASCII text in Python identifiers.";
     }
 
-    private CodeFixRequest buildValidationFixRequest(CodeResult codeResult, FixRetryState fixState) {
+    private CodeFixRequest buildValidationFixRequest(Narrative narrative,
+                                                     CodeResult codeResult,
+                                                     FixRetryState fixState) {
         CodeFixRequest request = new CodeFixRequest();
         request.setSource(CodeFixSource.GENERATION_VALIDATION);
         request.setReturnAction(WorkflowActions.RETRY_CODE_GENERATION);
@@ -282,6 +285,9 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         request.setTargetDescription(codeResult.getTargetDescription());
         request.setSceneName(codeResult.getSceneName());
         request.setExpectedSceneName(CodeUtils.EXPECTED_SCENE_NAME);
+        request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
+                ? StoryboardJsonBuilder.buildForCodegen(narrative.getStoryboard())
+                : "{\"scenes\":[]}");
         return request;
     }
 

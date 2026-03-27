@@ -167,6 +167,9 @@ public class Narrative {
         @JsonProperty("screen_overlay_plan")
         private String screenOverlayPlan;
 
+        @JsonProperty("geometry_constraints")
+        private List<String> geometryConstraints = new ArrayList<>();
+
         @JsonProperty("step_refs")
         private List<String> stepRefs = new ArrayList<>();
 
@@ -220,6 +223,11 @@ public class Narrative {
         public String getScreenOverlayPlan() { return screenOverlayPlan; }
         public void setScreenOverlayPlan(String screenOverlayPlan) {
             this.screenOverlayPlan = screenOverlayPlan;
+        }
+
+        public List<String> getGeometryConstraints() { return geometryConstraints; }
+        public void setGeometryConstraints(List<String> geometryConstraints) {
+            this.geometryConstraints = geometryConstraints;
         }
 
         public List<String> getStepRefs() { return stepRefs; }
@@ -282,6 +290,9 @@ public class Narrative {
         @JsonProperty("dependency_note")
         private String dependencyNote;
 
+        @JsonProperty("constraint_note")
+        private String constraintNote;
+
         public StoryboardObject() {}
 
         public String getId() { return id; }
@@ -310,6 +321,9 @@ public class Narrative {
 
         public String getDependencyNote() { return dependencyNote; }
         public void setDependencyNote(String dependencyNote) { this.dependencyNote = dependencyNote; }
+
+        public String getConstraintNote() { return constraintNote; }
+        public void setConstraintNote(String constraintNote) { this.constraintNote = constraintNote; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

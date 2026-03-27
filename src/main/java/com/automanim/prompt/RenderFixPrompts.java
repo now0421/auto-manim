@@ -15,6 +15,7 @@ public final class RenderFixPrompts {
                     + "Use ASCII-only identifiers, fix the reported root cause systematically, and also correct nearby Python/Manim runtime mistakes.\n"
                     + "Do not store mobjects across scene methods via `self`, do not hardcode MathTex numeric indexing, and keep layout inside x[-7,7], y[-4,4].\n"
                     + "If the code contains geometric angle markers, prefer vertex-anchored `Angle(...)` constructions over manually tuned `Arc(...)` start-angle math.\n"
+                    + "Do not break mathematical construction constraints while fixing render issues; derived points should remain derived from their source geometry.\n"
                     + "\n"
                     + "Output format:\n"
                     + "Return exactly one fenced Python code block containing the full corrected file.\n"
@@ -43,15 +44,27 @@ public final class RenderFixPrompts {
     }
 
     public static String userPrompt(String code, String error) {
-        return userPrompt(code, error, Collections.emptyList());
+        return userPrompt(code, error, null, Collections.emptyList());
     }
 
     public static String userPrompt(String code, String error, List<String> fixHistory) {
+        return userPrompt(code, error, null, fixHistory);
+    }
+
+    public static String userPrompt(String code,
+                                    String error,
+                                    String storyboardJson,
+                                    List<String> fixHistory) {
         StringBuilder sb = new StringBuilder();
         sb.append("The following Manim code failed to render:\n\n")
+                .append(storyboardJson != null && !storyboardJson.isBlank()
+                        ? "Compact storyboard JSON (source of truth):\n```json\n"
+                        + storyboardJson + "\n```\n\n"
+                        : "")
                 .append("```python\n").append(code).append("\n```\n\n")
                 .append("Error output:\n```\n").append(error).append("\n```\n\n")
                 .append("Please fix the reported error and also inspect nearby and structurally similar code paths for the same root cause.\n")
+                .append("If the storyboard encodes geometric constraints or derived constructions, preserve them while fixing the render failure.\n")
                 .append("Also proactively check for common Python and Manim runtime mistakes.\n")
                 .append("Remember: Return ONLY the single Python code block containing the full file. No explanation.\n");
 

@@ -12,6 +12,8 @@ public final class SceneEvaluationPrompts {
                     + "Preserve the teaching goal, visual intent, scene class name, and continuity.\n"
                     + "Prefer adjusting positioning, scaling, grouping, and spacing over deleting explanatory content.\n"
                     + "Also correct semantically wrong geometric attachments you notice, especially angle markers that are drawn on the wrong side or detached from their true vertex.\n"
+                    + "Treat storyboard geometric constraints as hard requirements: if a point is defined as a reflection, midpoint, foot, or intersection, preserve that definition while fixing layout.\n"
+                    + "When a constrained construction goes out of frame, prefer recentering or uniformly scaling the whole related diagram, or moving overlays, instead of moving one constrained point independently.\n"
                     + "\n"
                     + "Output format:\n"
                     + "Return exactly one fenced Python code block containing the full corrected file.\n"
@@ -54,6 +56,7 @@ public final class SceneEvaluationPrompts {
                 .append("Scene evaluation report excerpt:\n```json\n").append(sceneEvaluationJson).append("\n```\n\n")
                 .append("Please fix the code so the reported sampled frames no longer have elements overlapping or going outside the frame.\n")
                 .append("Preserve the intended teaching flow and animation meaning.\n")
+                .append("Preserve geometric invariants from the storyboard; do not fix offscreen issues by breaking reflections, symmetry, intersections, equal distances, or other defining constructions.\n")
                 .append("Also proactively check for common Python and Manim runtime mistakes.\n")
                 .append("Remember: Return ONLY the single Python code block containing the full file. No explanation.\n");
 
