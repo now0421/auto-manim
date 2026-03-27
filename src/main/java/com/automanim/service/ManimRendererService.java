@@ -27,6 +27,7 @@ public class ManimRendererService {
 
     private static final Logger log = LoggerFactory.getLogger(ManimRendererService.class);
     private static final long RENDER_TIMEOUT_MINUTES = 10;
+    private static final String MANIM_EXECUTABLE_ENV = "AUTOMANIM_MANIM_EXECUTABLE";
     private static final String GENERATED_SCENE_FILE = "scene_render.py";
     private static final String GEOMETRY_EXPORT_HELPER_FILE = "automanim_geometry_export.py";
     private static final String GEOMETRY_EXPORT_OUTPUT_FILE = "5_mobject_geometry.json";
@@ -97,6 +98,7 @@ public class ManimRendererService {
 
             List<String> cmd = buildManimCommand(codeFile, sceneName, quality, normalizedOutputDir);
             log.info("Rendering: manim {} (quality={})", sceneName, quality);
+            log.debug("Render command: {}", String.join(" ", cmd));
 
             Process process = startProcess(cmd, normalizedOutputDir,
                     geometryHelperFile != null ? geometryOutputFile : null);
@@ -181,8 +183,7 @@ public class ManimRendererService {
     }
 
     private List<String> buildManimCommand(Path codeFile, String sceneName, String quality, Path outputDir) {
-        List<String> cmd = new ArrayList<>();
-        cmd.add("manim");
+        List<String> cmd = new ArrayList<>(resolveManimLauncherPrefix());
         cmd.add("render");
 
         switch (quality) {
@@ -204,6 +205,50 @@ public class ManimRendererService {
         cmd.add(sceneName);
 
         return cmd;
+    }
+
+    protected List<String> resolveManimLauncherPrefix() {
+        String configuredExecutable = resolveConfiguredManimExecutable();
+        if (configuredExecutable != null) {
+            return wrapWindowsScriptIfNeeded(configuredExecutable);
+        }
+        if (isWindows()) {
+            List<String> cmd = new ArrayList<>();
+            cmd.add("cmd.exe");
+            cmd.add("/c");
+            cmd.add("manim");
+            return cmd;
+        }
+        return List.of("manim");
+    }
+
+    protected String resolveConfiguredManimExecutable() {
+        String configured = System.getenv(MANIM_EXECUTABLE_ENV);
+        if (configured == null) {
+            return null;
+        }
+        String trimmed = configured.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    protected boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    private List<String> wrapWindowsScriptIfNeeded(String executable) {
+        if (isWindows() && isWindowsScript(executable)) {
+            List<String> cmd = new ArrayList<>();
+            cmd.add("cmd.exe");
+            cmd.add("/c");
+            cmd.add(executable);
+            return cmd;
+        }
+        return List.of(executable);
+    }
+
+    private boolean isWindowsScript(String executable) {
+        String normalized = executable.toLowerCase();
+        return normalized.endsWith(".cmd") || normalized.endsWith(".bat");
     }
 
     private String instrumentCodeWithGeometryExport(String code, String sceneName) {

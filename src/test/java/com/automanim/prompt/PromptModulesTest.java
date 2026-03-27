@@ -38,8 +38,8 @@ class PromptModulesTest {
 
     @Test
     void promptsMentionThreeDPlanningAndOverlayRules() {
-        String visualPrompt = VisualDesignPrompts.systemPrompt("Vector Field", "3D demo");
-        String narrativePrompt = NarrativePrompts.systemPrompt("Vector Field", "3D demo");
+        String visualPrompt = VisualDesignPrompts.systemPrompt("Vector Field", "3D demo", "manim");
+        String narrativePrompt = NarrativePrompts.systemPrompt("Vector Field", "3D demo", "manim");
         String codegenPrompt = NarrativePrompts.storyboardCodegenPrompt(
                 "Vector Field",
                 "{\"scenes\":[{\"scene_mode\":\"3d\",\"camera_plan\":\"orbit\",\"screen_overlay_plan\":\"Keep title fixed\"}]}");
