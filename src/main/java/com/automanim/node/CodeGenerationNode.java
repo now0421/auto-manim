@@ -335,84 +335,52 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
     private String normalizeGeneratedCode(String code) {
         return isGeoGebraTarget()
-                ? normalizeGeneratedGeoGebraCode(code)
-                : normalizeGeneratedManimCode(code);
+                ? GeoGebraCodeUtils.extractCode(code)
+                : ManimCodeUtils.enforceMainSceneName(code);
     }
 
     private List<String> validateGeneratedCode(String code) {
         return isGeoGebraTarget()
-                ? validateGeneratedGeoGebraCode(code)
-                : validateGeneratedManimCode(code);
+                ? GeoGebraCodeUtils.validateFull(code)
+                : ManimCodeUtils.validateFull(code);
     }
 
     private boolean shouldRouteValidationFix() {
-        return isGeoGebraTarget()
-                ? shouldRouteGeoGebraValidationFix()
-                : shouldRouteManimValidationFix();
+        return workflowConfig == null
+                || workflowConfig.isManimTarget()
+                || workflowConfig.isGeoGebraTarget();
     }
 
     private String resolveToolSchema() {
-        return workflowConfig != null && workflowConfig.isGeoGebraTarget()
+        return isGeoGebraTarget()
                 ? ToolSchemas.GEOGEBRA_CODE
                 : ToolSchemas.MANIM_CODE;
     }
 
     private String extractCodeFromText(String text) {
         return isGeoGebraTarget()
-                ? extractGeoGebraCodeFromText(text)
-                : extractManimCodeFromText(text);
+                ? GeoGebraCodeUtils.extractCode(text)
+                : ManimCodeUtils.extractCode(text);
     }
 
     private String defaultArtifactName() {
-        return workflowConfig != null && workflowConfig.isGeoGebraTarget()
+        return isGeoGebraTarget()
                 ? "GeoGebraFigure"
                 : ManimCodeUtils.EXPECTED_SCENE_NAME;
     }
 
     private String resolveArtifactFormat() {
-        return workflowConfig != null && workflowConfig.isGeoGebraTarget() ? "commands" : "python";
+        return isGeoGebraTarget() ? "commands" : "python";
     }
 
     private String buildResultDescription(String targetConcept) {
-        return workflowConfig != null && workflowConfig.isGeoGebraTarget()
+        return isGeoGebraTarget()
                 ? "GeoGebra construction for " + targetConcept
                 : "Manim animation for " + targetConcept;
     }
 
     private String resolveOutputTarget() {
         return workflowConfig != null ? workflowConfig.getOutputTarget() : WorkflowConfig.OUTPUT_TARGET_MANIM;
-    }
-
-    private String normalizeGeneratedManimCode(String code) {
-        return ManimCodeUtils.enforceMainSceneName(code);
-    }
-
-    private String normalizeGeneratedGeoGebraCode(String code) {
-        return GeoGebraCodeUtils.extractCode(code);
-    }
-
-    private List<String> validateGeneratedManimCode(String code) {
-        return ManimCodeUtils.validateFull(code);
-    }
-
-    private List<String> validateGeneratedGeoGebraCode(String code) {
-        return GeoGebraCodeUtils.validateFull(code);
-    }
-
-    private boolean shouldRouteManimValidationFix() {
-        return workflowConfig == null || workflowConfig.isManimTarget();
-    }
-
-    private boolean shouldRouteGeoGebraValidationFix() {
-        return workflowConfig != null && workflowConfig.isGeoGebraTarget();
-    }
-
-    private String extractManimCodeFromText(String text) {
-        return ManimCodeUtils.extractCode(text);
-    }
-
-    private String extractGeoGebraCodeFromText(String text) {
-        return GeoGebraCodeUtils.extractCode(text);
     }
 
     private String resolveExpectedArtifactName(CodeResult codeResult) {

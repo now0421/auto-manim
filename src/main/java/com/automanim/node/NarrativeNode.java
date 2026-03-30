@@ -66,22 +66,21 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
 
         String resolvedMode = resolveInputMode(graph);
         boolean problemMode = WorkflowConfig.INPUT_MODE_PROBLEM.equals(resolvedMode);
-        List<KnowledgeNode> ordered = filterNarrativeNodes(graph.topologicalOrder(), problemMode);
+        List<KnowledgeNode> ordered = graph.topologicalOrder();
         List<String> stepOrder = ordered.stream()
                 .map(KnowledgeNode::getStep)
                 .collect(java.util.stream.Collectors.toList());
+        String targetConcept = graph.getTargetConcept();
         String workflowTargetDetails = buildWorkflowTargetDescription(graph, problemMode);
-        String workflowTarget = graph.getTargetConcept();
         String systemPrompt = NarrativePrompts.systemPrompt(
-                workflowTarget, workflowTargetDetails, outputTarget);
+                targetConcept, workflowTargetDetails, outputTarget);
 
         log.info("  Narrative mode: {}, output_target: {}, order: {}", resolvedMode, outputTarget, stepOrder);
 
         int sceneCount = estimateSceneCount(ordered, problemMode);
-        String promptTarget = graph.getTargetConcept();
         String context = buildTruncatedContext(
-                promptTarget, ordered, problemMode, sceneCount, systemPrompt);
-        String userPrompt = buildUserPrompt(promptTarget, context, sceneCount, problemMode);
+                targetConcept, ordered, problemMode, sceneCount, systemPrompt);
+        String userPrompt = buildUserPrompt(targetConcept, context, sceneCount, problemMode);
 
         int totalDuration = estimateTotalDuration(sceneCount, problemMode);
         Storyboard storyboard;
@@ -100,10 +99,10 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         }
 
         String codegenPrompt = NarrativePrompts.storyboardCodegenPrompt(
-                graph.getTargetConcept(), storyboard);
+                targetConcept, storyboard);
 
         Narrative narrative = new Narrative(
-                graph.getTargetConcept(),
+                targetConcept,
                 workflowTargetDetails,
                 codegenPrompt,
                 storyboard,
@@ -243,10 +242,8 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             }
         }
 
-        if (storyboard != null && storyboard.getScenes() != null && !storyboard.getScenes().isEmpty()) {
-            sceneCount = storyboard.getScenes().size();
-            totalDuration = calculateStoryboardDuration(storyboard, totalDuration);
-        }
+        sceneCount = storyboard.getScenes().size();
+        totalDuration = calculateStoryboardDuration(storyboard, totalDuration);
 
         return new NarrativeDraft(storyboard, sceneCount, totalDuration);
     }
@@ -285,8 +282,7 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
         }
 
         try {
-            Storyboard storyboard = JsonUtils.mapper().treeToValue(storyboardNode, Storyboard.class);
-            return normalizeStoryboard(storyboard);
+            return normalizeStoryboard(JsonUtils.mapper().treeToValue(storyboardNode, Storyboard.class));
         } catch (Exception e) {
             log.warn("Failed to map storyboard payload: {}", e.getMessage());
             return null;
@@ -600,10 +596,6 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
             return WorkflowConfig.INPUT_MODE_PROBLEM;
         }
         return WorkflowConfig.INPUT_MODE_CONCEPT;
-    }
-
-    private List<KnowledgeNode> filterNarrativeNodes(List<KnowledgeNode> orderedNodes, boolean problemMode) {
-        return orderedNodes;
     }
 
     private String buildWorkflowTargetDescription(KnowledgeGraph graph, boolean problemMode) {

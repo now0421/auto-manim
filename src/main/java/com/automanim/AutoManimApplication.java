@@ -15,6 +15,7 @@ import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.service.GeminiAiClient;
 import com.automanim.service.OpenAiCompatibleAiClient;
+import com.automanim.util.TextUtils;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,7 +126,7 @@ public class AutoManimApplication {
             preloadedCodeResult = FileOutputService.loadCodeResult(codeFile);
             codeOutputDir = codeFile.toAbsolutePath().getParent();
             if (concept == null) {
-                concept = firstNonBlank(
+                concept = TextUtils.firstNonBlank(
                         preloadedCodeResult.getTargetConcept(),
                         preloadedCodeResult.getSceneName());
             }
@@ -220,10 +221,11 @@ public class AutoManimApplication {
 
         Duration elapsed = Duration.between(start, Instant.now());
 
-        Map<String, Object> summary = buildSummary(ctx, elapsed);
+        CodeFixTraceReport codeFixTraceReport = buildCodeFixTraceReport(ctx);
+        Map<String, Object> summary = buildSummary(ctx, elapsed, codeFixTraceReport);
         printSummary(summary);
         FileOutputService.saveWorkflowSummary(outputDir, summary);
-        FileOutputService.saveCodeFixTrace(outputDir, buildCodeFixTraceReport(ctx));
+        FileOutputService.saveCodeFixTrace(outputDir, codeFixTraceReport);
 
         log.info("Workflow completed in {}", formatDuration(elapsed));
     }
@@ -245,10 +247,11 @@ public class AutoManimApplication {
         }
     }
 
-    private static Map<String, Object> buildSummary(Map<String, Object> ctx, Duration elapsed) {
+    private static Map<String, Object> buildSummary(Map<String, Object> ctx,
+                                                    Duration elapsed,
+                                                    CodeFixTraceReport codeFixTraceReport) {
         Map<String, Object> summary = new LinkedHashMap<>();
         KnowledgeGraph graph = (KnowledgeGraph) ctx.get(WorkflowKeys.KNOWLEDGE_GRAPH);
-        log.info("");
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         CodeEvaluationResult codeEvaluationResult =
                 (CodeEvaluationResult) ctx.get(WorkflowKeys.CODE_EVALUATION_RESULT);
@@ -319,7 +322,7 @@ public class AutoManimApplication {
             summary.put("scene_evaluation_offscreen_issues", sceneEvaluationResult.getOffscreenIssueCount());
         }
 
-        summary.put("code_fix_event_count", buildCodeFixTraceReport(ctx).getTotalFixEvents());
+        summary.put("code_fix_event_count", codeFixTraceReport.getTotalFixEvents());
 
         summary.put("total_api_calls_estimate", apiCalls);
         summary.put("duration_human", formatDuration(elapsed));
@@ -436,19 +439,6 @@ public class AutoManimApplication {
             return manim;
         }
         return p;
-    }
-
-    private static String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
     }
 
     private static void printUsage() {

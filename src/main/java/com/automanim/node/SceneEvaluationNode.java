@@ -18,6 +18,7 @@ import com.automanim.node.support.FixRetryState;
 import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.util.ErrorSummarizer;
 import com.automanim.service.FileOutputService;
+import com.automanim.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -130,45 +131,29 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         log.info("=== Stage 5: Scene Evaluation ===");
 
         if (input.config() != null && input.config().isGeoGebraTarget()) {
-            result.setEvaluated(false);
-            result.setApproved(true);
-            result.setGateReason("Scene evaluation skipped: GeoGebra target does not produce Manim geometry samples");
-            finalizeResult(result, retryState, start, true);
-            return result;
+            return skipEvaluation(
+                    result,
+                    retryState,
+                    start,
+                    "Scene evaluation skipped: GeoGebra target does not produce Manim geometry samples");
         }
 
         if (renderResult == null) {
-            result.setEvaluated(false);
-            result.setApproved(true);
-            result.setGateReason("Scene evaluation skipped: render result unavailable");
-            finalizeResult(result, retryState, start, true);
-            return result;
+            return skipEvaluation(result, retryState, start, "Scene evaluation skipped: render result unavailable");
         }
 
         if (!renderResult.isSuccess()) {
-            result.setEvaluated(false);
-            result.setApproved(true);
-            result.setGateReason("Scene evaluation skipped: render was not successful");
-            finalizeResult(result, retryState, start, true);
-            return result;
+            return skipEvaluation(result, retryState, start, "Scene evaluation skipped: render was not successful");
         }
 
         String geometryPath = renderResult.getGeometryPath();
         if (geometryPath == null || geometryPath.isBlank()) {
-            result.setEvaluated(false);
-            result.setApproved(true);
-            result.setGateReason("Scene evaluation skipped: geometry report unavailable");
-            finalizeResult(result, retryState, start, true);
-            return result;
+            return skipEvaluation(result, retryState, start, "Scene evaluation skipped: geometry report unavailable");
         }
 
         Path geometryFile = Path.of(geometryPath);
         if (!Files.exists(geometryFile)) {
-            result.setEvaluated(false);
-            result.setApproved(true);
-            result.setGateReason("Scene evaluation skipped: geometry report not found");
-            finalizeResult(result, retryState, start, true);
-            return result;
+            return skipEvaluation(result, retryState, start, "Scene evaluation skipped: geometry report not found");
         }
 
         try {
@@ -254,11 +239,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
         } catch (IOException e) {
             log.warn("Scene evaluation could not read geometry report {}: {}", geometryPath, e.getMessage());
-            result.setEvaluated(false);
-            result.setApproved(true);
-            result.setGateReason("Scene evaluation skipped: failed to parse geometry report");
-            finalizeResult(result, retryState, start, true);
-            return result;
+            return skipEvaluation(result, retryState, start, "Scene evaluation skipped: failed to parse geometry report");
         }
     }
 
@@ -392,7 +373,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
             ElementGeometry element = new ElementGeometry();
             element.stableId = readNullableText(elementNode, "stable_id");
-            element.semanticName = firstNonBlank(
+            element.semanticName = TextUtils.firstNonBlank(
                     readNullableText(elementNode, "semantic_name"),
                     readNullableText(elementNode, "name"));
             element.className = readText(elementNode, "class_name", "Unknown");
@@ -789,8 +770,8 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (!left.isPointLike() || !right.isPointLike()) {
             return false;
         }
-        String leftName = safeLower(left.semanticName);
-        String rightName = safeLower(right.semanticName);
+        String leftName = TextUtils.safeLower(left.semanticName);
+        String rightName = TextUtils.safeLower(right.semanticName);
         boolean pFamily = (leftName.contains("point_p") && rightName.contains("point_pstar"))
                 || (leftName.contains("point_pstar") && rightName.contains("point_p"));
         if (!pFamily) {
@@ -809,7 +790,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     }
 
     private String semanticFamilyKey(String semanticName) {
-        String value = safeLower(semanticName);
+        String value = TextUtils.safeLower(semanticName);
         if (value.isBlank()) {
             return null;
         }
@@ -821,10 +802,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                 .replace("bar_", "");
         int underscore = value.indexOf('_');
         return underscore > 0 ? value.substring(0, underscore) : value;
-    }
-
-    private String safeLower(String value) {
-        return value == null ? "" : value.trim().toLowerCase();
     }
 
     private boolean isZeroArea(ElementGeometry element) {
@@ -1077,6 +1054,17 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         }
     }
 
+    private SceneEvaluationResult skipEvaluation(SceneEvaluationResult result,
+                                                 SceneEvaluationRetryState retryState,
+                                                 Instant start,
+                                                 String reason) {
+        result.setEvaluated(false);
+        result.setApproved(true);
+        result.setGateReason(reason);
+        finalizeResult(result, retryState, start, true);
+        return result;
+    }
+
     private String buildIssueSummary(SceneEvaluationResult result) {
         StringBuilder sb = new StringBuilder();
         int advisoryIssues = Math.max(result.getTotalIssueCount() - result.getBlockingIssueCount(), 0);
@@ -1259,18 +1247,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         return text != null && !text.isBlank() ? text.trim() : null;
     }
 
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
-    }
-
     private List<double[]> readPointList(JsonNode node) {
         List<double[]> points = new ArrayList<>();
         if (node == null || !node.isArray()) {
@@ -1338,7 +1314,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         private double[] max;
 
         private String displayName() {
-            return firstNonBlank(semanticName, displayText, className, stableId, "element");
+            return TextUtils.firstNonBlank(semanticName, displayText, className, stableId, "element");
         }
 
         private boolean isTextual() {
@@ -1364,18 +1340,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
         private boolean hasPathPoints() {
             return pathPoints != null && pathPoints.size() >= 2;
-        }
-
-        private String firstNonBlank(String... values) {
-            if (values == null) {
-                return null;
-            }
-            for (String value : values) {
-                if (value != null && !value.isBlank()) {
-                    return value;
-                }
-            }
-            return null;
         }
     }
 

@@ -19,6 +19,7 @@ import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.NodeConversationContext;
+import com.automanim.util.TextUtils;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,7 +139,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
             if (codeResult != null) {
                 codeResult.setManimCode(result.getFixedCode());
-                String updatedSceneName = firstNonBlank(
+                String updatedSceneName = TextUtils.firstNonBlank(
                         request != null ? request.getExpectedSceneName() : null,
                         request != null ? request.getSceneName() : null,
                         codeResult.getSceneName()
@@ -195,8 +196,9 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
     }
 
     private String selectSystemPrompt(CodeFixRequest request) {
-        String targetConcept = firstNonBlank(request.getTargetConcept(), request.getSceneName(), "Unknown target");
-        String targetDescription = firstNonBlank(request.getTargetDescription(), "");
+        String targetConcept = TextUtils.firstNonBlank(
+                request.getTargetConcept(), request.getSceneName(), "Unknown target");
+        String targetDescription = TextUtils.firstNonBlank(request.getTargetDescription(), "");
         String systemPrompt;
 
         if (request.getSource() == CodeFixSource.EVALUATION_REVIEW) {
@@ -218,50 +220,51 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
     private String selectUserPrompt(CodeFixRequest request) {
         if (request.getSource() == CodeFixSource.EVALUATION_REVIEW) {
             return CodeEvaluationPrompts.revisionUserPrompt(
-                    firstNonBlank(request.getTargetConcept(), request.getSceneName(), "Unknown target"),
-                    firstNonBlank(request.getSceneName(), request.getExpectedSceneName(), "MainScene"),
-                    defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}"),
-                    defaultJson(request.getStaticAnalysisJson(), "{}"),
-                    defaultJson(request.getReviewJson(), "{}"),
+                    TextUtils.firstNonBlank(request.getTargetConcept(), request.getSceneName(), "Unknown target"),
+                    TextUtils.firstNonBlank(request.getSceneName(), request.getExpectedSceneName(), "MainScene"),
+                    TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                    TextUtils.defaultIfBlank(request.getStaticAnalysisJson(), "{}"),
+                    TextUtils.defaultIfBlank(request.getReviewJson(), "{}"),
                     request.getCode()
             );
         }
         if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
             if (isGeoGebraTarget()) {
                 return CodeGenerationPrompts.geoGebraValidationFixUserPrompt(
-                        firstNonBlank(request.getExpectedSceneName(), request.getSceneName(), "GeoGebraFigure"),
+                        TextUtils.firstNonBlank(
+                                request.getExpectedSceneName(), request.getSceneName(), "GeoGebraFigure"),
                         request.getCode(),
                         splitValidationProblems(request.getErrorReason()),
-                        defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}")
+                        TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}")
                 );
             }
             return CodeGenerationPrompts.validationFixUserPrompt(
-                    firstNonBlank(request.getExpectedSceneName(), request.getSceneName(), "MainScene"),
+                    TextUtils.firstNonBlank(request.getExpectedSceneName(), request.getSceneName(), "MainScene"),
                     request.getCode(),
                     splitValidationProblems(request.getErrorReason()),
-                    defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}")
+                    TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}")
             );
         }
         if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
             return SceneEvaluationPrompts.layoutFixUserPrompt(
-                    defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                    TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
                     request.getCode(),
-                    firstNonBlank(request.getErrorReason(), "Unknown scene evaluation issue"),
-                    defaultJson(request.getSceneEvaluationJson(), "{}"),
+                    TextUtils.firstNonBlank(request.getErrorReason(), "Unknown scene evaluation issue"),
+                    TextUtils.defaultIfBlank(request.getSceneEvaluationJson(), "{}"),
                     request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
             );
         }
         return isGeoGebraTarget()
                 ? RenderFixPrompts.geoGebraUserPrompt(
                 request.getCode(),
-                firstNonBlank(request.getErrorReason(), "Unknown render failure"),
-                defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                TextUtils.firstNonBlank(request.getErrorReason(), "Unknown render failure"),
+                TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
                 request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
         )
                 : RenderFixPrompts.userPrompt(
                 request.getCode(),
-                firstNonBlank(request.getErrorReason(), "Unknown render failure"),
-                defaultJson(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                TextUtils.firstNonBlank(request.getErrorReason(), "Unknown render failure"),
+                TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
                 request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
         );
     }
@@ -297,22 +300,6 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
 
     private boolean isGeoGebraTarget() {
         return workflowConfig != null && workflowConfig.isGeoGebraTarget();
-    }
-
-    private String defaultJson(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
     }
 
     private double toSeconds(Instant start) {
