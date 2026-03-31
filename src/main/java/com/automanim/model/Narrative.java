@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Narrative composition result from the enrichment stage.
@@ -275,8 +277,7 @@ public class Narrative {
         @JsonProperty("placement")
         private String placement;
 
-        @JsonProperty("style")
-        private String style;
+        private List<StoryboardStyle> style = new ArrayList<>();
 
         @JsonProperty("source_node")
         private String sourceNode;
@@ -307,8 +308,12 @@ public class Narrative {
         public String getPlacement() { return placement; }
         public void setPlacement(String placement) { this.placement = placement; }
 
-        public String getStyle() { return style; }
-        public void setStyle(String style) { this.style = style; }
+        @JsonProperty("style")
+        public List<StoryboardStyle> getStyle() { return style; }
+
+        public void setStyle(List<StoryboardStyle> style) {
+            this.style = style != null ? style : new ArrayList<>();
+        }
 
         public String getSourceNode() { return sourceNode; }
         public void setSourceNode(String sourceNode) { this.sourceNode = sourceNode; }
@@ -324,6 +329,38 @@ public class Narrative {
 
         public String getConstraintNote() { return constraintNote; }
         public void setConstraintNote(String constraintNote) { this.constraintNote = constraintNote; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class StoryboardStyle {
+
+        @JsonProperty("role")
+        private String role;
+
+        @JsonProperty("type")
+        private String type;
+
+        @JsonProperty("instructions")
+        private String instructions;
+
+        @JsonProperty("properties")
+        private Map<String, Object> properties = new LinkedHashMap<>();
+
+        public StoryboardStyle() {}
+
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public String getInstructions() { return instructions; }
+        public void setInstructions(String instructions) { this.instructions = instructions; }
+
+        public Map<String, Object> getProperties() { return properties; }
+        public void setProperties(Map<String, Object> properties) {
+            this.properties = properties != null ? properties : new LinkedHashMap<>();
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

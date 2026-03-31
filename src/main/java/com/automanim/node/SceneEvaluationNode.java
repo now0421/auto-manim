@@ -770,10 +770,10 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (!left.isPointLike() || !right.isPointLike()) {
             return false;
         }
-        String leftName = TextUtils.safeLower(left.semanticName);
-        String rightName = TextUtils.safeLower(right.semanticName);
-        boolean pFamily = (leftName.contains("point_p") && rightName.contains("point_pstar"))
-                || (leftName.contains("point_pstar") && rightName.contains("point_p"));
+        String leftFamily = semanticFamilyKey(left.semanticName);
+        String rightFamily = semanticFamilyKey(right.semanticName);
+        boolean pFamily = ("p".equals(leftFamily) && "pstar".equals(rightFamily))
+                || ("pstar".equals(leftFamily) && "p".equals(rightFamily));
         if (!pFamily) {
             return false;
         }
@@ -800,8 +800,15 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                 .replace("line_", "")
                 .replace("brace_", "")
                 .replace("bar_", "");
+        value = value.replace("label", "")
+                .replace("point", "")
+                .replace("segment", "")
+                .replace("line", "");
+        value = value.replaceAll("[\\s\\-]+", "_");
         int underscore = value.indexOf('_');
-        return underscore > 0 ? value.substring(0, underscore) : value;
+        value = underscore > 0 ? value.substring(0, underscore) : value;
+        value = value.replaceAll("[^a-z0-9]", "");
+        return value.isBlank() ? null : value;
     }
 
     private boolean isZeroArea(ElementGeometry element) {

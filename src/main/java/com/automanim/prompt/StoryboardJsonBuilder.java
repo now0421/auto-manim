@@ -4,6 +4,7 @@ import com.automanim.model.Narrative.Storyboard;
 import com.automanim.model.Narrative.StoryboardScene;
 import com.automanim.model.Narrative.StoryboardObject;
 import com.automanim.model.Narrative.StoryboardAction;
+import com.automanim.model.Narrative.StoryboardStyle;
 import com.automanim.util.JsonUtils;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -119,12 +120,36 @@ public final class StoryboardJsonBuilder {
             putNonBlank(objectNode, "kind", object.getKind());
             putNonBlank(objectNode, "content", object.getContent());
             putNonBlank(objectNode, "placement", object.getPlacement());
-            putNonBlank(objectNode, "style", object.getStyle());
+            addStyles(objectNode, object.getStyle());
             putNonBlank(objectNode, "source_node", object.getSourceNode());
             putNonBlank(objectNode, "behavior", object.getBehavior());
             putNonBlank(objectNode, "anchor_id", object.getAnchorId());
             putNonBlank(objectNode, "dependency_note", object.getDependencyNote());
             putNonBlank(objectNode, "constraint_note", object.getConstraintNote());
+        }
+    }
+
+    private static void addStyles(ObjectNode objectNode, List<StoryboardStyle> styles) {
+        if (styles == null || styles.isEmpty()) {
+            return;
+        }
+
+        ArrayNode styleArray = objectNode.putArray("style");
+        for (StoryboardStyle style : styles) {
+            if (style == null) {
+                continue;
+            }
+            ObjectNode styleNode = styleArray.addObject();
+            putNonBlank(styleNode, "role", style.getRole());
+            putNonBlank(styleNode, "type", style.getType());
+            putNonBlank(styleNode, "instructions", style.getInstructions());
+            if (style.getProperties() != null && !style.getProperties().isEmpty()) {
+                styleNode.set("properties", JsonUtils.mapper().valueToTree(style.getProperties()));
+            }
+            removeIfEmpty(styleArray, styleNode);
+        }
+        if (styleArray.isEmpty()) {
+            objectNode.remove("style");
         }
     }
 
@@ -173,5 +198,17 @@ public final class StoryboardJsonBuilder {
             return "";
         }
         return text.trim().replaceAll("\\s+", " ");
+    }
+
+    private static void removeIfEmpty(ObjectNode parentNode, ObjectNode childNode, String fieldName) {
+        if (childNode.isEmpty()) {
+            parentNode.remove(fieldName);
+        }
+    }
+
+    private static void removeIfEmpty(ArrayNode parentNode, ObjectNode childNode) {
+        if (childNode.isEmpty()) {
+            parentNode.remove(parentNode.size() - 1);
+        }
     }
 }
