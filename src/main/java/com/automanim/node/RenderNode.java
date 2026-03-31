@@ -212,6 +212,25 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         String lastError = ErrorSummarizer.combineErrorStreams(renderAttempt.stdout(), renderAttempt.stderr());
         log.warn("  Render failed (attempt {}): {}", attemptNumber, abbreviateError(lastError));
 
+        String normalizedLastError = lastError == null
+                ? ""
+                : lastError.toLowerCase(java.util.Locale.ROOT);
+        if (normalizedLastError.contains("timeouterror")
+                || normalizedLastError.contains("timeout")
+                || normalizedLastError.contains("timed out")
+                || normalizedLastError.contains("did not become ready within")) {
+            log.warn("  Render failure is a timeout, stopping retries");
+            return failureResult(
+                    currentCode,
+                    sceneName,
+                    attemptNumber,
+                    lastError,
+                    geometryPath,
+                    retryState.getFixToolCalls(),
+                    start
+            );
+        }
+
         if (attemptNumber >= maxRetries + 1) {
             log.warn("Render failed after {} attempts", attemptNumber);
             return failureResult(
@@ -463,6 +482,10 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
         String normalized = error.toLowerCase(java.util.Locale.ROOT);
         return normalized.contains("failed to launch chromium")
+                || normalized.contains("timeouterror")
+                || normalized.contains("timeout")
+                || normalized.contains("timed out")
+                || normalized.contains("did not become ready within")
                 || normalized.contains("install chromium")
                 || normalized.contains("configured browser executable does not exist")
                 || normalized.contains("output directory is unavailable")

@@ -1,4 +1,4 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
@@ -176,7 +176,7 @@ class RenderNodeCodeGateTest {
     }
 
     @Test
-    void geogebraTimeoutValidationFailureStillRoutesThroughRetryLoop() {
+    void geogebraTimeoutValidationFailureStopsWithoutRetryingCodeFix() {
         WorkflowConfig config = new WorkflowConfig();
         config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);
         config.setRenderEnabled(true);
@@ -222,10 +222,13 @@ class RenderNodeCodeGateTest {
         new PocketFlow.Flow<>(renderNode).run(ctx);
 
         RenderResult renderResult = (RenderResult) ctx.get(WorkflowKeys.RENDER_RESULT);
+        CodeResult finalCodeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
 
         assertNotNull(renderResult);
-        assertTrue(renderResult.isSuccess());
-        assertEquals(2, renderResult.getAttempts());
+        assertFalse(renderResult.isSuccess());
+        assertEquals(1, renderResult.getAttempts());
+        assertTrue(renderResult.getLastError().contains("Timeout 30000ms exceeded"));
+        assertTrue(finalCodeResult.getCode().contains("mid = Midpoint(lineAB)"));
     }
 
     private static GeoGebraRenderService.ValidationReport successfulValidationReport(String figureName,

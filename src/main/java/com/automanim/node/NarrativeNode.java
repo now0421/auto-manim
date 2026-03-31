@@ -8,6 +8,7 @@ import com.automanim.model.Narrative.Storyboard;
 import com.automanim.model.Narrative.StoryboardAction;
 import com.automanim.model.Narrative.StoryboardObject;
 import com.automanim.model.Narrative.StoryboardScene;
+import com.automanim.model.Narrative.StoryboardStyle;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.prompt.NarrativePrompts;
 import com.automanim.prompt.ToolSchemas;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -395,6 +397,21 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
                 }
                 if (object.getContent() == null || object.getContent().isBlank()) {
                     object.setContent(object.getId());
+                }
+                if (object.getStyle() == null) {
+                    object.setStyle(new ArrayList<>());
+                } else {
+                    List<StoryboardStyle> normalizedStyles = new ArrayList<>();
+                    for (StoryboardStyle style : object.getStyle()) {
+                        if (style == null) {
+                            continue;
+                        }
+                        if (style.getProperties() == null) {
+                            style.setProperties(new LinkedHashMap<>());
+                        }
+                        normalizedStyles.add(style);
+                    }
+                    object.setStyle(normalizedStyles);
                 }
                 if (object.getConstraintNote() == null) {
                     object.setConstraintNote("");

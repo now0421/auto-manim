@@ -65,4 +65,28 @@ class PromptModulesTest {
         assertTrue(geogebraPrompt.contains("GeoGebra Classic"));
         assertTrue(geogebraPrompt.contains("Define the base objects first."));
     }
+
+    @Test
+    void geogebraNarrativePromptIncludesStyleReferenceLikeManim() {
+        String manimPrompt = NarrativePrompts.systemPrompt("Triangle", "Demo", "manim");
+        String geogebraPrompt = NarrativePrompts.systemPrompt("Triangle", "Demo", "geogebra");
+
+        assertTrue(manimPrompt.contains("Manim style reference:"));
+        assertTrue(geogebraPrompt.contains("GeoGebra style reference:"));
+        assertTrue(geogebraPrompt.contains("Allowed Color Inputs"));
+        assertTrue(geogebraPrompt.contains("official `SetColor`-compatible inputs"));
+    }
+
+    @Test
+    void narrativePromptsRequireObjectReferencesToUseIdsOnly() {
+        String systemPrompt = NarrativePrompts.systemPrompt("Triangle", "Demo", "geogebra");
+        String codegenPrompt = NarrativePrompts.storyboardCodegenPrompt(
+                "Triangle",
+                "{\"scenes\":[{\"entering_objects\":[{\"id\":\"angle_in\",\"kind\":\"angle\",\"content\":\"angle between AP and l at P\"}]}]}",
+                "geogebra");
+
+        assertTrue(systemPrompt.contains("refer to that object by id only"));
+        assertTrue(systemPrompt.contains("angle between AP and l at P"));
+        assertTrue(codegenPrompt.contains("treat those mentions as object ids only"));
+    }
 }

@@ -93,6 +93,21 @@ class NarrativeNodeTest {
         assertFalse(aiClient.lastSystemPrompt.contains("Use symmetry to convert a broken path into a straight-line comparison."));
     }
 
+    @Test
+    void storyboardCodegenPromptDropsLegacyStyleInstructionsAndKeepsProperties() {
+        SequentialAiClient aiClient = new SequentialAiClient(List.of(validStoryboardResponse()));
+        Map<String, Object> ctx = buildContext(aiClient);
+
+        new NarrativeNode().run(ctx);
+
+        Narrative narrative = (Narrative) ctx.get(WorkflowKeys.NARRATIVE);
+        assertNotNull(narrative);
+        assertNotNull(narrative.getVerbosePrompt());
+        assertTrue(narrative.getVerbosePrompt().contains("\"properties\""));
+        assertTrue(narrative.getVerbosePrompt().contains("\"color\" : \"BLUE\""));
+        assertFalse(narrative.getVerbosePrompt().contains("\"instructions\""));
+    }
+
     private static Map<String, Object> buildContext(AiClient aiClient) {
         return buildContext(aiClient, createBasicRootNode());
     }
@@ -197,6 +212,11 @@ class NarrativeNodeTest {
         enteringObject.put("kind", "visual");
         enteringObject.put("content", "main concept diagram");
         enteringObject.put("placement", "center");
+        ObjectNode style = enteringObject.putArray("style").addObject();
+        style.put("role", "emphasis");
+        style.put("type", "Text");
+        style.put("instructions", "legacy prose styling that should be dropped");
+        style.putObject("properties").put("color", "BLUE");
 
         scene.putArray("persistent_objects").add("main_visual");
         scene.putArray("exiting_objects");

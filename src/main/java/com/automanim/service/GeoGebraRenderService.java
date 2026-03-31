@@ -2,6 +2,8 @@ package com.automanim.service;
 
 import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.util.JsonUtils;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
@@ -13,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,9 +35,9 @@ public class GeoGebraRenderService {
     private static final Logger log = LoggerFactory.getLogger(GeoGebraRenderService.class);
     private static final String PREVIEW_FILE = "5_geogebra_preview.html";
     private static final String VALIDATION_FILE = "5_geogebra_validation.json";
-    private static final String BROWSER_EXECUTABLE_ENV = "AUTOMANIM_GEOGEBRA_BROWSER_EXECUTABLE";
     private static final String DEPLOY_GGB_URL = "https://www.geogebra.org/apps/deployggb.js";
     private static final String PLAYWRIGHT_ENGINE = "playwright";
+    private static final String PLAYWRIGHT_BUNDLED_CHROMIUM = "playwright:chromium";
     private static final String PLAYWRIGHT_INSTALL_HINT =
             "Install Playwright Chromium with "
                     + "mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI "
@@ -43,6 +47,7 @@ public class GeoGebraRenderService {
     private static final int APPLET_BOOTSTRAP_TIMEOUT_MS = VALIDATION_TIMEOUT_MS;
     private static final int APPLET_WIDTH = 960;
     private static final int APPLET_HEIGHT = 540;
+    private static final String VALIDATOR_APPLET_ID = "ggbValidatorApplet";
 
     public RenderAttemptResult render(String commandScript,
                                       String figureName,
@@ -94,15 +99,13 @@ public class GeoGebraRenderService {
                                                            String figureName,
                                                            List<String> commands) {
         ValidationReport fallback = newValidationReport(figureName, commands);
-        String configuredBrowser = resolveBrowserExecutable();
-        fallback.browserExecutable = configuredBrowser != null && !configuredBrowser.isBlank()
-                ? configuredBrowser
-                : "playwright:chromium";
+        fallback.browserExecutable = PLAYWRIGHT_BUNDLED_CHROMIUM;
 
         Playwright playwright = null;
         Browser browser = null;
         BrowserContext context = null;
         Page page = null;
+        HttpServer validationServer = null;
         List<String> consoleMessages = new ArrayList<>();
         List<String> pageErrors = new ArrayList<>();
         List<String> requestFailures = new ArrayList<>();
@@ -110,10 +113,10 @@ public class GeoGebraRenderService {
         try {
             playwright = Playwright.create();
             BrowserType chromium = playwright.chromium();
-            String browserDescriptor = resolveBrowserDescriptor(chromium, configuredBrowser);
+            String browserDescriptor = resolveBrowserDescriptor(chromium);
             fallback.browserExecutable = browserDescriptor;
 
-            browser = launchBrowser(chromium, configuredBrowser);
+            browser = launchBrowser(chromium);
             context = browser.newContext();
             page = context.newPage();
             page.setDefaultTimeout(VALIDATION_TIMEOUT_MS);
@@ -122,7 +125,8 @@ public class GeoGebraRenderService {
             page.onRequestFailed(request -> requestFailures.add(
                     request.url() + " :: " + (request.failure() != null ? request.failure() : "request failed")));
 
-            initializeValidationApplet(page, figureName);
+            validationServer = startValidationServer(figureName);
+            initializeValidationApplet(page, figureName, validationServer);
             String validationJson = executeValidationScript(page, commands);
             ValidationReport parsed = parseValidationReport(validationJson);
             if (parsed == null) {
@@ -135,7 +139,7 @@ public class GeoGebraRenderService {
             appendDiagnostics(parsed, consoleMessages, pageErrors, requestFailures);
             return parsed;
         } catch (PlaywrightException e) {
-            fallback.error = formatPlaywrightError(e, configuredBrowser);
+            fallback.error = formatPlaywrightError(e);
             appendDiagnostics(fallback, consoleMessages, pageErrors, requestFailures);
             return fallback;
         } catch (IOException e) {
@@ -143,6 +147,7 @@ public class GeoGebraRenderService {
             appendDiagnostics(fallback, consoleMessages, pageErrors, requestFailures);
             return fallback;
         } finally {
+            safeClose(validationServer);
             safeClose(page);
             safeClose(context);
             safeClose(browser);
@@ -150,47 +155,27 @@ public class GeoGebraRenderService {
         }
     }
 
-    protected String resolveBrowserExecutable() {
-        String configured = System.getenv(BROWSER_EXECUTABLE_ENV);
-        if (configured == null) {
-            return null;
-        }
-        String trimmed = configured.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private Browser launchBrowser(BrowserType chromium, String configuredBrowser) throws IOException {
+    private Browser launchBrowser(BrowserType chromium) {
         BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
                 .setHeadless(true)
+                .setChannel("chromium")
                 .setTimeout((double) VALIDATION_TIMEOUT_MS);
-
-        if (configuredBrowser != null && !configuredBrowser.isBlank()) {
-            if (looksLikePath(configuredBrowser)) {
-                Path executablePath = Path.of(configuredBrowser);
-                if (!Files.exists(executablePath)) {
-                    throw new IOException("Configured browser executable does not exist: " + configuredBrowser);
-                }
-                options.setExecutablePath(executablePath);
-            } else {
-                options.setChannel(configuredBrowser);
-            }
-        }
 
         return chromium.launch(options);
     }
 
-    private String resolveBrowserDescriptor(BrowserType chromium, String configuredBrowser) {
-        if (configuredBrowser != null && !configuredBrowser.isBlank()) {
-            return configuredBrowser;
-        }
+    private String resolveBrowserDescriptor(BrowserType chromium) {
         String executablePath = chromium.executablePath();
         return executablePath != null && !executablePath.isBlank()
                 ? executablePath
-                : "playwright:chromium";
+                : PLAYWRIGHT_BUNDLED_CHROMIUM;
     }
 
-    private void initializeValidationApplet(Page page, String figureName) throws IOException {
-        page.setContent(buildValidatorHtml(figureName));
+    private void initializeValidationApplet(Page page,
+                                            String figureName,
+                                            HttpServer validationServer) throws IOException {
+        int port = validationServer.getAddress().getPort();
+        page.navigate("http://127.0.0.1:" + port + "/");
         page.waitForFunction(
                 "() => window.__ggbDeployLoaded === true || !!window.__ggbDeployError",
                 null,
@@ -219,6 +204,7 @@ public class GeoGebraRenderService {
         appletParams.put("enableShiftDragZoom", false);
         appletParams.put("enableRightClick", false);
         appletParams.put("useBrowserForJS", true);
+        appletParams.put("id", VALIDATOR_APPLET_ID);
 
         page.evaluate(
                 "(payload) => {"
@@ -233,6 +219,7 @@ public class GeoGebraRenderService {
                         + "       && typeof window.__ggbInjectedApplet.getAppletObject === 'function') {"
                         + "     try { api = window.__ggbInjectedApplet.getAppletObject(); } catch (error) { api = null; }"
                         + "   }"
+                        + "   if (!api && window[payload.appletId]) { api = window[payload.appletId]; }"
                         + "   if (!api && window.ggbApplet0) { api = window.ggbApplet0; }"
                         + "   if (!api && window[payload.figureName]) { api = window[payload.figureName]; }"
                         + "   if (api && typeof api.evalCommand === 'function') {"
@@ -268,7 +255,8 @@ public class GeoGebraRenderService {
                 Map.of(
                         "params", appletParams,
                         "timeoutMs", APPLET_BOOTSTRAP_TIMEOUT_MS,
-                        "figureName", figureName
+                        "figureName", figureName,
+                        "appletId", VALIDATOR_APPLET_ID
                 )
         );
 
@@ -284,6 +272,22 @@ public class GeoGebraRenderService {
         }
 
         page.evaluate("() => { ggbApplet.setErrorDialogsActive(false); ggbApplet.setRepaintingActive(false); }");
+    }
+
+    private HttpServer startValidationServer(String figureName) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        byte[] body = buildValidatorHtml(figureName).getBytes(StandardCharsets.UTF_8);
+        server.createContext("/", exchange -> writeHtmlResponse(exchange, body));
+        server.start();
+        return server;
+    }
+
+    private void writeHtmlResponse(HttpExchange exchange, byte[] body) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+        exchange.sendResponseHeaders(200, body.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
+        }
     }
 
     private String executeValidationScript(Page page, List<String> commands) {
@@ -312,6 +316,157 @@ public class GeoGebraRenderService {
                         + "   try { const value = fn(); return value === undefined ? fallback : value; }"
                         + "   catch (error) { return fallback; }"
                         + " };"
+                        + " const splitArgs = (raw) => {"
+                        + "   const args = [];"
+                        + "   let current = '';"
+                        + "   let depth = 0;"
+                        + "   let quote = null;"
+                        + "   for (let i = 0; i < raw.length; i += 1) {"
+                        + "     const ch = raw[i];"
+                        + "     if (quote) {"
+                        + "       current += ch;"
+                        + "       if (ch === '\\\\' && i + 1 < raw.length) { current += raw[i + 1]; i += 1; continue; }"
+                        + "       if (ch === quote) { quote = null; }"
+                        + "       continue;"
+                        + "     }"
+                        + "     if (ch === '\"' || ch === '\\'') { quote = ch; current += ch; continue; }"
+                        + "     if (ch === '(' || ch === '[' || ch === '{') { depth += 1; current += ch; continue; }"
+                        + "     if (ch === ')' || ch === ']' || ch === '}') { depth = Math.max(0, depth - 1); current += ch; continue; }"
+                        + "     if (ch === ',' && depth === 0) { args.push(current.trim()); current = ''; continue; }"
+                        + "     current += ch;"
+                        + "   }"
+                        + "   if (current.trim() || raw.trim().endsWith(',')) { args.push(current.trim()); }"
+                        + "   return args;"
+                        + " };"
+                        + " const unquote = (value) => {"
+                        + "   if (typeof value !== 'string') { return value; }"
+                        + "   const trimmed = value.trim();"
+                        + "   if (trimmed.length >= 2 && ((trimmed.startsWith('\"') && trimmed.endsWith('\"')) || (trimmed.startsWith('\\'') && trimmed.endsWith('\\'')))) {"
+                        + "     return trimmed.slice(1, -1);"
+                        + "   }"
+                        + "   return trimmed;"
+                        + " };"
+                        + " const parseBooleanLiteral = (value) => {"
+                        + "   if (typeof value !== 'string') { return null; }"
+                        + "   const normalized = value.trim().toLowerCase();"
+                        + "   if (normalized === 'true') { return true; }"
+                        + "   if (normalized === 'false') { return false; }"
+                        + "   return null;"
+                        + " };"
+                        + " const parseNumberLiteral = (value) => {"
+                        + "   if (typeof value !== 'string' || value.trim() === '') { return null; }"
+                        + "   const parsed = Number(value.trim());"
+                        + "   return Number.isFinite(parsed) ? parsed : null;"
+                        + " };"
+                        + " const colorToRgb = (() => {"
+                        + "   let ctx = null;"
+                        + "   return (value) => {"
+                        + "     const color = unquote(value);"
+                        + "     if (!color) { return null; }"
+                        + "     if (!ctx && typeof document !== 'undefined' && document.createElement) {"
+                        + "       const canvas = document.createElement('canvas');"
+                        + "       ctx = canvas.getContext('2d');"
+                        + "     }"
+                        + "     if (!ctx) { return null; }"
+                        + "     ctx.fillStyle = '#000000';"
+                        + "     ctx.fillStyle = color;"
+                        + "     const normalized = ctx.fillStyle || '';"
+                        + "     if (normalized.startsWith('#')) {"
+                        + "       const hex = normalized.slice(1);"
+                        + "       if (hex.length === 6) {"
+                        + "         return { red: parseInt(hex.slice(0, 2), 16), green: parseInt(hex.slice(2, 4), 16), blue: parseInt(hex.slice(4, 6), 16) };"
+                        + "       }"
+                        + "     }"
+                        + "     const match = normalized.match(/^rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);"
+                        + "     if (match) {"
+                        + "       return { red: Number(match[1]), green: Number(match[2]), blue: Number(match[3]) };"
+                        + "     }"
+                        + "     return null;"
+                        + "   };"
+                        + " })();"
+                        + " const executeCommand = (api, command) => {"
+                        + "   const trimmed = typeof command === 'string' ? command.trim() : '';"
+                        + "   const match = trimmed.match(/^([A-Za-z][A-Za-z0-9_]*)\\((.*)\\)$/);"
+                        + "   if (!match) {"
+                        + "     return { success: !!api.evalCommand(command), error: null };"
+                        + "   }"
+                        + "   const fnName = match[1];"
+                        + "   const args = splitArgs(match[2]);"
+                        + "   try {"
+                        + "     switch (fnName) {"
+                        + "       case 'SetColor': {"
+                        + "         if (args.length === 2) {"
+                        + "           const rgb = colorToRgb(args[1]);"
+                        + "           if (rgb) { api.setColor(args[0].trim(), rgb.red, rgb.green, rgb.blue); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         if (args.length === 4) {"
+                        + "           const red = parseNumberLiteral(args[1]);"
+                        + "           const green = parseNumberLiteral(args[2]);"
+                        + "           const blue = parseNumberLiteral(args[3]);"
+                        + "           if (red !== null && green !== null && blue !== null) {"
+                        + "             api.setColor(args[0].trim(), Math.round(red), Math.round(green), Math.round(blue));"
+                        + "             return { success: true, error: null };"
+                        + "           }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetLineThickness': {"
+                        + "         if (args.length === 2) {"
+                        + "           const thickness = parseNumberLiteral(args[1]);"
+                        + "           if (thickness !== null) { api.setLineThickness(args[0].trim(), Math.round(thickness)); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetLineStyle': {"
+                        + "         if (args.length === 2) {"
+                        + "           const style = parseNumberLiteral(args[1]);"
+                        + "           if (style !== null) { api.setLineStyle(args[0].trim(), Math.round(style)); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetPointStyle': {"
+                        + "         if (args.length === 2) {"
+                        + "           const style = parseNumberLiteral(args[1]);"
+                        + "           if (style !== null) { api.setPointStyle(args[0].trim(), Math.round(style)); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetPointSize': {"
+                        + "         if (args.length === 2) {"
+                        + "           const size = parseNumberLiteral(args[1]);"
+                        + "           if (size !== null) { api.setPointSize(args[0].trim(), Math.round(size)); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetFilling': {"
+                        + "         if (args.length === 2) {"
+                        + "           const filling = parseNumberLiteral(args[1]);"
+                        + "           if (filling !== null) { api.setFilling(args[0].trim(), filling); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'ShowLabel': {"
+                        + "         if (args.length === 2) {"
+                        + "           const visible = parseBooleanLiteral(args[1]);"
+                        + "           if (visible !== null) { api.setLabelVisible(args[0].trim(), visible); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetCaption': {"
+                        + "         if (args.length === 2) {"
+                        + "           api.setCaption(args[0].trim(), unquote(args[1]));"
+                        + "           return { success: true, error: null };"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       default:"
+                        + "         break;"
+                        + "     }"
+                        + "     return { success: !!api.evalCommand(command), error: null };"
+                        + "   } catch (error) {"
+                        + "     return { success: false, error: error && error.message ? error.message : String(error) };"
+                        + "   }"
+                        + " };"
                         + " const allObjectNames = () => {"
                         + "   const names = safeCall(() => Array.from(ggbApplet.getAllObjectNames()), []);"
                         + "   return Array.from(new Set((names || []).filter(name => typeof name === 'string' && name.trim() !== '')));"
@@ -332,8 +487,9 @@ public class GeoGebraRenderService {
                         + "   const beforeSet = new Set(beforeNames);"
                         + "   let success = false;"
                         + "   let errorMessage = null;"
-                        + "   try { success = !!ggbApplet.evalCommand(command); }"
-                        + "   catch (error) { success = false; errorMessage = error && error.message ? error.message : String(error); }"
+                        + "   const result = executeCommand(ggbApplet, command);"
+                        + "   success = !!result.success;"
+                        + "   errorMessage = result.error;"
                         + "   const afterNames = allObjectNames();"
                         + "   const createdObjects = afterNames.filter(name => !beforeSet.has(name)).map(snapshotObject);"
                         + "   report.commands.push({"
@@ -462,7 +618,7 @@ public class GeoGebraRenderService {
         report.requestFailures.addAll(requestFailures);
     }
 
-    private String formatPlaywrightError(PlaywrightException error, String configuredBrowser) {
+    private String formatPlaywrightError(PlaywrightException error) {
         String message = error != null && error.getMessage() != null
                 ? error.getMessage().trim()
                 : "Unknown Playwright error";
@@ -470,11 +626,7 @@ public class GeoGebraRenderService {
         if (normalized.contains("executable doesn't exist")
                 || normalized.contains("failed to launch")
                 || normalized.contains("browsertype.launch")) {
-            String browserHint = configuredBrowser != null && !configuredBrowser.isBlank()
-                    ? "Configured browser: " + configuredBrowser + ". "
-                    : "";
             return "GeoGebra Playwright validation failed to launch Chromium. "
-                    + browserHint
                     + PLAYWRIGHT_INSTALL_HINT
                     + ". Raw error: "
                     + message;
@@ -613,6 +765,222 @@ public class GeoGebraRenderService {
                 + "        return fallbackValue;\n"
                 + "      }\n"
                 + "    }\n"
+                + "    function splitArgs(raw) {\n"
+                + "      const args = [];\n"
+                + "      let current = '';\n"
+                + "      let depth = 0;\n"
+                + "      let quote = null;\n"
+                + "      for (let i = 0; i < raw.length; i += 1) {\n"
+                + "        const ch = raw[i];\n"
+                + "        if (quote) {\n"
+                + "          current += ch;\n"
+                + "          if (ch === '\\\\' && i + 1 < raw.length) {\n"
+                + "            current += raw[i + 1];\n"
+                + "            i += 1;\n"
+                + "            continue;\n"
+                + "          }\n"
+                + "          if (ch === quote) {\n"
+                + "            quote = null;\n"
+                + "          }\n"
+                + "          continue;\n"
+                + "        }\n"
+                + "        if (ch === '\"' || ch === '\\'') {\n"
+                + "          quote = ch;\n"
+                + "          current += ch;\n"
+                + "          continue;\n"
+                + "        }\n"
+                + "        if (ch === '(' || ch === '[' || ch === '{') {\n"
+                + "          depth += 1;\n"
+                + "          current += ch;\n"
+                + "          continue;\n"
+                + "        }\n"
+                + "        if (ch === ')' || ch === ']' || ch === '}') {\n"
+                + "          depth = Math.max(0, depth - 1);\n"
+                + "          current += ch;\n"
+                + "          continue;\n"
+                + "        }\n"
+                + "        if (ch === ',' && depth === 0) {\n"
+                + "          args.push(current.trim());\n"
+                + "          current = '';\n"
+                + "          continue;\n"
+                + "        }\n"
+                + "        current += ch;\n"
+                + "      }\n"
+                + "      if (current.trim() || raw.trim().endsWith(',')) {\n"
+                + "        args.push(current.trim());\n"
+                + "      }\n"
+                + "      return args;\n"
+                + "    }\n"
+                + "    function unquote(value) {\n"
+                + "      if (typeof value !== 'string') {\n"
+                + "        return value;\n"
+                + "      }\n"
+                + "      const trimmed = value.trim();\n"
+                + "      if (trimmed.length >= 2\n"
+                + "          && ((trimmed.startsWith('\"') && trimmed.endsWith('\"'))\n"
+                + "              || (trimmed.startsWith('\\'') && trimmed.endsWith('\\'')))) {\n"
+                + "        return trimmed.slice(1, -1);\n"
+                + "      }\n"
+                + "      return trimmed;\n"
+                + "    }\n"
+                + "    function parseBooleanLiteral(value) {\n"
+                + "      if (typeof value !== 'string') {\n"
+                + "        return null;\n"
+                + "      }\n"
+                + "      const normalized = value.trim().toLowerCase();\n"
+                + "      if (normalized === 'true') {\n"
+                + "        return true;\n"
+                + "      }\n"
+                + "      if (normalized === 'false') {\n"
+                + "        return false;\n"
+                + "      }\n"
+                + "      return null;\n"
+                + "    }\n"
+                + "    function parseNumberLiteral(value) {\n"
+                + "      if (typeof value !== 'string' || value.trim() === '') {\n"
+                + "        return null;\n"
+                + "      }\n"
+                + "      const parsed = Number(value.trim());\n"
+                + "      return Number.isFinite(parsed) ? parsed : null;\n"
+                + "    }\n"
+                + "    const colorToRgb = (() => {\n"
+                + "      let ctx = null;\n"
+                + "      return (value) => {\n"
+                + "        const color = unquote(value);\n"
+                + "        if (!color) {\n"
+                + "          return null;\n"
+                + "        }\n"
+                + "        if (!ctx) {\n"
+                + "          const canvas = document.createElement('canvas');\n"
+                + "          ctx = canvas.getContext('2d');\n"
+                + "        }\n"
+                + "        if (!ctx) {\n"
+                + "          return null;\n"
+                + "        }\n"
+                + "        ctx.fillStyle = '#000000';\n"
+                + "        ctx.fillStyle = color;\n"
+                + "        const normalized = ctx.fillStyle || '';\n"
+                + "        if (normalized.startsWith('#')) {\n"
+                + "          const hex = normalized.slice(1);\n"
+                + "          if (hex.length === 6) {\n"
+                + "            return {\n"
+                + "              red: parseInt(hex.slice(0, 2), 16),\n"
+                + "              green: parseInt(hex.slice(2, 4), 16),\n"
+                + "              blue: parseInt(hex.slice(4, 6), 16)\n"
+                + "            };\n"
+                + "          }\n"
+                + "        }\n"
+                + "        const match = normalized.match(/^rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);\n"
+                + "        if (match) {\n"
+                + "          return { red: Number(match[1]), green: Number(match[2]), blue: Number(match[3]) };\n"
+                + "        }\n"
+                + "        return null;\n"
+                + "      };\n"
+                + "    })();\n"
+                + "    function executeGeoGebraCommand(api, command) {\n"
+                + "      const trimmed = typeof command === 'string' ? command.trim() : '';\n"
+                + "      const match = trimmed.match(/^([A-Za-z][A-Za-z0-9_]*)\\((.*)\\)$/);\n"
+                + "      if (!match) {\n"
+                + "        return { success: !!api.evalCommand(command), error: null };\n"
+                + "      }\n"
+                + "      const fnName = match[1];\n"
+                + "      const args = splitArgs(match[2]);\n"
+                + "      try {\n"
+                + "        switch (fnName) {\n"
+                + "          case 'SetColor': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const rgb = colorToRgb(args[1]);\n"
+                + "              if (rgb) {\n"
+                + "                api.setColor(args[0].trim(), rgb.red, rgb.green, rgb.blue);\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            if (args.length === 4) {\n"
+                + "              const red = parseNumberLiteral(args[1]);\n"
+                + "              const green = parseNumberLiteral(args[2]);\n"
+                + "              const blue = parseNumberLiteral(args[3]);\n"
+                + "              if (red !== null && green !== null && blue !== null) {\n"
+                + "                api.setColor(args[0].trim(), Math.round(red), Math.round(green), Math.round(blue));\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'SetLineThickness': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const thickness = parseNumberLiteral(args[1]);\n"
+                + "              if (thickness !== null) {\n"
+                + "                api.setLineThickness(args[0].trim(), Math.round(thickness));\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'SetLineStyle': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const style = parseNumberLiteral(args[1]);\n"
+                + "              if (style !== null) {\n"
+                + "                api.setLineStyle(args[0].trim(), Math.round(style));\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'SetPointStyle': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const style = parseNumberLiteral(args[1]);\n"
+                + "              if (style !== null) {\n"
+                + "                api.setPointStyle(args[0].trim(), Math.round(style));\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'SetPointSize': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const size = parseNumberLiteral(args[1]);\n"
+                + "              if (size !== null) {\n"
+                + "                api.setPointSize(args[0].trim(), Math.round(size));\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'SetFilling': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const filling = parseNumberLiteral(args[1]);\n"
+                + "              if (filling !== null) {\n"
+                + "                api.setFilling(args[0].trim(), filling);\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'ShowLabel': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              const visible = parseBooleanLiteral(args[1]);\n"
+                + "              if (visible !== null) {\n"
+                + "                api.setLabelVisible(args[0].trim(), visible);\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          case 'SetCaption': {\n"
+                + "            if (args.length === 2) {\n"
+                + "              api.setCaption(args[0].trim(), unquote(args[1]));\n"
+                + "              return { success: true, error: null };\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
+                + "          default:\n"
+                + "            break;\n"
+                + "        }\n"
+                + "        return { success: !!api.evalCommand(command), error: null };\n"
+                + "      } catch (error) {\n"
+                + "        return { success: false, error: error && error.message ? error.message : String(error) };\n"
+                + "      }\n"
+                + "    }\n"
                 + "    function fitView(api) {\n"
                 + "      safeCall(() => api.showAllObjects(), null);\n"
                 + "    }\n"
@@ -664,15 +1032,10 @@ public class GeoGebraRenderService {
                 + "        if (!command || !command.trim()) {\n"
                 + "          continue;\n"
                 + "        }\n"
-                + "        try {\n"
-                + "          const ok = !!api.evalCommand(command);\n"
-                + "          if (!ok) {\n"
-                + "            failures += 1;\n"
-                + "            console.warn('Preview applet returned false for command:', command);\n"
-                + "          }\n"
-                + "        } catch (error) {\n"
+                + "        const result = executeGeoGebraCommand(api, command);\n"
+                + "        if (!result.success) {\n"
                 + "          failures += 1;\n"
-                + "          console.warn('Preview applet threw for command:', command, error);\n"
+                + "          console.warn('Preview applet failed for command:', command, result.error);\n"
                 + "        }\n"
                 + "      }\n"
                 + "      renderSceneButtons(api);\n"
@@ -802,10 +1165,6 @@ public class GeoGebraRenderService {
                 .replace("\"", "&quot;");
     }
 
-    private boolean looksLikePath(String value) {
-        return value.contains("\\") || value.contains("/") || value.contains(":");
-    }
-
     private String formatConsoleMessage(ConsoleMessage message) {
         if (message == null) {
             return "console: <null>";
@@ -847,6 +1206,17 @@ public class GeoGebraRenderService {
             browser.close();
         } catch (Exception ignored) {
             // Ignore shutdown noise from already-closed browsers.
+        }
+    }
+
+    private void safeClose(HttpServer server) {
+        if (server == null) {
+            return;
+        }
+        try {
+            server.stop(0);
+        } catch (Exception ignored) {
+            // Ignore shutdown noise from already-stopped servers.
         }
     }
 

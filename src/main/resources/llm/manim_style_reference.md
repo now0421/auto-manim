@@ -1,6 +1,6 @@
 # Manim Style Reference
 
-Use this compact reference when writing storyboard-level style instructions. This stage does not write code, but all style language must stay compatible with later Manim code generation.
+Use this compact reference when writing storyboard-level style properties. This stage does not write code, but all style language must stay compatible with later Manim code generation.
 
 ## 1. Allowed Color Constants
 

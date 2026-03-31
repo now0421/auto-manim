@@ -102,4 +102,18 @@ class ToolSchemasTest {
         assertTrue(ToolSchemas.CODE_REVIEW.contains("revision_directives"));
         assertTrue(ToolSchemas.CODE_REVIEW.contains("likely_offscreen_risk"));
     }
+
+    @Test
+    void storyboardTool_usesPropertiesNotInstructionsForStyle() {
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"properties\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"required\": [\"role\", \"type\", \"properties\"]"));
+        assertFalse(ToolSchemas.STORYBOARD.contains("\"instructions\""));
+    }
+
+    @Test
+    void storyboardTool_requiresReferencedObjectsToBeNamedByIdOnly() {
+        assertTrue(ToolSchemas.STORYBOARD.contains("mention them by id only"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("angle between AP and l at P"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("do not restate their kind"));
+    }
 }

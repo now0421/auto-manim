@@ -1,4 +1,4 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;

@@ -142,7 +142,6 @@ public final class StoryboardJsonBuilder {
             ObjectNode styleNode = styleArray.addObject();
             putNonBlank(styleNode, "role", style.getRole());
             putNonBlank(styleNode, "type", style.getType());
-            putNonBlank(styleNode, "instructions", style.getInstructions());
             if (style.getProperties() != null && !style.getProperties().isEmpty()) {
                 styleNode.set("properties", JsonUtils.mapper().valueToTree(style.getProperties()));
             }

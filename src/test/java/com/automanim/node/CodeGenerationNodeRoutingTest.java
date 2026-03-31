@@ -1,4 +1,4 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
@@ -261,7 +261,14 @@ class CodeGenerationNodeRoutingTest {
         title.setKind("text");
         title.setContent("Demo title");
         title.setPlacement("top-center, y = 3.0");
-        title.setStyle("WHITE, scale 0.9");
+        Narrative.StoryboardStyle titleStyle = new Narrative.StoryboardStyle();
+        titleStyle.setRole("emphasis");
+        titleStyle.setType("text");
+        titleStyle.setProperties(Map.of(
+                "color", "WHITE",
+                "scale", 0.9
+        ));
+        title.setStyle(List.of(titleStyle));
         title.setSourceNode("problem");
         scene.setEnteringObjects(List.of(title));
         scene.setPersistentObjects(List.of("title_main"));

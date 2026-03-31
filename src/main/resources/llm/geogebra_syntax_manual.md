@@ -370,6 +370,9 @@ If the downstream consumer expects executable commands, use official scripting c
 
 ```text
 SetColor(s, "blue")
+SetColor(s, 0, 0, 1)
+SetColor(s, "#0000FF")
+SetColor(poly, "#80FF0000")
 SetLineThickness(s, 6)
 SetPointStyle(A, 0)
 SetFilling(poly, 0.25)
@@ -379,11 +382,22 @@ SetConditionToShowObject(helperLine, showHelpers)
 
 Important corrections:
 
+- `SetColor(<Object>, <Red>, <Green>, <Blue>)` is an official form, where each component is normally interpreted on the 0 to 1 scale.
+- `SetColor(<Object>, <"Color">)` is also official.
+- For text color input, use English color names for executable GeoGebraScript.
+- Official text color inputs also include hexadecimal strings of the form `#RRGGBB` and `#AARRGGBB`.
+- `#AARRGGBB` includes alpha, red, green, and blue; `AA` controls transparency.
 - Natural-language phrases like 鈥渂lue segment with medium thickness鈥?are **guidance**, not executable GeoGebra syntax.
 - If you want a command-level manual for an LLM, distinguish clearly between:
   - executable GeoGebra commands
   - non-executable visual recommendations
 - Scripting commands cannot be nested inside object constructors.
+
+Preferred color-name discipline for LLM output:
+
+- Use English names only.
+- Prefer common official names such as `BLUE`, `RED`, `GREEN`, `YELLOW`, `BLACK`, `WHITE`, `GRAY`, `LIGHTGRAY`, `DARKBLUE`, `DARKGREEN`, `ORANGE`, `GOLD`, `PURPLE`, `PINK`, `CYAN`, `TURQUOISE`, `LIGHTBLUE`.
+- If a very specific color is required, prefer an official hex string over an invented prose description.
 
 Recommended visual policy:
 

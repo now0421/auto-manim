@@ -1,12 +1,64 @@
 # GeoGebra Style Reference
 
-Use this compact reference when writing storyboard-level style instructions for GeoGebra output. This stage does not write code, but all style language should stay compatible with later GeoGebra construction and presentation steps.
+Use this compact reference when writing storyboard-level style properties for GeoGebra output. This stage does not write code, but all style language must stay compatible with later GeoGebra command generation.
 
-## 1. Safe Style Language
+## 1. Allowed Color Inputs
+
+If you mention GeoGebra colors in `color_scheme`, `color_palette`, object `style`, or scene notes, use only official `SetColor`-compatible inputs:
+
+Named colors:
+
+* `BLACK`
+* `DARKGRAY`
+* `GRAY`
+* `DARKBLUE`
+* `BLUE`
+* `DARKGREEN`
+* `GREEN`
+* `MAROON`
+* `CRIMSON`
+* `RED`
+* `MAGENTA`
+* `INDIGO`
+* `PURPLE`
+* `BROWN`
+* `ORANGE`
+* `GOLD`
+* `LIME`
+* `CYAN`
+* `TURQUOISE`
+* `LIGHTBLUE`
+* `AQUA`
+* `SILVER`
+* `LIGHTGRAY`
+* `PINK`
+* `VIOLET`
+* `YELLOW`
+* `LIGHTYELLOW`
+* `LIGHTORANGE`
+* `LIGHTVIOLET`
+* `LIGHTPURPLE`
+* `LIGHTGREEN`
+* `WHITE`
+
+Additional official color names from the GeoGebra colors reference are also allowed. Keep them in English.
+
+Hex colors:
+
+* `#RRGGBB`
+* `#AARRGGBB`
+
+Rules:
+
+* Use English color names only.
+* Prefer named colors in storyboard output unless a very specific official hex color is necessary.
+* Do not invent CSS color names, gradients, shadows, or browser-specific styling terms.
+
+## 2. Safe Style Language
 
 Describe style in simple GeoGebra-friendly terms:
 
-* color
+* overall color
 * line thickness
 * line style
 * point size
@@ -17,16 +69,14 @@ Describe style in simple GeoGebra-friendly terms:
 
 Prefer short phrases such as:
 
-* blue primary segment with medium thickness
-* red highlight point
-* dashed gray helper line
-* lightly filled polygon
-* hide auxiliary bisectors after construction
-* show labels only for key points
+* `BLUE primary segment with medium thickness`
+* `RED highlight point`
+* `DARKGRAY dashed helper line`
+* `LIGHTGREEN lightly filled polygon`
+* `hide auxiliary bisectors after construction`
+* `show labels only for key points`
 
-Avoid CSS-style syntax, gradients, shadows, blur, texture language, or browser-specific styling terms.
-
-## 2. Style Planning Rules
+## 3. Style Planning Rules
 
 * Use semantic color mapping consistently across the figure.
 * Keep the same object category in the same color whenever possible.
@@ -35,29 +85,11 @@ Avoid CSS-style syntax, gradients, shadows, blur, texture language, or browser-s
 * Do not overload one figure with too many saturated highlight colors.
 * Labels and measurements should support the construction rather than crowd it.
 
-## 3. Visibility Guidance
+## 4. Storyboard Output Guidance
 
-When planning a construction:
+When writing storyboard JSON:
 
-* keep labels on key points, key lines, and final results
-* hide temporary helper objects unless they are pedagogically important
-* reduce clutter before introducing additional annotations
-* prefer one clear highlighted target over several competing accents
-
-## 4. Dynamic Figure Guidance
-
-If the figure is interactive or slider-driven:
-
-* style the moving object so it is easy to track
-* keep dependent objects visually attached to the same semantic palette
-* use dynamic text sparingly and only for values that genuinely help interpretation
-* avoid too many simultaneous moving labels or measurements
-
-## 5. Storyboard Output Guidance
-
-When writing storyboard JSON or high-level design notes:
-
-* `color_palette` should list simple named colors only
-* `color_scheme` should describe semantic mapping, not implementation details
-* object `style` should stay concise and construction-friendly
-* `notes_for_codegen` may remind later stages to preserve dependency clarity, helper visibility rules, and emphasis hierarchy
+* `color_palette` should contain only official GeoGebra named colors or official hex strings.
+* `color_scheme` should describe semantic mapping, not implementation details.
+* Object `style` should stay concise and construction-friendly.
+* `notes_for_codegen` may remind later stages to preserve helper visibility, label policy, and emphasis hierarchy.

@@ -340,9 +340,6 @@ public class Narrative {
         @JsonProperty("type")
         private String type;
 
-        @JsonProperty("instructions")
-        private String instructions;
-
         @JsonProperty("properties")
         private Map<String, Object> properties = new LinkedHashMap<>();
 
@@ -353,9 +350,6 @@ public class Narrative {
 
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }
-
-        public String getInstructions() { return instructions; }
-        public void setInstructions(String instructions) { this.instructions = instructions; }
 
         public Map<String, Object> getProperties() { return properties; }
         public void setProperties(Map<String, Object> properties) {

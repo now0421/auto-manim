@@ -81,7 +81,7 @@ public final class SystemPrompts {
         }
         return base
                 + "\n\nManim style reference:\n"
-                + "Follow the guidance below whenever you assign storyboard-level colors or style instructions.\n\n"
+                + "Follow the guidance below whenever you assign storyboard-level colors or style properties.\n\n"
                 + ManimStyleReferenceHolder.VALUE;
     }
 
@@ -103,7 +103,7 @@ public final class SystemPrompts {
         }
         return base
                 + "\n\nGeoGebra style reference:\n"
-                + "Follow the guidance below whenever you assign storyboard-level colors or style instructions.\n\n"
+                + "Follow the guidance below whenever you assign storyboard-level colors or style properties.\n\n"
                 + GeoGebraStyleReferenceHolder.VALUE;
     }
 
