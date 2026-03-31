@@ -28,6 +28,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -99,6 +101,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
     @Override
     public CodeResult exec(CodeGenerationInput input) {
+        Instant start = Instant.now();
         log.info("=== Stage 2: Code Generation ===");
         toolCalls = 0;
 
@@ -113,7 +116,9 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
         if (narrative == null && input.existingCodeResult() == null) {
             log.warn("Narrative is empty, cannot generate code");
-            return new CodeResult("", "", "Empty narrative", "", "");
+            CodeResult emptyResult = new CodeResult("", "", "Empty narrative", "", "");
+            emptyResult.setExecutionTimeSeconds(toSeconds(start));
+            return emptyResult;
         }
 
         String targetConcept = narrative != null ? narrative.getTargetConcept()
@@ -133,7 +138,15 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             String userPrompt = buildGenerationPrompt(narrative, artifactName);
             if (userPrompt.isBlank()) {
                 log.warn("Narrative prompt is empty, cannot generate code");
-                return new CodeResult("", "", "Empty narrative", targetConcept, targetDescription);
+                CodeResult emptyResult = new CodeResult(
+                        "",
+                        "",
+                        "Empty narrative",
+                        targetConcept,
+                        targetDescription
+                );
+                emptyResult.setExecutionTimeSeconds(toSeconds(start));
+                return emptyResult;
             }
 
             try {
@@ -188,9 +201,14 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         result.setOutputTarget(resolveOutputTarget());
         result.setArtifactFormat(resolveArtifactFormat());
         result.setToolCalls(toolCalls + fixState.totalToolCalls());
+        result.setExecutionTimeSeconds(toSeconds(start));
 
         log.info("Code generated: {} lines, artifact={}", result.codeLineCount(), artifactName);
         return result;
+    }
+
+    private double toSeconds(Instant start) {
+        return Duration.between(start, Instant.now()).toNanos() / 1_000_000_000.0;
     }
 
     private CompletableFuture<CodeDraft> requestCodeAsync(String userPrompt, String expectedArtifactName) {

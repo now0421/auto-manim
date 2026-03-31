@@ -26,6 +26,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -119,6 +121,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
     @Override
     public RenderResult exec(RenderInput input) {
+        Instant start = Instant.now();
         RenderRetryState retryState = input.retryState();
         retryState.setRequestFix(false);
         retryState.pendingFocusedError = null;
@@ -130,20 +133,20 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         if (config != null && !config.isRenderEnabled()) {
             log.info("Rendering disabled by config");
             retryState.reset();
-            return skippedResult(codeResult, config, "Render disabled");
+            return skippedResult(codeResult, config, "Render disabled", start);
         }
         if (codeResult == null || !codeResult.hasCode()) {
             log.warn("No code to render");
             retryState.reset();
-            return skippedResult(codeResult, config, "No code");
+            return skippedResult(codeResult, config, "No code", start);
         }
 
         return isGeoGebraTarget(input)
-                ? renderGeoGebra(input)
-                : renderManim(input);
+                ? renderGeoGebra(input, start)
+                : renderManim(input, start);
     }
 
-    private RenderResult renderManim(RenderInput input) {
+    private RenderResult renderManim(RenderInput input, Instant start) {
         CodeResult codeResult = input.codeResult();
         CodeEvaluationResult codeEvaluationResult = input.codeEvaluationResult();
         WorkflowConfig config = input.config();
@@ -174,7 +177,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     retryState.getAttempts(),
                     input.previousFixResult().getFailureReason(),
                     null,
-                    retryState.getFixToolCalls()
+                    retryState.getFixToolCalls(),
+                    start
             );
         }
 
@@ -200,6 +204,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             result.setGeometryPath(geometryPath);
             result.setAttempts(attemptNumber);
             result.setToolCalls(retryState.getFixToolCalls());
+            result.setExecutionTimeSeconds(toSeconds(start));
             return result;
         }
 
@@ -209,12 +214,28 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
         if (attemptNumber >= maxRetries + 1) {
             log.warn("Render failed after {} attempts", attemptNumber);
-            return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.getFixToolCalls());
+            return failureResult(
+                    currentCode,
+                    sceneName,
+                    attemptNumber,
+                    lastError,
+                    geometryPath,
+                    retryState.getFixToolCalls(),
+                    start
+            );
         }
 
         if (ErrorSummarizer.isEnvironmentError(lastError)) {
             log.warn("  Non-code error detected (environment issue), stopping retries");
-            return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.getFixToolCalls());
+            return failureResult(
+                    currentCode,
+                    sceneName,
+                    attemptNumber,
+                    lastError,
+                    geometryPath,
+                    retryState.getFixToolCalls(),
+                    start
+            );
         }
 
         String focusedError = ErrorSummarizer.extractFocusedError(renderAttempt.stdout(), renderAttempt.stderr());
@@ -222,10 +243,18 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         retryState.previousErrorSignature = errorSignature;
         retryState.setRequestFix(true);
         retryState.pendingFocusedError = focusedError;
-        return failureResult(currentCode, sceneName, attemptNumber, lastError, geometryPath, retryState.getFixToolCalls());
+        return failureResult(
+                currentCode,
+                sceneName,
+                attemptNumber,
+                lastError,
+                geometryPath,
+                retryState.getFixToolCalls(),
+                start
+        );
     }
 
-    private RenderResult renderGeoGebra(RenderInput input) {
+    private RenderResult renderGeoGebra(RenderInput input, Instant start) {
         CodeResult codeResult = input.codeResult();
         WorkflowConfig config = input.config();
         RenderRetryState retryState = input.retryState();
@@ -244,7 +273,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     retryState.getAttempts(),
                     input.previousFixResult().getFailureReason(),
                     null,
-                    retryState.getFixToolCalls()
+                    retryState.getFixToolCalls(),
+                    start
             );
         }
 
@@ -268,6 +298,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             result.setArtifactPath(renderAttempt.previewPath());
             result.setAttempts(attemptNumber);
             result.setToolCalls(retryState.getFixToolCalls());
+            result.setExecutionTimeSeconds(toSeconds(start));
             return result;
         }
 
@@ -283,7 +314,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     attemptNumber,
                     error,
                     renderAttempt.previewPath(),
-                    retryState.getFixToolCalls()
+                    retryState.getFixToolCalls(),
+                    start
             );
         }
 
@@ -295,7 +327,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     attemptNumber,
                     error,
                     renderAttempt.previewPath(),
-                    retryState.getFixToolCalls()
+                    retryState.getFixToolCalls(),
+                    start
             );
         }
 
@@ -307,7 +340,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                 attemptNumber,
                 error,
                 renderAttempt.previewPath(),
-                retryState.getFixToolCalls()
+                retryState.getFixToolCalls(),
+                start
         );
     }
 
@@ -359,7 +393,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
 
     private RenderResult skippedResult(CodeResult codeResult,
                                        WorkflowConfig config,
-                                       String reason) {
+                                       String reason,
+                                       Instant start) {
         RenderResult skipped = RenderResult.skipped(
                 codeResult != null ? codeResult.getSceneName() : ManimCodeUtils.EXPECTED_SCENE_NAME,
                 reason);
@@ -371,6 +406,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         skipped.setArtifactType(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equals(outputTarget)
                 ? "geogebra_preview_html"
                 : "video");
+        skipped.setExecutionTimeSeconds(toSeconds(start));
         return skipped;
     }
 
@@ -379,7 +415,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                                        int attempts,
                                        String error,
                                        String geometryPath,
-                                       int toolCalls) {
+                                       int toolCalls,
+                                       Instant start) {
         RenderResult result = new RenderResult();
         result.setSuccess(false);
         result.setFinalCode(code);
@@ -390,6 +427,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         result.setAttempts(attempts);
         result.setLastError(error);
         result.setToolCalls(toolCalls);
+        result.setExecutionTimeSeconds(toSeconds(start));
         return result;
     }
 
@@ -398,7 +436,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                                                int attempts,
                                                String error,
                                                String previewPath,
-                                               int toolCalls) {
+                                               int toolCalls,
+                                               Instant start) {
         RenderResult result = new RenderResult();
         result.setSuccess(false);
         result.setFinalCode(code);
@@ -409,7 +448,12 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         result.setAttempts(attempts);
         result.setLastError(error);
         result.setToolCalls(toolCalls);
+        result.setExecutionTimeSeconds(toSeconds(start));
         return result;
+    }
+
+    private double toSeconds(Instant start) {
+        return Duration.between(start, Instant.now()).toNanos() / 1_000_000_000.0;
     }
 
     private boolean isGeoGebraEnvironmentError(String error) {

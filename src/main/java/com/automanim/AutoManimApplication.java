@@ -258,8 +258,19 @@ public class AutoManimApplication {
         RenderResult renderResult = (RenderResult) ctx.get(WorkflowKeys.RENDER_RESULT);
         SceneEvaluationResult sceneEvaluationResult =
                 (SceneEvaluationResult) ctx.get(WorkflowKeys.SCENE_EVALUATION_RESULT);
-        int apiCalls = (int) ctx.getOrDefault(WorkflowKeys.EXPLORATION_API_CALLS, 0);
-        apiCalls += (int) ctx.getOrDefault(WorkflowKeys.ENRICHMENT_TOOL_CALLS, 0);
+        int explorationCalls = (int) ctx.getOrDefault(WorkflowKeys.EXPLORATION_API_CALLS, 0);
+        int enrichmentCalls = (int) ctx.getOrDefault(WorkflowKeys.ENRICHMENT_TOOL_CALLS, 0);
+        int codeGenerationCalls = codeResult != null ? codeResult.getToolCalls() : 0;
+        int codeEvaluationCalls = codeEvaluationResult != null ? codeEvaluationResult.getToolCalls() : 0;
+        int renderStageCalls = renderResult != null ? renderResult.getToolCalls() : 0;
+        int sceneEvaluationCalls = sceneEvaluationResult != null ? sceneEvaluationResult.getToolCalls() : 0;
+        int codeFixCalls = sumCodeFixToolCalls(codeFixTraceReport);
+        int totalLlmCalls = explorationCalls
+                + enrichmentCalls
+                + codeGenerationCalls
+                + codeEvaluationCalls
+                + renderStageCalls
+                + sceneEvaluationCalls;
 
         WorkflowConfig workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         summary.put("concept", ctx.get(WorkflowKeys.CONCEPT));
@@ -267,7 +278,8 @@ public class AutoManimApplication {
         summary.put("output_target", workflowConfig.getOutputTarget());
         summary.put("model", workflowConfig.getModel());
         summary.put("provider", workflowConfig.getModelConfig().resolveProvider());
-        summary.put("elapsed_seconds", elapsed.getSeconds());
+        summary.put("elapsed_millis", elapsed.toMillis());
+        summary.put("elapsed_seconds", toSeconds(elapsed));
 
         if (graph != null) {
             summary.put("graph_nodes", graph.countNodes());
@@ -276,17 +288,17 @@ public class AutoManimApplication {
         }
 
         if (codeResult != null) {
-            apiCalls += codeResult.getToolCalls();
             summary.put("scene_name", codeResult.getSceneName());
             summary.put("code_lines", codeResult.codeLineCount());
+            summary.put("code_generation_seconds", codeResult.getExecutionTimeSeconds());
         }
 
         if (codeEvaluationResult != null) {
-            apiCalls += codeEvaluationResult.getToolCalls();
             summary.put("code_evaluation_approved", codeEvaluationResult.isApprovedForRender());
             summary.put("code_revision_triggered", codeEvaluationResult.isRevisionTriggered());
             summary.put("code_revision_attempts", codeEvaluationResult.getRevisionAttempts());
             summary.put("code_gate_reason", codeEvaluationResult.getGateReason());
+            summary.put("code_evaluation_seconds", codeEvaluationResult.getExecutionTimeSeconds());
 
             CodeEvaluationResult.ReviewSnapshot finalReview = codeEvaluationResult.getFinalReview();
             if (finalReview != null) {
@@ -299,17 +311,16 @@ public class AutoManimApplication {
         }
 
         if (renderResult != null) {
-            apiCalls += renderResult.getToolCalls();
             summary.put("render_success", renderResult.isSuccess());
             summary.put("render_attempts", renderResult.getAttempts());
             summary.put("video_path", renderResult.getVideoPath());
             summary.put("artifact_path", renderResult.getArtifactPath());
             summary.put("artifact_type", renderResult.getArtifactType());
             summary.put("geometry_path", renderResult.getGeometryPath());
+            summary.put("render_seconds", renderResult.getExecutionTimeSeconds());
         }
 
         if (sceneEvaluationResult != null) {
-            apiCalls += sceneEvaluationResult.getToolCalls();
             summary.put("scene_evaluation_evaluated", sceneEvaluationResult.isEvaluated());
             summary.put("scene_evaluation_approved", sceneEvaluationResult.isApproved());
             summary.put("scene_evaluation_revision_triggered", sceneEvaluationResult.isRevisionTriggered());
@@ -320,11 +331,21 @@ public class AutoManimApplication {
             summary.put("scene_evaluation_total_issues", sceneEvaluationResult.getTotalIssueCount());
             summary.put("scene_evaluation_overlap_issues", sceneEvaluationResult.getOverlapIssueCount());
             summary.put("scene_evaluation_offscreen_issues", sceneEvaluationResult.getOffscreenIssueCount());
+            summary.put("scene_evaluation_seconds", sceneEvaluationResult.getExecutionTimeSeconds());
         }
 
         summary.put("code_fix_event_count", codeFixTraceReport.getTotalFixEvents());
-
-        summary.put("total_api_calls_estimate", apiCalls);
+        summary.put("code_fix_llm_calls", codeFixCalls);
+        summary.put("llm_calls_breakdown", buildLlmCallBreakdown(
+                explorationCalls,
+                enrichmentCalls,
+                codeGenerationCalls,
+                codeEvaluationCalls,
+                renderStageCalls,
+                sceneEvaluationCalls
+        ));
+        summary.put("total_llm_calls", totalLlmCalls);
+        summary.put("total_api_calls_estimate", totalLlmCalls);
         summary.put("duration_human", formatDuration(elapsed));
         return summary;
     }
@@ -398,15 +419,44 @@ public class AutoManimApplication {
                 log.info("  Scene Gate: {}", summary.get("scene_evaluation_gate_reason"));
             }
         }
-        log.info("  Total API calls: ~{}", summary.get("total_api_calls_estimate"));
+        log.info("  Total LLM calls: {}", summary.get("total_llm_calls"));
         log.info("  Duration: {}", summary.get("duration_human"));
         log.info("==========================================================");
     }
 
     private static String formatDuration(Duration d) {
-        long s = d.getSeconds();
+        long s = d.toMillis() / 1000;
         if (s < 60) return s + "s";
         return (s / 60) + "m " + (s % 60) + "s";
+    }
+
+    private static double toSeconds(Duration duration) {
+        return duration.toNanos() / 1_000_000_000.0;
+    }
+
+    private static int sumCodeFixToolCalls(CodeFixTraceReport report) {
+        if (report == null || report.getEntries() == null) {
+            return 0;
+        }
+        return report.getEntries().stream()
+                .mapToInt(CodeFixTraceEntry::getToolCalls)
+                .sum();
+    }
+
+    private static Map<String, Integer> buildLlmCallBreakdown(int explorationCalls,
+                                                              int enrichmentCalls,
+                                                              int codeGenerationCalls,
+                                                              int codeEvaluationCalls,
+                                                              int renderStageCalls,
+                                                              int sceneEvaluationCalls) {
+        Map<String, Integer> breakdown = new LinkedHashMap<>();
+        breakdown.put("exploration", explorationCalls);
+        breakdown.put("enrichment_and_narrative", enrichmentCalls);
+        breakdown.put("code_generation", codeGenerationCalls);
+        breakdown.put("code_evaluation", codeEvaluationCalls);
+        breakdown.put("render_related_code_fix", renderStageCalls);
+        breakdown.put("scene_evaluation", sceneEvaluationCalls);
+        return breakdown;
     }
 
     private static Path resolveGraphPath(String fromGraphPath) {
