@@ -35,6 +35,7 @@ public class GeoGebraRenderService {
     private static final Logger log = LoggerFactory.getLogger(GeoGebraRenderService.class);
     private static final String PREVIEW_FILE = "5_geogebra_preview.html";
     private static final String VALIDATION_FILE = "5_geogebra_validation.json";
+    private static final String GEOMETRY_FILE = "5_geogebra_geometry.json";
     private static final String DEPLOY_GGB_URL = "https://www.geogebra.org/apps/deployggb.js";
     private static final String PLAYWRIGHT_ENGINE = "playwright";
     private static final String PLAYWRIGHT_BUNDLED_CHROMIUM = "playwright:chromium";
@@ -48,12 +49,16 @@ public class GeoGebraRenderService {
     private static final int APPLET_WIDTH = 960;
     private static final int APPLET_HEIGHT = 540;
     private static final String VALIDATOR_APPLET_ID = "ggbValidatorApplet";
+    private static final double DEFAULT_FRAME_X_MIN = -7.0;
+    private static final double DEFAULT_FRAME_X_MAX = 7.0;
+    private static final double DEFAULT_FRAME_Y_MIN = -4.0;
+    private static final double DEFAULT_FRAME_Y_MAX = 4.0;
 
     public RenderAttemptResult render(String commandScript,
                                       String figureName,
                                       Path outputDir) {
         if (outputDir == null) {
-            return new RenderAttemptResult(false, null, "Output directory is unavailable");
+            return new RenderAttemptResult(false, null, null, "Output directory is unavailable");
         }
 
         try {
@@ -64,6 +69,7 @@ public class GeoGebraRenderService {
                     GeoGebraCodeUtils.extractSceneDirectives(commandScript);
             Path previewPath = outputDir.resolve(PREVIEW_FILE);
             Path validationPath = outputDir.resolve(VALIDATION_FILE);
+            Path geometryPath = outputDir.resolve(GEOMETRY_FILE);
             Files.writeString(previewPath,
                     buildPreviewHtml(commands, sceneDirectives, safeFigureName),
                     StandardCharsets.UTF_8);
@@ -74,7 +80,7 @@ public class GeoGebraRenderService {
                 report.completed = true;
                 report.error = "No executable GeoGebra commands were found after stripping comments.";
             } else {
-                report = validateWithHeadlessBrowser(previewPath, safeFigureName, commands);
+                report = validateWithHeadlessBrowser(previewPath, safeFigureName, commands, geometryPath);
             }
 
             Files.writeString(validationPath, JsonUtils.toPrettyJson(report), StandardCharsets.UTF_8);
@@ -82,22 +88,26 @@ public class GeoGebraRenderService {
             log.info("GeoGebra validation report generated: {}", validationPath);
 
             String normalizedPreviewPath = previewPath.toAbsolutePath().normalize().toString();
+            String normalizedGeometryPath = Files.exists(geometryPath)
+                    ? geometryPath.toAbsolutePath().normalize().toString()
+                    : null;
             if (report != null && report.allSuccessful()) {
-                return new RenderAttemptResult(true, normalizedPreviewPath, null);
+                return new RenderAttemptResult(true, normalizedPreviewPath, normalizedGeometryPath, null);
             }
 
             String error = summarizeValidationFailure(report);
             log.warn("GeoGebra command validation failed: {}", error);
-            return new RenderAttemptResult(false, normalizedPreviewPath, error);
+            return new RenderAttemptResult(false, normalizedPreviewPath, normalizedGeometryPath, error);
         } catch (IOException e) {
             log.warn("GeoGebra preview generation failed: {}", e.getMessage());
-            return new RenderAttemptResult(false, null, e.getMessage());
+            return new RenderAttemptResult(false, null, null, e.getMessage());
         }
     }
 
     protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
                                                            String figureName,
-                                                           List<String> commands) {
+                                                           List<String> commands,
+                                                           Path geometryPath) {
         ValidationReport fallback = newValidationReport(figureName, commands);
         fallback.browserExecutable = PLAYWRIGHT_BUNDLED_CHROMIUM;
 
@@ -135,6 +145,19 @@ public class GeoGebraRenderService {
                 return fallback;
             }
 
+            // Extract geometry for scene evaluation
+            if (geometryPath != null && parsed.allSuccessful()) {
+                try {
+                    String geometryJson = extractGeometry(page, figureName);
+                    if (geometryJson != null && !geometryJson.isBlank()) {
+                        Files.writeString(geometryPath, geometryJson, StandardCharsets.UTF_8);
+                        log.info("GeoGebra geometry report generated: {}", geometryPath);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to extract GeoGebra geometry: {}", e.getMessage());
+                }
+            }
+
             normalizeParsedReport(parsed, figureName, commands, browserDescriptor);
             appendDiagnostics(parsed, consoleMessages, pageErrors, requestFailures);
             return parsed;
@@ -153,6 +176,125 @@ public class GeoGebraRenderService {
             safeClose(browser);
             safeClose(playwright);
         }
+    }
+
+    private String extractGeometry(Page page, String figureName) {
+        return asString(page.evaluate(
+                "(figureName) => {"
+                        + " const safeCall = (fn, fallback) => {"
+                        + "   try { const v = fn(); return v === undefined ? fallback : v; }"
+                        + "   catch (e) { return fallback; }"
+                        + " };"
+                        + " const safeNumber = (v) => {"
+                        + "   if (v === null || v === undefined || !Number.isFinite(v)) return null;"
+                        + "   return Math.round(v * 1000000) / 1000000;"
+                        + " };"
+                        + " const api = window.ggbApplet;"
+                        + " if (!api) { return JSON.stringify({ error: 'GeoGebra applet not available' }); }"
+                        + " const names = safeCall(() => Array.from(api.getAllObjectNames()), []);"
+                        + " const elements = [];"
+                        + " const TEXT_CHAR_WIDTH = 0.15;"
+                        + " const TEXT_HEIGHT = 0.4;"
+                        + " const POINT_RADIUS = 0.15;"
+                        + " for (const name of names) {"
+                        + "   const type = safeCall(() => api.getObjectType(name), 'unknown');"
+                        + "   const visible = safeCall(() => api.getVisible(name), true);"
+                        + "   const x = safeNumber(safeCall(() => api.getXcoord(name), null));"
+                        + "   const y = safeNumber(safeCall(() => api.getYcoord(name), null));"
+                        + "   const caption = safeCall(() => api.getCaption(name), null);"
+                        + "   const defString = safeCall(() => api.getDefinitionString(name), null);"
+                        + "   const valueString = safeCall(() => api.getValueString(name), null);"
+                        + "   let bounds = null;"
+                        + "   let center = null;"
+                        + "   let displayText = null;"
+                        + "   let semanticClass = 'unknown';"
+                        + "   const typeLower = (type || '').toLowerCase();"
+                        + "   if (typeLower === 'point') {"
+                        + "     semanticClass = 'point';"
+                        + "     if (x !== null && y !== null) {"
+                        + "       center = [x, y, 0];"
+                        + "       bounds = {"
+                        + "         min: [x - POINT_RADIUS, y - POINT_RADIUS, 0],"
+                        + "         max: [x + POINT_RADIUS, y + POINT_RADIUS, 0]"
+                        + "       };"
+                        + "     }"
+                        + "   } else if (typeLower === 'text') {"
+                        + "     semanticClass = 'text';"
+                        + "     displayText = valueString || caption || name;"
+                        + "     if (x !== null && y !== null) {"
+                        + "       const textLen = (displayText || '').length || 1;"
+                        + "       const width = textLen * TEXT_CHAR_WIDTH;"
+                        + "       center = [x + width / 2, y + TEXT_HEIGHT / 2, 0];"
+                        + "       bounds = {"
+                        + "         min: [x, y, 0],"
+                        + "         max: [x + width, y + TEXT_HEIGHT, 0]"
+                        + "       };"
+                        + "     }"
+                        + "   } else if (typeLower === 'line' || typeLower === 'ray' || typeLower === 'segment') {"
+                        + "     semanticClass = 'line';"
+                        + "     // Lines extend infinitely; we skip bounds for unbounded lines"
+                        + "     if (typeLower === 'segment') {"
+                        + "       // Attempt to get segment endpoints from definition"
+                        + "       const p1x = safeNumber(safeCall(() => api.getXcoord(name + '_1'), null));"
+                        + "       const p1y = safeNumber(safeCall(() => api.getYcoord(name + '_1'), null));"
+                        + "       const p2x = safeNumber(safeCall(() => api.getXcoord(name + '_2'), null));"
+                        + "       const p2y = safeNumber(safeCall(() => api.getYcoord(name + '_2'), null));"
+                        + "       // Segments don't typically expose endpoints this way, so bounds may be null"
+                        + "     }"
+                        + "   } else if (typeLower === 'circle' || typeLower === 'ellipse' || typeLower === 'conic') {"
+                        + "     semanticClass = 'shape';"
+                        + "   } else if (typeLower === 'polygon') {"
+                        + "     semanticClass = 'shape';"
+                        + "   } else if (typeLower === 'numeric' || typeLower === 'angle') {"
+                        + "     semanticClass = 'formula';"
+                        + "     displayText = valueString;"
+                        + "   }"
+                        + "   elements.push({"
+                        + "     stable_id: 'ggb-' + name,"
+                        + "     name: name,"
+                        + "     semantic_name: name,"
+                        + "     class_name: type,"
+                        + "     semantic_class: semanticClass,"
+                        + "     display_text: displayText,"
+                        + "     visible: visible,"
+                        + "     center: center,"
+                        + "     bounds: bounds,"
+                        + "     top_level_stable_id: 'ggb-' + name,"
+                        + "     element_path: String(elements.length),"
+                        + "     sample_order: elements.length"
+                        + "   });"
+                        + " }"
+                        + " const report = {"
+                        + "   scene_name: figureName,"
+                        + "   report_type: 'geogebra_element_report',"
+                        + "   report_version: 1,"
+                        + "   frame_bounds: {"
+                        + "     min: [" + DEFAULT_FRAME_X_MIN + ", " + DEFAULT_FRAME_Y_MIN + ", 0],"
+                        + "     max: [" + DEFAULT_FRAME_X_MAX + ", " + DEFAULT_FRAME_Y_MAX + ", 0],"
+                        + "     width: " + (DEFAULT_FRAME_X_MAX - DEFAULT_FRAME_X_MIN) + ","
+                        + "     height: " + (DEFAULT_FRAME_Y_MAX - DEFAULT_FRAME_Y_MIN)
+                        + "   },"
+                        + "   element_bounds_space: 'world',"
+                        + "   sample_count: 1,"
+                        + "   samples: [{"
+                        + "     sample_id: 'geogebra-initial',"
+                        + "     play_index: null,"
+                        + "     play_type: 'geogebra',"
+                        + "     sample_role: 'geogebra_construction',"
+                        + "     scene_method: 'construct',"
+                        + "     source_line: null,"
+                        + "     source_code: null,"
+                        + "     animation_time_seconds: null,"
+                        + "     scene_time_seconds: 0,"
+                        + "     trigger: 'construction_complete',"
+                        + "     element_count: elements.length,"
+                        + "     elements: elements"
+                        + "   }]"
+                        + " };"
+                        + " return JSON.stringify(report, null, 2);"
+                        + "}",
+                figureName
+        ));
     }
 
     private Browser launchBrowser(BrowserType chromium) {
@@ -1279,16 +1421,19 @@ public class GeoGebraRenderService {
     public static final class RenderAttemptResult {
         private final boolean success;
         private final String previewPath;
+        private final String geometryPath;
         private final String error;
 
-        public RenderAttemptResult(boolean success, String previewPath, String error) {
+        public RenderAttemptResult(boolean success, String previewPath, String geometryPath, String error) {
             this.success = success;
             this.previewPath = previewPath;
+            this.geometryPath = geometryPath;
             this.error = error;
         }
 
         public boolean success() { return success; }
         public String previewPath() { return previewPath; }
+        public String geometryPath() { return geometryPath; }
         public String error() { return error; }
     }
 }

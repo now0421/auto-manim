@@ -79,7 +79,8 @@ class GeoGebraAppletEnvironmentTest {
         private ValidationReport probeEnvironment(String figureName, List<String> commands) {
             return validateWithHeadlessBrowser(Path.of("geogebra-applet-environment-check.html"),
                     figureName,
-                    commands);
+                    commands,
+                    null);
         }
     }
 }

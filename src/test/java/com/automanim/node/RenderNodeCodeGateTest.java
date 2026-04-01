@@ -103,7 +103,8 @@ class RenderNodeCodeGateTest {
             @Override
             protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
                                                                    String figureName,
-                                                                   List<String> commands) {
+                                                                   List<String> commands,
+                                                                   Path geometryPath) {
                 return successfulValidationReport(figureName, commands);
             }
         };
@@ -148,11 +149,12 @@ class RenderNodeCodeGateTest {
             @Override
             public RenderAttemptResult render(String commandScript, String figureName, Path outputDir) {
                 if (commandScript.contains("mid = Midpoint(A, B)")) {
-                    return new RenderAttemptResult(true, outputDir.resolve("5_geogebra_preview.html").toString(), null);
+                    return new RenderAttemptResult(true, outputDir.resolve("5_geogebra_preview.html").toString(), null, null);
                 }
                 return new RenderAttemptResult(
                         false,
                         outputDir.resolve("5_geogebra_preview.html").toString(),
+                        null,
                         "Command 3 returned false: mid = Midpoint(lineAB)"
                 );
             }
@@ -204,11 +206,12 @@ class RenderNodeCodeGateTest {
             @Override
             public RenderAttemptResult render(String commandScript, String figureName, Path outputDir) {
                 if (commandScript.contains("mid = Midpoint(A, B)")) {
-                    return new RenderAttemptResult(true, outputDir.resolve("5_geogebra_preview.html").toString(), null);
+                    return new RenderAttemptResult(true, outputDir.resolve("5_geogebra_preview.html").toString(), null, null);
                 }
                 return new RenderAttemptResult(
                         false,
                         outputDir.resolve("5_geogebra_preview.html").toString(),
+                        null,
                         "GeoGebra Playwright validation failed: Timeout 30000ms exceeded."
                 );
             }

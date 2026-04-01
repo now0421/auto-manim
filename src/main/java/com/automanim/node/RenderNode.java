@@ -292,6 +292,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     retryState.getAttempts(),
                     input.previousFixResult().getFailureReason(),
                     null,
+                    null,
                     retryState.getFixToolCalls(),
                     start
             );
@@ -315,6 +316,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             result.setFinalCode(preparedCode);
             result.setSceneName(sceneName);
             result.setArtifactPath(renderAttempt.previewPath());
+            result.setGeometryPath(renderAttempt.geometryPath());
             result.setAttempts(attemptNumber);
             result.setToolCalls(retryState.getFixToolCalls());
             result.setExecutionTimeSeconds(toSeconds(start));
@@ -333,6 +335,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     attemptNumber,
                     error,
                     renderAttempt.previewPath(),
+                    renderAttempt.geometryPath(),
                     retryState.getFixToolCalls(),
                     start
             );
@@ -346,6 +349,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                     attemptNumber,
                     error,
                     renderAttempt.previewPath(),
+                    renderAttempt.geometryPath(),
                     retryState.getFixToolCalls(),
                     start
             );
@@ -359,6 +363,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                 attemptNumber,
                 error,
                 renderAttempt.previewPath(),
+                renderAttempt.geometryPath(),
                 retryState.getFixToolCalls(),
                 start
         );
@@ -455,6 +460,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                                                int attempts,
                                                String error,
                                                String previewPath,
+                                               String geometryPath,
                                                int toolCalls,
                                                Instant start) {
         RenderResult result = new RenderResult();
@@ -464,6 +470,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         result.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);
         result.setArtifactType("geogebra_preview_html");
         result.setArtifactPath(previewPath);
+        result.setGeometryPath(geometryPath);
         result.setAttempts(attempts);
         result.setLastError(error);
         result.setToolCalls(toolCalls);

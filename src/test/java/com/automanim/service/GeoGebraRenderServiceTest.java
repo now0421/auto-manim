@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -23,7 +24,8 @@ class GeoGebraRenderServiceTest {
             @Override
             protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
                                                                    String figureName,
-                                                                   List<String> commands) {
+                                                                   List<String> commands,
+                                                                   Path geometryPath) {
                 ValidationReport report = new ValidationReport();
                 report.figureName = figureName;
                 report.validationEngine = "playwright";
@@ -85,7 +87,8 @@ class GeoGebraRenderServiceTest {
             @Override
             protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
                                                                    String figureName,
-                                                                   List<String> commands) {
+                                                                   List<String> commands,
+                                                                   Path geometryPath) {
                 ValidationReport report = new ValidationReport();
                 report.figureName = figureName;
                 report.validationEngine = "playwright";
@@ -121,7 +124,8 @@ class GeoGebraRenderServiceTest {
             @Override
             protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
                                                                    String figureName,
-                                                                   List<String> commands) {
+                                                                   List<String> commands,
+                                                                   Path geometryPath) {
                 return successfulReport(figureName, commands);
             }
         };
@@ -144,6 +148,63 @@ class GeoGebraRenderServiceTest {
         assertTrue(previewHtml.contains("scene-controls"));
         assertTrue(previewHtml.contains("scene-data"));
         assertFalse(previewHtml.contains("label = Text(\"quoted"));
+    }
+
+    @Test
+    void renderGeneratesGeometryReportForSuccessfulValidation() throws IOException {
+        GeoGebraRenderService service = new GeoGebraRenderService() {
+            @Override
+            protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
+                                                                   String figureName,
+                                                                   List<String> commands,
+                                                                   Path geometryPath) {
+                // Simulate writing geometry file (normally done via Playwright JS)
+                if (geometryPath != null) {
+                    String mockGeometry = """
+                            {
+                              "scene_name": "GeoGebraFigure",
+                              "report_type": "geogebra_element_report",
+                              "report_version": 1,
+                              "frame_bounds": {
+                                "min": [-7.0, -4.0, 0],
+                                "max": [7.0, 4.0, 0]
+                              },
+                              "sample_count": 1,
+                              "samples": [{
+                                "sample_id": "geogebra-initial",
+                                "sample_role": "geogebra_construction",
+                                "element_count": 2,
+                                "elements": [
+                                  {"stable_id": "ggb-A", "name": "A", "class_name": "point", "visible": true},
+                                  {"stable_id": "ggb-B", "name": "B", "class_name": "point", "visible": true}
+                                ]
+                              }]
+                            }
+                            """;
+                    try {
+                        Files.writeString(geometryPath, mockGeometry, StandardCharsets.UTF_8);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                return successfulReport(figureName, commands);
+            }
+        };
+
+        GeoGebraRenderService.RenderAttemptResult result = service.render(
+                "A = (0, 0)\nB = (4, 0)",
+                "GeoGebraFigure",
+                tempDir
+        );
+
+        assertTrue(result.success());
+        assertNotNull(result.geometryPath());
+        assertTrue(Files.exists(Path.of(result.geometryPath())));
+
+        String geometryJson = Files.readString(Path.of(result.geometryPath()));
+        assertTrue(geometryJson.contains("geogebra_element_report"));
+        assertTrue(geometryJson.contains("geogebra_construction"));
+        assertTrue(geometryJson.contains("ggb-A"));
     }
 
     private static GeoGebraRenderService.ValidationReport successfulReport(String figureName,

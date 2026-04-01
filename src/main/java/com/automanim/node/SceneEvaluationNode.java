@@ -130,14 +130,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
         log.info("=== Stage 5: Scene Evaluation ===");
 
-        if (input.config() != null && input.config().isGeoGebraTarget()) {
-            return skipEvaluation(
-                    result,
-                    retryState,
-                    start,
-                    "Scene evaluation skipped: GeoGebra target does not produce Manim geometry samples");
-        }
-
         if (renderResult == null) {
             return skipEvaluation(result, retryState, start, "Scene evaluation skipped: render result unavailable");
         }
@@ -264,6 +256,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                                                           SceneEvaluationResult result) {
         CodeResult codeResult = input.codeResult();
         Narrative narrative = input.narrative();
+        RenderResult renderResult = input.renderResult();
         SceneEvaluationRetryState retryState = input.retryState();
 
         CodeFixRequest request = new CodeFixRequest();
@@ -279,7 +272,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         request.setTargetConcept(codeResult.getTargetConcept());
         request.setTargetDescription(codeResult.getTargetDescription());
         request.setSceneName(codeResult.getSceneName());
-        request.setExpectedSceneName("MainScene");
+        // For GeoGebra, the expected scene name is typically "GeoGebraFigure"
+        boolean isGeoGebra = renderResult != null && renderResult.isGeoGebraTarget();
+        request.setExpectedSceneName(isGeoGebra ? "GeoGebraFigure" : "MainScene");
         request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
                 ? StoryboardJsonBuilder.buildForSceneEvaluationFix(narrative.getStoryboard())
                 : "{\"scenes\":[]}");
