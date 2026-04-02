@@ -9,6 +9,7 @@ import com.automanim.model.WorkflowKeys;
 import com.automanim.service.AiClient;
 import com.automanim.service.GeoGebraRenderService;
 import com.automanim.service.ManimRendererService;
+import com.automanim.util.GeoGebraCodeUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
 import org.junit.jupiter.api.Test;
@@ -87,7 +88,7 @@ class RenderNodeCodeGateTest {
                         "A = (0, 0)",
                         "B = (4, 0)",
                         "lineAB = Line(A, B)"),
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 "demo",
                 "Demo concept",
                 "Demo description");
@@ -132,7 +133,7 @@ class RenderNodeCodeGateTest {
                         "A = (0, 0)",
                         "B = (4, 0)",
                         "mid = Midpoint(lineAB)"),
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 "demo",
                 "Demo concept",
                 "Demo description");
@@ -174,7 +175,7 @@ class RenderNodeCodeGateTest {
         assertTrue(renderResult.isSuccess());
         assertEquals(2, renderResult.getAttempts());
         assertNull(renderResult.getLastError());
-        assertTrue(finalCodeResult.getCode().contains("mid = Midpoint(A, B)"));
+        assertTrue(finalCodeResult.getGeneratedCode().contains("mid = Midpoint(A, B)"));
     }
 
     @Test
@@ -189,7 +190,7 @@ class RenderNodeCodeGateTest {
                         "A = (0, 0)",
                         "B = (4, 0)",
                         "mid = Midpoint(lineAB)"),
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 "demo",
                 "Demo concept",
                 "Demo description");
@@ -231,7 +232,7 @@ class RenderNodeCodeGateTest {
         assertFalse(renderResult.isSuccess());
         assertEquals(1, renderResult.getAttempts());
         assertTrue(renderResult.getLastError().contains("Timeout 30000ms exceeded"));
-        assertTrue(finalCodeResult.getCode().contains("mid = Midpoint(lineAB)"));
+        assertTrue(finalCodeResult.getGeneratedCode().contains("mid = Midpoint(lineAB)"));
     }
 
     private static GeoGebraRenderService.ValidationReport successfulValidationReport(String figureName,

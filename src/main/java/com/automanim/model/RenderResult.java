@@ -10,7 +10,7 @@ import com.automanim.config.WorkflowConfig;
 public class RenderResult {
 
     private boolean success;
-    private String finalCode;
+    private String finalGeneratedCode;
     private String sceneName;
     private String videoPath;
     private String artifactPath;
@@ -46,8 +46,8 @@ public class RenderResult {
     public boolean isSuccess() { return success; }
     public void setSuccess(boolean success) { this.success = success; }
 
-    public String getFinalCode() { return finalCode; }
-    public void setFinalCode(String finalCode) { this.finalCode = finalCode; }
+    public String getFinalGeneratedCode() { return finalGeneratedCode; }
+    public void setFinalGeneratedCode(String finalGeneratedCode) { this.finalGeneratedCode = finalGeneratedCode; }
 
     public String getSceneName() { return sceneName; }
     public void setSceneName(String sceneName) { this.sceneName = sceneName; }

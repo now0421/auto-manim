@@ -1,5 +1,6 @@
 package com.automanim.node;
 
+import com.automanim.config.ModelConfig;
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.KnowledgeNode;
@@ -98,9 +99,9 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         foundationCache.clear();
         prereqDescriptions.clear();
 
-        int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
-                ? workflowConfig.getModelConfig().getMaxInputTokens()
-                : 131072;
+        int maxInputTokens = workflowConfig != null
+                ? workflowConfig.resolveMaxInputTokens()
+                : ModelConfig.DEFAULT_MAX_INPUT_TOKENS;
         initializeRoutingContext(maxInputTokens, concept);
         String resolvedMode = resolveInputMode(concept);
         initializeExplorationContexts(maxInputTokens, concept, resolvedMode);

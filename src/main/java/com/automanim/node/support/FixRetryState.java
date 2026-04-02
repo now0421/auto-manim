@@ -16,7 +16,7 @@ public class FixRetryState {
     protected int fixToolCalls;
     protected int carryoverToolCalls;
     protected boolean requestFix;
-    protected String originalCodeBeforeFix;
+    protected String originalGeneratedCodeBeforeFix;
     protected int originalIssueCount;
     protected List<String> currentIssues = new ArrayList<>();
 
@@ -29,7 +29,7 @@ public class FixRetryState {
      */
     public void clearPending() {
         requestFix = false;
-        originalCodeBeforeFix = null;
+        originalGeneratedCodeBeforeFix = null;
         originalIssueCount = 0;
         currentIssues = new ArrayList<>();
     }
@@ -50,7 +50,7 @@ public class FixRetryState {
     public void recordFixRequest(String code, List<String> issues) {
         requestFix = true;
         attempts++;
-        originalCodeBeforeFix = code;
+        originalGeneratedCodeBeforeFix = code;
         originalIssueCount = issues != null ? issues.size() : 0;
         currentIssues = issues != null ? new ArrayList<>(issues) : new ArrayList<>();
     }
@@ -59,7 +59,7 @@ public class FixRetryState {
      * Checks if the fix improved the issue count.
      */
     public boolean didFixImprove(int newIssueCount) {
-        if (originalCodeBeforeFix == null) {
+        if (originalGeneratedCodeBeforeFix == null) {
             return true;
         }
         return newIssueCount < originalIssueCount;
@@ -117,12 +117,12 @@ public class FixRetryState {
         this.requestFix = requestFix;
     }
 
-    public String getOriginalCodeBeforeFix() {
-        return originalCodeBeforeFix;
+    public String getOriginalGeneratedCodeBeforeFix() {
+        return originalGeneratedCodeBeforeFix;
     }
 
-    public void setOriginalCodeBeforeFix(String originalCodeBeforeFix) {
-        this.originalCodeBeforeFix = originalCodeBeforeFix;
+    public void setOriginalGeneratedCodeBeforeFix(String originalGeneratedCodeBeforeFix) {
+        this.originalGeneratedCodeBeforeFix = originalGeneratedCodeBeforeFix;
     }
 
     public int getOriginalIssueCount() {

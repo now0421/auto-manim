@@ -1,5 +1,6 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
+import com.automanim.config.ModelConfig;
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeFixRequest;
 import com.automanim.model.CodeFixResult;
@@ -12,6 +13,7 @@ import com.automanim.prompt.CodeEvaluationPrompts;
 import com.automanim.prompt.CodeGenerationPrompts;
 import com.automanim.prompt.RenderFixPrompts;
 import com.automanim.prompt.SceneEvaluationPrompts;
+import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
 import com.automanim.util.CodeValidationSupport;
@@ -20,11 +22,11 @@ import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.NodeConversationContext;
 import com.automanim.util.TextUtils;
+import com.automanim.util.TimeUtils;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -68,24 +70,24 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
 
         if (request == null) {
             result.setFailureReason("No code fix request available");
-            result.setExecutionTimeSeconds(toSeconds(start));
+            result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
             return result;
         }
 
         result.setSource(request.getSource());
         result.setReturnAction(request.getReturnAction());
-        result.setOriginalCode(request.getCode());
+        result.setOriginalGeneratedCode(request.getGeneratedCode());
         result.setErrorReason(request.getErrorReason());
 
-        if (request.getCode() == null || request.getCode().isBlank()) {
+        if (request.getGeneratedCode() == null || request.getGeneratedCode().isBlank()) {
             result.setFailureReason("No code provided for code fix");
-            result.setExecutionTimeSeconds(toSeconds(start));
+            result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
             return result;
         }
 
-        int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
-                ? workflowConfig.getModelConfig().getMaxInputTokens()
-                : 131072;
+        int maxInputTokens = workflowConfig != null
+                ? workflowConfig.resolveMaxInputTokens()
+                : ModelConfig.DEFAULT_MAX_INPUT_TOKENS;
         NodeConversationContext conversationContext = new NodeConversationContext(maxInputTokens);
         String systemPrompt = selectSystemPrompt(request);
         conversationContext.setSystemMessage(systemPrompt);
@@ -95,7 +97,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         result.setUserPrompt(userPrompt);
         if (userPrompt == null || userPrompt.isBlank()) {
             result.setFailureReason("Code fix prompt was empty");
-            result.setExecutionTimeSeconds(toSeconds(start));
+            result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
             return result;
         }
 
@@ -111,11 +113,11 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                 result.setFailureReason("Code fix returned no parseable "
                         + (isGeoGebraTarget() ? "GeoGebra code" : "Python code"));
             } else if (CodeValidationSupport.normalizeForComparison(fixedCode)
-                    .equals(CodeValidationSupport.normalizeForComparison(request.getCode()))) {
+                    .equals(CodeValidationSupport.normalizeForComparison(request.getGeneratedCode()))) {
                 result.setFailureReason("Code fix produced no meaningful code change");
             } else {
                 result.setApplied(true);
-                result.setFixedCode(fixedCode);
+                result.setFixedGeneratedCode(fixedCode);
             }
         } catch (CompletionException e) {
             Throwable cause = ConcurrencyUtils.unwrapCompletionException(e);
@@ -125,7 +127,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         }
 
         result.setToolCalls(toolCalls);
-        result.setExecutionTimeSeconds(toSeconds(start));
+        result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
         return result;
     }
 
@@ -138,7 +140,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         if (result != null && result.isApplied()) {
             CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
             if (codeResult != null) {
-                codeResult.setCode(result.getFixedCode());
+                codeResult.setGeneratedCode(result.getFixedGeneratedCode());
                 String updatedSceneName = TextUtils.firstNonBlank(
                         request != null ? request.getExpectedSceneName() : null,
                         request != null ? request.getSceneName() : null,
@@ -222,33 +224,33 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             return CodeEvaluationPrompts.revisionUserPrompt(
                     TextUtils.firstNonBlank(request.getTargetConcept(), request.getSceneName(), "Unknown target"),
                     TextUtils.firstNonBlank(request.getSceneName(), request.getExpectedSceneName(), "MainScene"),
-                    TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                    TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
                     TextUtils.defaultIfBlank(request.getStaticAnalysisJson(), "{}"),
                     TextUtils.defaultIfBlank(request.getReviewJson(), "{}"),
-                    request.getCode()
+                    request.getGeneratedCode()
             );
         }
         if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
             if (isGeoGebraTarget()) {
                 return CodeGenerationPrompts.geoGebraValidationFixUserPrompt(
                         TextUtils.firstNonBlank(
-                                request.getExpectedSceneName(), request.getSceneName(), "GeoGebraFigure"),
-                        request.getCode(),
+                                request.getExpectedSceneName(), request.getSceneName(), GeoGebraCodeUtils.EXPECTED_FIGURE_NAME),
+                        request.getGeneratedCode(),
                         splitValidationProblems(request.getErrorReason()),
-                        TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}")
+                        TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON)
                 );
             }
             return CodeGenerationPrompts.validationFixUserPrompt(
                     TextUtils.firstNonBlank(request.getExpectedSceneName(), request.getSceneName(), "MainScene"),
-                    request.getCode(),
+                    request.getGeneratedCode(),
                     splitValidationProblems(request.getErrorReason()),
-                    TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}")
+                    TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON)
             );
         }
         if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
             return SceneEvaluationPrompts.layoutFixUserPrompt(
-                    TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
-                    request.getCode(),
+                    TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
+                    request.getGeneratedCode(),
                     TextUtils.firstNonBlank(request.getErrorReason(), "Unknown scene evaluation issue"),
                     TextUtils.defaultIfBlank(request.getSceneEvaluationJson(), "{}"),
                     request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
@@ -256,15 +258,15 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         }
         return isGeoGebraTarget()
                 ? RenderFixPrompts.geoGebraUserPrompt(
-                request.getCode(),
+                request.getGeneratedCode(),
                 TextUtils.firstNonBlank(request.getErrorReason(), "Unknown render failure"),
-                TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
                 request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
         )
                 : RenderFixPrompts.userPrompt(
-                request.getCode(),
+                request.getGeneratedCode(),
                 TextUtils.firstNonBlank(request.getErrorReason(), "Unknown render failure"),
-                TextUtils.defaultIfBlank(request.getStoryboardJson(), "{\"scenes\":[]}"),
+                TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
                 request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
         );
     }
@@ -300,10 +302,6 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
 
     private boolean isGeoGebraTarget() {
         return workflowConfig != null && workflowConfig.isGeoGebraTarget();
-    }
-
-    private double toSeconds(Instant start) {
-        return Duration.between(start, Instant.now()).toMillis() / 1000.0;
     }
 }
 

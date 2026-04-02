@@ -1,4 +1,4 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeFixRequest;
@@ -17,8 +17,10 @@ import com.automanim.model.WorkflowKeys;
 import com.automanim.node.support.FixRetryState;
 import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.util.ErrorSummarizer;
+import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.service.FileOutputService;
 import com.automanim.util.TextUtils;
+import com.automanim.util.TimeUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,7 +32,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -262,7 +263,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         CodeFixRequest request = new CodeFixRequest();
         request.setSource(CodeFixSource.SCENE_LAYOUT_EVALUATION);
         request.setReturnAction(WorkflowActions.RETRY_RENDER);
-        request.setCode(codeResult.getCode());
+        request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(retryState.pendingIssueSummary != null
                 ? retryState.pendingIssueSummary
                 : buildIssueSummary(result));
@@ -272,12 +273,12 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         request.setTargetConcept(codeResult.getTargetConcept());
         request.setTargetDescription(codeResult.getTargetDescription());
         request.setSceneName(codeResult.getSceneName());
-        // For GeoGebra, the expected scene name is typically "GeoGebraFigure"
+        // For GeoGebra, the expected scene name is typically GeoGebraCodeUtils.EXPECTED_FIGURE_NAME
         boolean isGeoGebra = renderResult != null && renderResult.isGeoGebraTarget();
-        request.setExpectedSceneName(isGeoGebra ? "GeoGebraFigure" : "MainScene");
+        request.setExpectedSceneName(isGeoGebra ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : "MainScene");
         request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
                 ? StoryboardJsonBuilder.buildForSceneEvaluationFix(narrative.getStoryboard())
-                : "{\"scenes\":[]}");
+                : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON);
         request.setFixHistory(new ArrayList<>(retryState.fixHistory));
         return request;
     }
@@ -1050,7 +1051,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                                 SceneEvaluationRetryState retryState,
                                 Instant start,
                                 boolean resetState) {
-        result.setExecutionTimeSeconds(toSeconds(start));
+        result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
         if (resetState) {
             retryState.reset();
         }
@@ -1275,10 +1276,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
     private double round(double value) {
         return Math.round(value * 1_000_000.0) / 1_000_000.0;
-    }
-
-    private double toSeconds(Instant start) {
-        return Duration.between(start, Instant.now()).toMillis() / 1000.0;
     }
 
     static final class SceneEvaluationRetryState extends FixRetryState {

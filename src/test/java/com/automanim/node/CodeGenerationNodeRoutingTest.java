@@ -11,6 +11,7 @@ import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.prompt.ToolSchemas;
 import com.automanim.service.AiClient;
+import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.util.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -65,8 +66,8 @@ class CodeGenerationNodeRoutingTest {
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         assertNotNull(codeResult);
         assertEquals("MainScene", codeResult.getSceneName());
-        assertTrue(codeResult.getCode().contains("label = Text"));
-        assertFalse(codeResult.getCode().contains("self.bad"));
+        assertTrue(codeResult.getGeneratedCode().contains("label = Text"));
+        assertFalse(codeResult.getGeneratedCode().contains("self.bad"));
         assertEquals(2, codeResult.getToolCalls());
     }
 
@@ -123,8 +124,8 @@ class CodeGenerationNodeRoutingTest {
 
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         assertNotNull(codeResult);
-        assertTrue(codeResult.getCode().contains("class MainScene(Scene):"));
-        assertTrue(codeResult.getCode().contains("self.play(Write(label))"));
+        assertTrue(codeResult.getGeneratedCode().contains("class MainScene(Scene):"));
+        assertTrue(codeResult.getGeneratedCode().contains("self.play(Write(label))"));
         assertEquals(1, codeResult.getToolCalls());
     }
 
@@ -149,7 +150,7 @@ class CodeGenerationNodeRoutingTest {
 
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         assertNotNull(codeResult);
-        assertTrue(codeResult.getCode().contains("fallback"));
+        assertTrue(codeResult.getGeneratedCode().contains("fallback"));
         assertEquals("MainScene", codeResult.getSceneName());
         assertEquals(2, codeResult.getToolCalls());
     }
@@ -176,7 +177,7 @@ class CodeGenerationNodeRoutingTest {
         assertNotNull(codeResult);
         assertEquals(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA, codeResult.getOutputTarget());
         assertEquals("commands", codeResult.getArtifactFormat());
-        assertTrue(codeResult.getCode().contains("lineAB = Line(A, B)"));
+        assertTrue(codeResult.getGeneratedCode().contains("lineAB = Line(A, B)"));
         assertEquals(ToolSchemas.GEOGEBRA_CODE, aiClient.lastToolsJson);
         assertTrue(aiClient.lastSystemPrompt.contains("GeoGebra"));
         assertTrue(aiClient.lastUserMessage.contains("Figure name: GeoGebraFigure"));
@@ -213,8 +214,8 @@ class CodeGenerationNodeRoutingTest {
         CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
         assertNotNull(codeResult);
         assertEquals(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA, codeResult.getOutputTarget());
-        assertTrue(codeResult.getCode().contains("A = (0, 0)"));
-        assertFalse(codeResult.getCode().contains("const A"));
+        assertTrue(codeResult.getGeneratedCode().contains("A = (0, 0)"));
+        assertFalse(codeResult.getGeneratedCode().contains("const A"));
         assertEquals(2, codeResult.getToolCalls());
         assertTrue(aiClient.lastSystemPrompt.contains("GeoGebra"));
     }
@@ -295,7 +296,7 @@ class CodeGenerationNodeRoutingTest {
         function.put("name", "write_manim_code");
 
         ObjectNode arguments = JsonUtils.mapper().createObjectNode();
-        arguments.put("code", code);
+        arguments.put("manimCode", code);
         arguments.put("scene_name", "DemoScene");
         arguments.put("description", "demo");
         function.set("arguments", arguments);
@@ -326,8 +327,8 @@ class CodeGenerationNodeRoutingTest {
         function.put("name", "write_geogebra_code");
 
         ObjectNode arguments = JsonUtils.mapper().createObjectNode();
-        arguments.put("code", code);
-        arguments.put("figure_name", "GeoGebraFigure");
+        arguments.put("geogebraCode", code);
+        arguments.put("figure_name", GeoGebraCodeUtils.EXPECTED_FIGURE_NAME);
         arguments.put("description", "demo");
         arguments.put("artifact_format", "commands");
         function.set("arguments", arguments);

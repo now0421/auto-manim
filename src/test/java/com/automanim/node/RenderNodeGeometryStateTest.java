@@ -85,7 +85,7 @@ class RenderNodeGeometryStateTest {
         assertFalse(renderResult.isSuccess());
         assertEquals(2, renderResult.getAttempts());
         assertNull(renderResult.getGeometryPath());
-        assertTrue(renderResult.getFinalCode().startsWith("from manim import *"));
+        assertTrue(renderResult.getFinalGeneratedCode().startsWith("from manim import *"));
     }
 
     private static final class StubAiClient implements AiClient {

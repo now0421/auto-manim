@@ -139,13 +139,13 @@ public final class CodeGenerationPrompts {
     }
 
     public static String validationFixUserPrompt(String sceneName,
-                                                 String code,
+                                                 String generatedCode,
                                                  List<String> violations) {
-        return validationFixUserPrompt(sceneName, code, violations, null);
+        return validationFixUserPrompt(sceneName, generatedCode, violations, null);
     }
 
     public static String validationFixUserPrompt(String sceneName,
-                                                 String code,
+                                                 String generatedCode,
                                                  List<String> violations,
                                                  String storyboardJson) {
         String problemList = (violations == null || violations.isEmpty())
@@ -166,7 +166,7 @@ public final class CodeGenerationPrompts {
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
                         + "Keep `%s` as the exact scene class name, use ASCII-only Python identifiers, and also fix nearby Python/Manim mistakes.\n"
                         + "Return ONLY the full Python code block.",
-                storyboardBlock, sceneName, code, problemList, sceneName);
+                storyboardBlock, sceneName, generatedCode, problemList, sceneName);
     }
 
     public static String geoGebraValidationFixUserPrompt(String figureName,

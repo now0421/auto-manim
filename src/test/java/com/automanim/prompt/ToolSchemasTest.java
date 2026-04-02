@@ -92,7 +92,7 @@ class ToolSchemasTest {
     @Test
     void manimCodeTool_hasRequiredFields() {
         assertTrue(ToolSchemas.MANIM_CODE.contains("write_manim_code"));
-        assertTrue(ToolSchemas.MANIM_CODE.contains("code"));
+        assertTrue(ToolSchemas.MANIM_CODE.contains("manimCode"));
         assertTrue(ToolSchemas.MANIM_CODE.contains("scene_name"));
     }
 

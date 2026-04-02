@@ -1,5 +1,6 @@
 package com.automanim.service;
 
+import com.automanim.util.GeoGebraCodeUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -63,7 +64,7 @@ class GeoGebraRenderServiceTest {
                         "A = (0, 0)",
                         "B = (4, 0)",
                         "lineAB = Line(A, B)"),
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 tempDir
         );
 
@@ -110,7 +111,7 @@ class GeoGebraRenderServiceTest {
 
         GeoGebraRenderService.RenderAttemptResult result = service.render(
                 "Broken(Command)",
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 tempDir
         );
 
@@ -138,7 +139,7 @@ class GeoGebraRenderServiceTest {
                 "# AUTOGEN_SCENE_BUTTONS_END");
 
         GeoGebraRenderService.RenderAttemptResult result =
-                service.render(script, "GeoGebraFigure", tempDir);
+                service.render(script, GeoGebraCodeUtils.EXPECTED_FIGURE_NAME, tempDir);
 
         assertTrue(result.success());
         assertNotNull(result.previewPath());
@@ -193,7 +194,7 @@ class GeoGebraRenderServiceTest {
 
         GeoGebraRenderService.RenderAttemptResult result = service.render(
                 "A = (0, 0)\nB = (4, 0)",
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 tempDir
         );
 

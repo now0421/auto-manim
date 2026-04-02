@@ -1,5 +1,6 @@
 package com.automanim.util;
 
+import com.automanim.config.ModelConfig;
 import com.automanim.model.KnowledgeGraph;
 import com.automanim.model.KnowledgeNode;
 
@@ -203,6 +204,6 @@ public final class TargetDescriptionBuilder {
         if (config != null && config.getModelConfig() != null) {
             return config.getModelConfig().getMaxInputTokens();
         }
-        return 131072;
+        return ModelConfig.DEFAULT_MAX_INPUT_TOKENS;
     }
 }

@@ -1,4 +1,4 @@
-﻿package com.automanim.service;
+package com.automanim.service;
 
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
@@ -8,6 +8,7 @@ import com.automanim.model.Narrative;
 import com.automanim.model.RenderResult;
 import com.automanim.model.CodeEvaluationResult;
 import com.automanim.model.SceneEvaluationResult;
+import com.automanim.util.GeoGebraCodeUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -84,7 +85,7 @@ public class FileOutputService {
     public static CodeResult loadCodeResult(Path path) {
         try {
             log.info("[Load] code <- {}", path);
-            String code = Files.readString(path, StandardCharsets.UTF_8);
+            String generatedCode = Files.readString(path, StandardCharsets.UTF_8);
 
             Path metadataPath = path.toAbsolutePath().normalize().getParent();
             JsonNode metadata = loadOptionalMetadata(
@@ -96,7 +97,7 @@ public class FileOutputService {
             if (sceneName.isBlank()) {
                 sceneName = WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equals(outputTarget)
                         ? defaultFigureName(path)
-                        : extractSceneName(code, fileStem(path));
+                        : extractSceneName(generatedCode, fileStem(path));
             }
 
             String description = readTextField(metadata, "description");
@@ -106,7 +107,7 @@ public class FileOutputService {
             }
 
             CodeResult codeResult = new CodeResult(
-                    code,
+                    generatedCode,
                     sceneName,
                     description,
                     targetConcept,
@@ -133,7 +134,7 @@ public class FileOutputService {
     public static void saveCodeResult(Path outputDir, CodeResult codeResult) {
         if (codeResult.hasCode()) {
             writeText(outputDir.resolve(resolveCodeFilename(codeResult)),
-                    codeResult.getCode(),
+                    codeResult.getGeneratedCode(),
                     describeCodeArtifact(codeResult));
         }
         Map<String, Object> meta = new LinkedHashMap<>();
@@ -160,7 +161,7 @@ public class FileOutputService {
                 && codeResult != null
                 && codeResult.hasCode()) {
             writeText(outputDir.resolve(resolveReviewedCodeFilename(codeResult)),
-                    codeResult.getCode(), "reviewed code");
+                    codeResult.getGeneratedCode(), "reviewed code");
         }
     }
 
@@ -179,9 +180,9 @@ public class FileOutputService {
         meta.put("execution_time_seconds", renderResult.getExecutionTimeSeconds());
         writeJson(outputDir.resolve("5_render_result.json"), meta, "render result");
 
-        if (renderResult.getFinalCode() != null) {
+        if (renderResult.getFinalGeneratedCode() != null) {
             writeText(outputDir.resolve(resolveFinalCodeFilename(renderResult)),
-                    renderResult.getFinalCode(),
+                    renderResult.getFinalGeneratedCode(),
                     "final code");
         }
     }
@@ -354,7 +355,7 @@ public class FileOutputService {
 
     private static String defaultFigureName(Path path) {
         String stem = fileStem(path);
-        return stem == null || stem.isBlank() ? "GeoGebraFigure" : stem;
+        return stem == null || stem.isBlank() ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : stem;
     }
 
     private static String resolveOutputTargetDirectoryName(String outputTarget) {

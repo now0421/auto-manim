@@ -1,5 +1,6 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
+import com.automanim.config.ModelConfig;
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeFixRequest;
 import com.automanim.model.CodeFixResult;
@@ -28,12 +29,12 @@ import com.automanim.util.JsonUtils;
 import com.automanim.util.ManimCodeUtils;
 import com.automanim.util.NodeConversationContext;
 import com.automanim.util.TargetDescriptionBuilder;
+import com.automanim.util.TimeUtils;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -180,7 +181,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             result.setRevisionTriggered(false);
             result.setRevisedCodeApplied(false);
             result.setToolCalls(0);
-            result.setExecutionTimeSeconds(toSeconds(start));
+            result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
             if (codeResult != null) {
                 result.setSceneName(codeResult.getSceneName());
             }
@@ -193,11 +194,11 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             result.setRevisionTriggered(fixState.getAttempts() > 0);
             result.setRevisedCodeApplied(fixState.revisedCodeApplied);
             result.setToolCalls(toolCalls + fixState.totalToolCalls());
-            result.setExecutionTimeSeconds(toSeconds(start));
+            result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
             return result;
         }
 
-        String currentCode = codeResult.getCode();
+        String currentCode = codeResult.getGeneratedCode();
         String sceneName = ManimCodeUtils.extractSceneName(currentCode, codeResult.getSceneName());
         codeResult.setSceneName(sceneName);
         result.setSceneName(sceneName);
@@ -227,7 +228,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         result.setRevisedCodeApplied(fixState.revisedCodeApplied);
         result.setToolCalls(toolCalls + fixState.getFixToolCalls() + fixState.getCarryoverToolCalls());
         result.setGateReason(buildGateReason(approved, result.getFinalStaticAnalysis(), result.getFinalReview()));
-        result.setExecutionTimeSeconds(toSeconds(start));
+        result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
 
         if (approved) {
             log.info("Code evaluation advisory passed for scene {}", sceneName);
@@ -326,7 +327,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 : sceneName;
         String storyboardJson = narrative != null && narrative.hasStoryboard()
                 ? StoryboardJsonBuilder.buildForCodegen(narrative.getStoryboard())
-                : "{\"scenes\":[]}";
+                : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON;
         String staticAnalysisJson = JsonUtils.toPrettyJson(analysis);
         String userPrompt = CodeEvaluationPrompts.reviewUserPrompt(
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, code);
@@ -361,9 +362,9 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 ? codeResult.getTargetConcept()
                 : fallbackSceneName;
         String targetDescription = codeResult != null ? codeResult.getTargetDescription() : "";
-        int maxInputTokens = (workflowConfig != null && workflowConfig.getModelConfig() != null)
-                ? workflowConfig.getModelConfig().getMaxInputTokens()
-                : 131072;
+        int maxInputTokens = workflowConfig != null
+                ? workflowConfig.resolveMaxInputTokens()
+                : ModelConfig.DEFAULT_MAX_INPUT_TOKENS;
 
         this.reviewConversationContext = new NodeConversationContext(maxInputTokens);
         this.reviewConversationContext.setSystemMessage(
@@ -379,9 +380,9 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         CodeFixRequest request = new CodeFixRequest();
         request.setSource(CodeFixSource.EVALUATION_REVIEW);
         request.setReturnAction(WorkflowActions.RETRY_CODE_EVALUATION);
-        request.setCode(codeResult.getCode());
+        request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(buildDetailedEvaluationFixReason(
-                codeResult.getCode(),
+                codeResult.getGeneratedCode(),
                 result.getFinalStaticAnalysis(),
                 result.getFinalReview(),
                 result.getGateReason()));
@@ -391,7 +392,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         request.setExpectedSceneName(sceneName);
         request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
                 ? StoryboardJsonBuilder.buildForCodegen(narrative.getStoryboard())
-                : "{\"scenes\":[]}");
+                : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON);
         request.setStaticAnalysisJson(JsonUtils.toPrettyJson(result.getFinalStaticAnalysis()));
         request.setReviewJson(JsonUtils.toPrettyJson(result.getFinalReview()));
         return request;
@@ -1238,10 +1239,6 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                             "code_lines=%d, scene_count=%d",
                             analysis.getCodeLines(), analysis.getSceneCount()));
         }
-    }
-
-    private double toSeconds(Instant start) {
-        return Duration.between(start, Instant.now()).toMillis() / 1000.0;
     }
 
     static final class EvaluationFixState extends FixRetryState {

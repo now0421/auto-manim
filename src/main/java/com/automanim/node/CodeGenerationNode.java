@@ -1,4 +1,4 @@
-﻿package com.automanim.node;
+package com.automanim.node;
 
 import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeFixRequest;
@@ -19,6 +19,7 @@ import com.automanim.util.AiRequestUtils;
 import com.automanim.util.ConcurrencyUtils;
 import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.util.JsonUtils;
+import com.automanim.util.TimeUtils;
 import com.automanim.util.ManimCodeUtils;
 import com.automanim.util.NodeConversationContext;
 import com.automanim.util.TargetDescriptionBuilder;
@@ -28,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -117,7 +117,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         if (narrative == null && input.existingCodeResult() == null) {
             log.warn("Narrative is empty, cannot generate code");
             CodeResult emptyResult = new CodeResult("", "", "Empty narrative", "", "");
-            emptyResult.setExecutionTimeSeconds(toSeconds(start));
+            emptyResult.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
             return emptyResult;
         }
 
@@ -145,7 +145,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                         targetConcept,
                         targetDescription
                 );
-                emptyResult.setExecutionTimeSeconds(toSeconds(start));
+                emptyResult.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
                 return emptyResult;
             }
 
@@ -170,12 +170,12 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
         if (input.previousFixResult() != null) {
             if (!violations.isEmpty()) {
-                if (fixState.getOriginalCodeBeforeFix() != null
+                if (fixState.getOriginalGeneratedCodeBeforeFix() != null
                         && violations.size() >= fixState.getOriginalIssueCount()) {
                     log.warn("  Shared code fix did not improve validation violations ({} -> {}),"
                                     + " keeping original generated code",
                             fixState.getOriginalIssueCount(), violations.size());
-                    code = fixState.getOriginalCodeBeforeFix();
+                    code = fixState.getOriginalGeneratedCodeBeforeFix();
                     violations = validateGeneratedCode(code);
                 } else {
                     log.info("  Shared code fix reduced violations from {} to {}",
@@ -201,14 +201,10 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         result.setOutputTarget(resolveOutputTarget());
         result.setArtifactFormat(resolveArtifactFormat());
         result.setToolCalls(toolCalls + fixState.totalToolCalls());
-        result.setExecutionTimeSeconds(toSeconds(start));
+        result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
 
         log.info("Code generated: {} lines, artifact={}", result.codeLineCount(), artifactName);
         return result;
-    }
-
-    private double toSeconds(Instant start) {
-        return Duration.between(start, Instant.now()).toNanos() / 1_000_000_000.0;
     }
 
     private CompletableFuture<CodeDraft> requestCodeAsync(String userPrompt, String expectedArtifactName) {
@@ -283,7 +279,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         CodeFixRequest request = new CodeFixRequest();
         request.setSource(CodeFixSource.GENERATION_VALIDATION);
         request.setReturnAction(WorkflowActions.RETRY_CODE_GENERATION);
-        request.setCode(codeResult.getCode());
+        request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(String.join("\n", fixState.getCurrentIssues()));
         request.setTargetConcept(codeResult.getTargetConcept());
         request.setTargetDescription(codeResult.getTargetDescription());
@@ -291,7 +287,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         request.setExpectedSceneName(resolveExpectedArtifactName(codeResult));
         request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
                 ? StoryboardJsonBuilder.buildForCodegen(narrative.getStoryboard())
-                : "{\"scenes\":[]}");
+                : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON);
         return request;
     }
 
@@ -306,12 +302,12 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
     private String extractRetriedCode(CodeGenerationInput input) {
         if (input.existingCodeResult() != null
-                && input.existingCodeResult().getCode() != null
-                && !input.existingCodeResult().getCode().isBlank()) {
-            return input.existingCodeResult().getCode();
+                && input.existingCodeResult().getGeneratedCode() != null
+                && !input.existingCodeResult().getGeneratedCode().isBlank()) {
+            return input.existingCodeResult().getGeneratedCode();
         }
         if (input.previousFixResult() != null) {
-            return input.previousFixResult().getFixedCode();
+            return input.previousFixResult().getFixedGeneratedCode();
         }
         return "";
     }
@@ -333,21 +329,26 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         }
 
         return JsonUtils.mapper().createObjectNode()
-                .put("code", code);
+                .put(isGeoGebraTarget() ? "geogebraCode" : "manimCode", code);
     }
 
     private boolean hasCodePayload(JsonNode payload) {
-        return payload != null
-                && payload.has("code")
-                && !payload.get("code").asText("").isBlank();
+        if (payload == null) return false;
+        if (payload.has("manimCode") && !payload.get("manimCode").asText("").isBlank()) return true;
+        if (payload.has("geogebraCode") && !payload.get("geogebraCode").asText("").isBlank()) return true;
+        return false;
     }
 
     private CodeDraft toCodeDraft(JsonNode payload, String expectedArtifactName) {
         String code = null;
         String artifactName = expectedArtifactName;
 
-        if (payload != null && payload.has("code")) {
-            code = payload.get("code").asText();
+        if (payload != null) {
+            if (payload.has("manimCode")) {
+                code = payload.get("manimCode").asText();
+            } else if (payload.has("geogebraCode")) {
+                code = payload.get("geogebraCode").asText();
+            }
         }
         if (payload != null && payload.has("scene_name")) {
             artifactName = payload.get("scene_name").asText(expectedArtifactName);
@@ -390,7 +391,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
     private String defaultArtifactName() {
         return isGeoGebraTarget()
-                ? "GeoGebraFigure"
+                ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME
                 : ManimCodeUtils.EXPECTED_SCENE_NAME;
     }
 
@@ -413,7 +414,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             if (codeResult.getSceneName() != null && !codeResult.getSceneName().isBlank()) {
                 return codeResult.getSceneName();
             }
-            return "GeoGebraFigure";
+            return GeoGebraCodeUtils.EXPECTED_FIGURE_NAME;
         }
         return ManimCodeUtils.EXPECTED_SCENE_NAME;
     }

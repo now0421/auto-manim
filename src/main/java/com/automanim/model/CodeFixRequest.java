@@ -10,7 +10,7 @@ public class CodeFixRequest {
 
     private CodeFixSource source;
     private String returnAction;
-    private String code;
+    private String generatedCode;
     private String errorReason;
     private String targetConcept;
     private String targetDescription;
@@ -28,8 +28,8 @@ public class CodeFixRequest {
     public String getReturnAction() { return returnAction; }
     public void setReturnAction(String returnAction) { this.returnAction = returnAction; }
 
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
+    public String getGeneratedCode() { return generatedCode; }
+    public void setGeneratedCode(String generatedCode) { this.generatedCode = generatedCode; }
 
     public String getErrorReason() { return errorReason; }
     public void setErrorReason(String errorReason) { this.errorReason = errorReason; }

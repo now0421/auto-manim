@@ -123,4 +123,11 @@ public class WorkflowConfig {
     public boolean isGeoGebraTarget() {
         return OUTPUT_TARGET_GEOGEBRA.equals(outputTarget);
     }
+
+    /**
+     * Returns the resolved max input tokens from the model config, or the default if unavailable.
+     */
+    public int resolveMaxInputTokens() {
+        return modelConfig != null ? modelConfig.getMaxInputTokens() : ModelConfig.DEFAULT_MAX_INPUT_TOKENS;
+    }
 }

@@ -409,11 +409,11 @@ public final class ToolSchemas {
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"code\": { \"type\": \"string\", \"description\": \"Complete Manim Python source code\" },"
+            + "        \"manimCode\": { \"type\": \"string\", \"description\": \"Complete Manim Python source code\" },"
             + "        \"scene_name\": { \"type\": \"string\", \"description\": \"Primary scene class name in ASCII\" },"
             + "        \"description\": { \"type\": \"string\", \"description\": \"Short summary of the animation\" }"
             + "      },"
-            + "      \"required\": [\"code\"]"
+            + "      \"required\": [\"manimCode\"]"
             + "    }"
             + "  }"
             + "}"
@@ -428,19 +428,17 @@ public final class ToolSchemas {
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"code\": { \"type\": \"string\", \"description\": \"Complete GeoGebra command script\" },"
+            + "        \"geogebraCode\": { \"type\": \"string\", \"description\": \"Complete GeoGebra command script\" },"
             + "        \"figure_name\": { \"type\": \"string\", \"description\": \"Primary figure name in ASCII\" },"
             + "        \"description\": { \"type\": \"string\", \"description\": \"Short summary of the construction\" },"
             + "        \"artifact_format\": { \"type\": \"string\", \"description\": \"Output form such as commands\" }"
             + "      },"
-            + "      \"required\": [\"code\"]"
+            + "      \"required\": [\"geogebraCode\"]"
             + "    }"
             + "  }"
             + "}"
             + "]";
 
-    // ========================================================================
-    // Stage 3: Code Evaluation
     // ========================================================================
 
     public static final String CODE_REVIEW = "["

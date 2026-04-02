@@ -55,7 +55,7 @@ class CodeEvaluationNodeTest {
         assertTrue(result.isApprovedForRender());
         assertEquals(1, result.getRevisionAttempts());
         assertEquals(3, result.getToolCalls());
-        assertTrue(codeResult.getCode().contains("ReplacementTransform"));
+        assertTrue(codeResult.getGeneratedCode().contains("ReplacementTransform"));
         assertEquals("DemoScene", codeResult.getSceneName());
     }
 

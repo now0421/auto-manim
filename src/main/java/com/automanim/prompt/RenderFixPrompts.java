@@ -51,15 +51,15 @@ public final class RenderFixPrompts {
         ) + GEOGEBRA_SYSTEM);
     }
 
-    public static String userPrompt(String code, String error) {
-        return userPrompt(code, error, null, Collections.emptyList());
+    public static String userPrompt(String generatedCode, String error) {
+        return userPrompt(generatedCode, error, null, Collections.emptyList());
     }
 
-    public static String userPrompt(String code, String error, List<String> fixHistory) {
-        return userPrompt(code, error, null, fixHistory);
+    public static String userPrompt(String generatedCode, String error, List<String> fixHistory) {
+        return userPrompt(generatedCode, error, null, fixHistory);
     }
 
-    public static String userPrompt(String code,
+    public static String userPrompt(String generatedCode,
                                     String error,
                                     String storyboardJson,
                                     List<String> fixHistory) {
@@ -69,7 +69,7 @@ public final class RenderFixPrompts {
                         ? "Compact storyboard JSON (source of truth):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
-                .append("```python\n").append(code).append("\n```\n\n")
+                .append("```python\n").append(generatedCode).append("\n```\n\n")
                 .append("Error output:\n```\n").append(error).append("\n```\n\n")
                 .append("Please fix the reported error and also inspect nearby and structurally similar code paths for the same root cause.\n")
                 .append("If the storyboard encodes geometric constraints or derived constructions, preserve them while fixing the render failure.\n")
@@ -91,7 +91,7 @@ public final class RenderFixPrompts {
         return sb.toString();
     }
 
-    public static String geoGebraUserPrompt(String code,
+    public static String geoGebraUserPrompt(String generatedCode,
                                             String error,
                                             String storyboardJson,
                                             List<String> fixHistory) {
@@ -101,7 +101,7 @@ public final class RenderFixPrompts {
                         ? "Compact storyboard JSON (source of truth):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
-                .append("```geogebra\n").append(code).append("\n```\n\n")
+                .append("```geogebra\n").append(generatedCode).append("\n```\n\n")
                 .append("Validation failure details:\n```\n").append(error).append("\n```\n\n")
                 .append("Please rewrite the FULL command script so the failing commands become valid and downstream dependent commands remain correct.\n")
                 .append("Use English GeoGebra command names, ASCII-only object identifiers, and preserve geometric dependency constraints from the storyboard.\n")

@@ -18,6 +18,8 @@ import java.util.List;
  */
 public final class StoryboardJsonBuilder {
 
+    public static final String EMPTY_STORYBOARD_JSON = "{\"scenes\":[]}";
+
     private static final class BuildOptions {
         private final boolean includeNarrativeFields;
         private final boolean includeSceneFixFields;

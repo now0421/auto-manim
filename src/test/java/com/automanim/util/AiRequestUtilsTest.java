@@ -66,7 +66,7 @@ class AiRequestUtilsTest {
 
         FakeAiClient aiClient = new FakeAiClient(
                 wrapToolResponse(toolArguments),
-                "{\"code\":\"print('ok')\"}"
+                "{\"manimCode\":\"print('ok')\"}"
         );
 
         JsonNode result = AiRequestUtils.requestJsonObjectAsync(
@@ -79,11 +79,11 @@ class AiRequestUtilsTest {
                 () -> { },
                 JsonUtils::parseTree,
                 payload -> payload != null
-                        && payload.has("code")
-                        && !payload.get("code").asText("").isBlank()
+                        && payload.has("manimCode")
+                        && !payload.get("manimCode").asText("").isBlank()
         ).join();
 
-        assertEquals("print('ok')", result.get("code").asText());
+        assertEquals("print('ok')", result.get("manimCode").asText());
         assertEquals(1, aiClient.chatCalls.get());
     }
 

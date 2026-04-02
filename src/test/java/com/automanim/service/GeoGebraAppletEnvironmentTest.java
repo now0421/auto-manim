@@ -1,5 +1,6 @@
 package com.automanim.service;
 
+import com.automanim.util.GeoGebraCodeUtils;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -21,7 +22,7 @@ class GeoGebraAppletEnvironmentTest {
         );
 
         GeoGebraRenderService.ValidationReport report =
-                service.probeEnvironment("GeoGebraFigure", commands);
+                service.probeEnvironment(GeoGebraCodeUtils.EXPECTED_FIGURE_NAME, commands);
 
         assertNotNull(report, "Validation report should not be null");
         assertTrue(report.appletLoaded, diagnosticMessage(report));
@@ -48,7 +49,7 @@ class GeoGebraAppletEnvironmentTest {
         );
 
         GeoGebraRenderService.ValidationReport report =
-                service.probeEnvironment("GeoGebraFigure", commands);
+                service.probeEnvironment(GeoGebraCodeUtils.EXPECTED_FIGURE_NAME, commands);
 
         assertNotNull(report, "Validation report should not be null");
         assertTrue(report.appletLoaded, diagnosticMessage(report));

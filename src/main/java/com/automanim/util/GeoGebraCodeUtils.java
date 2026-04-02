@@ -16,6 +16,8 @@ public final class GeoGebraCodeUtils {
 
     private GeoGebraCodeUtils() {}
 
+    public static final String EXPECTED_FIGURE_NAME = "GeoGebraFigure";
+
     private static final String SCENE_DIRECTIVE_LINE_PREFIX = "# @scene ";
     private static final String SCENE_BUTTONS_BEGIN_MARKER = "# AUTOGEN_SCENE_BUTTONS_BEGIN";
     private static final String SCENE_BUTTONS_END_MARKER = "# AUTOGEN_SCENE_BUTTONS_END";

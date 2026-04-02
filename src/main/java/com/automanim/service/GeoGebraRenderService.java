@@ -823,7 +823,7 @@ public class GeoGebraRenderService {
     }
 
     private String normalizeFigureName(String figureName) {
-        return (figureName == null || figureName.isBlank()) ? "GeoGebraFigure" : figureName.trim();
+        return (figureName == null || figureName.isBlank()) ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : figureName.trim();
     }
 
     private String buildPreviewHtml(List<String> commands,

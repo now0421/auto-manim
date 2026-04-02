@@ -4,6 +4,7 @@ import com.automanim.config.WorkflowConfig;
 import com.automanim.model.CodeResult;
 import com.automanim.model.RenderResult;
 import com.automanim.model.SceneEvaluationResult;
+import com.automanim.util.GeoGebraCodeUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -65,7 +66,7 @@ class FileOutputServiceTest {
         assertEquals("manual resume", codeResult.getDescription());
         assertEquals("Manual Concept", codeResult.getTargetConcept());
         assertEquals("Recovered from disk", codeResult.getTargetDescription());
-        assertTrue(codeResult.getCode().contains("class RecoveredScene(Scene):"));
+        assertTrue(codeResult.getGeneratedCode().contains("class RecoveredScene(Scene):"));
     }
 
     @Test
@@ -86,7 +87,7 @@ class FileOutputServiceTest {
                         "A = (0, 0)",
                         "B = (4, 0)",
                         "lineAB = Line(A, B)"),
-                "GeoGebraFigure",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
                 "geo demo",
                 "Manual Concept",
                 "Recovered from disk");
@@ -100,7 +101,7 @@ class FileOutputServiceTest {
         CodeResult loaded = FileOutputService.loadCodeResult(tempDir.resolve("4_geogebra_commands.txt"));
         assertEquals(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA, loaded.getOutputTarget());
         assertEquals("commands", loaded.getArtifactFormat());
-        assertTrue(loaded.getCode().contains("lineAB = Line(A, B)"));
+        assertTrue(loaded.getGeneratedCode().contains("lineAB = Line(A, B)"));
     }
 
     @Test

@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class ModelConfig {
 
+    public static final int DEFAULT_MAX_INPUT_TOKENS = 131072;
+
     private String model;
     private String provider;
     private String apiKeyEnv;
@@ -19,7 +21,7 @@ public class ModelConfig {
     private boolean reasoningContentFallback;
     private double temperature;
     private int maxOutputTokens;
-    private int maxInputTokens = 131072;
+    private int maxInputTokens = DEFAULT_MAX_INPUT_TOKENS;
 
     public ModelConfig copyWithModel(String modelName) {
         ModelConfig copy = new ModelConfig();

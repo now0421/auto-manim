@@ -7,8 +7,8 @@ public class CodeFixResult {
 
     private CodeFixSource source;
     private String returnAction;
-    private String originalCode;
-    private String fixedCode;
+    private String originalGeneratedCode;
+    private String fixedGeneratedCode;
     private String errorReason;
     private String systemPrompt;
     private String userPrompt;
@@ -23,11 +23,11 @@ public class CodeFixResult {
     public String getReturnAction() { return returnAction; }
     public void setReturnAction(String returnAction) { this.returnAction = returnAction; }
 
-    public String getOriginalCode() { return originalCode; }
-    public void setOriginalCode(String originalCode) { this.originalCode = originalCode; }
+    public String getOriginalGeneratedCode() { return originalGeneratedCode; }
+    public void setOriginalGeneratedCode(String originalGeneratedCode) { this.originalGeneratedCode = originalGeneratedCode; }
 
-    public String getFixedCode() { return fixedCode; }
-    public void setFixedCode(String fixedCode) { this.fixedCode = fixedCode; }
+    public String getFixedGeneratedCode() { return fixedGeneratedCode; }
+    public void setFixedGeneratedCode(String fixedGeneratedCode) { this.fixedGeneratedCode = fixedGeneratedCode; }
 
     public String getErrorReason() { return errorReason; }
     public void setErrorReason(String errorReason) { this.errorReason = errorReason; }
