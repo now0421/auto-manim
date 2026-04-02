@@ -30,7 +30,7 @@ public final class NarrativePrompts {
                     + "- Use enrichment fields only when they sharpen the explanation\n"
                     + "- If the target is a problem, every scene must directly advance the solution\n"
                     + "- Prefer 3 to 5 strong scenes for problem-solving unless more are truly needed\n"
-                    + "- Keep object ids concise and non-redundant: prefer `A`, `B`, `P`, `river` over ids like `pointA`, `labelA`, or `line_river`, since `kind` already carries the type. See the backend-specific naming rules below for allowed id conventions.\n"
+                    + "- Keep object ids concise and non-redundant since `kind` already carries the type. Follow the backend-specific naming rules above for id format and allowed names.\n"
                     + "- Reuse the exact same concise ids consistently in `anchor_id`, `persistent_objects`, `exiting_objects`, and `actions.targets`\n"
                     + "- When any field inside `entering_objects` refers to another object, especially `content`, refer to that object by id only. Do not restate its kind there.\n"
                     + "- For example, write `angle between AP and l at P`, not `angle between segment AP and line l at point P`.\n"
@@ -65,7 +65,7 @@ public final class NarrativePrompts {
                     + "      \"step_refs\": [\"string, referenced knowledge-graph step or solving beat covered by this scene\"],\n"
                     + "      \"entering_objects\": [\n"
                     + "        {\n"
-                    + "          \"id\": \"string, stable visual identity for continuity and transforms; use concise identifiers, e.g. `A`, `P`, `river`; keep ids non-redundant since `kind` carries the type; see backend-specific naming rules for allowed conventions\",\n"
+                    + "          \"id\": \"string, stable visual identity for continuity and transforms; keep ids concise and non-redundant since `kind` carries the type; follow backend-specific naming rules for allowed id conventions\",\n"
                     + "          \"kind\": \"string, object category such as text|equation|axes|point|graph|label|region|helper; do not repeat this type inside `id`\",\n"
                     + "          \"content\": \"string, mathematical or visual content shown by the object. If this text references other storyboard objects, mention those objects by id only and do not repeat their kind, for example `angle between AP and l at P`\",\n"
                     + "          \"placement\": \"string, explicit initial placement or layout intent relative to the frame or existing anchors; do not use it as the only place to encode hard geometry\",\n"
@@ -230,14 +230,17 @@ public final class NarrativePrompts {
                     + "- If the visible text is simply the object's own name or symbol, keep it as the object's native label and do not create a separate storyboard object for it.\n"
                     + "- Create separate `label` or `text` objects only for overlays, formulas, counters, captions, explanatory annotations, or text that is not the object's own native name.\n"
                     + "- Avoid redundant pairs such as `A` plus `aLabel`, `lineL` plus `labelL`, or `circleO` plus `labelO` unless the extra text is semantically different from the object's native label.\n"
-                    + "- Follow GeoGebra naming conventions for object ids: point ids must start with an uppercase letter (e.g. `A`, `P_1`), vector ids with a lowercase letter (e.g. `v`, `u`); use `_` for subscripts (`P_1`, `s_{AB}`) and `'` for primes (`B'`). Do not use GeoGebra reserved names (`x`, `y`, `z`, `e`, `i`, `sin`, `cos`, `log`, etc.) as object ids.\n"
+                    + "- Follow GeoGebra naming conventions for object ids: point ids must start with an uppercase letter (e.g. `A`, `P_1`); vector ids must start with a lowercase letter (e.g. `v`, `u`); lines, circles, and other non-point objects may start with a lowercase letter (e.g. `l`, `c`, `tri`). Use `_` for subscripts (`P_1`, `s_{AB}`) and `'` for primes (`B'`). Do not prefix ids with the object kind when the kind is already carried by the `kind` field: prefer `l` over `lineL`, `c` over `circleC`.\n"
+                    + "- Do not use GeoGebra reserved names as object ids: `x`, `y`, `z`, `xAxis`, `yAxis`, `zAxis`, `e`, `i`, and all built-in math function names (`abs`, `sgn`, `sqrt`, `exp`, `log`, `ln`, `ld`, `lg`, `cos`, `sin`, `tan`, `acos`, `arcos`, `arccos`, `asin`, `arcsin`, `atan`, `arctan`, `cosh`, `sinh`, `tanh`, `acosh`, `arcosh`, `arccosh`, `asinh`, `arcsinh`, `atanh`, `arctanh`, `atan2`, `erf`, `floor`, `ceil`, `round`, `random`, `conjugate`, `arg`, `gamma`, `gammaRegularized`, `beta`, `betaRegularized`, `sec`, `csc`, `cosec`, `cot`, `sech`, `csch`, `coth`).\n"
                     + "- Translate ASCII-spelled ids to GeoGebra-native math names: `Bprime` → `B'`, `ABprime` → `AB'`, `Popt` → `P_{opt}`, `P1` → `P_1`. If the storyboard already uses native names like `B'`, keep them verbatim.\n"
                     + "- Use style changes (color, line thickness, dash style) on existing objects rather than creating visual duplicates on the same endpoints. GeoGebra objects persist globally, so every redundant object adds permanent clutter.\n"
                     + "- For angle markers, use `Angle(B, A, C)` with `SetFilling` for filled sectors. Use `CircularArc` only for decorative arcs not associated with angle measurement.\n";
         } else {
             prompt += "\nManim-specific storyboard rules:\n"
-                    + "- Use ASCII-only camelCase or snake_case identifiers for object ids: `aLabel`, `numberLine`, `formula_card`. These become Python variable names in downstream code generation.\n"
-                    + "- Do not use Python reserved words (`class`, `def`, `lambda`, `for`, `if`, `in`, `is`, `not`, `None`, `True`, `False`, etc.) as object ids.\n"
+                    + "- Object ids become Python variable names in downstream code generation. Use ASCII-only identifiers.\n"
+                    + "- Single uppercase letters are acceptable for geometric points (e.g. `A`, `B`, `P`). Use camelCase or snake_case for compound names (e.g. `numberLine`, `formula_card`, `aLabel`).\n"
+                    + "- Do not prefix ids with the object kind: prefer `river` over `line_river`, `A` over `pointA`, since `kind` already carries the type.\n"
+                    + "- Do not use Python reserved words (`class`, `def`, `lambda`, `for`, `if`, `in`, `is`, `not`, `None`, `True`, `False`, etc.) or Manim built-in class names (`Scene`, `Mobject`, `Line`, `Circle`, `Text`, etc.) as object ids.\n"
                     + "- For moving points or markers, create a separate label object with `behavior = follows_anchor` so the label tracks the moving object.\n";
         }
         prompt += "\n"

@@ -30,7 +30,7 @@ Use official object-creating commands such as:
 - `PerpendicularLine(...)`
 - `ParallelLine(...)`
 - `PerpendicularBisector(...)`
-- `AngularBisector(...)`
+- `AngleBisector(...)`
 - `Reflect(...)`
 - `Rotate(...)`
 - `Translate(...)`
@@ -329,6 +329,15 @@ alpha = Angle(B, A, C)
 beta = Angle(line1, line2)
 ```
 
+### Additional Angle forms
+```geogebra
+gamma = Angle(v)              // angle between x-axis and vector v
+delta = Angle(P)              // angle between x-axis and position vector of point P
+angles = Angle(poly)          // all interior angles of a polygon (returned individually)
+epsilon = Angle(conic1)       // twist angle of a conic's major axis
+fixedAngle = Angle(A, B, 45°) // angle of size 45° drawn from A with apex B; also creates the rotated point
+```
+
 Guidance:
 
 - In `Angle(B, A, C)`, the **middle argument is the vertex**.
@@ -338,6 +347,8 @@ Guidance:
   - `Angle((x(P)+1, 0), P, A)` — sweeps CCW from rightward ray to ray PA = small angle above the line. Correct.
   - `Angle(A, P, (x(P)+1, 0))` — sweeps CCW from ray PA to rightward ray = large angle (~330°). Wrong.
 - For equal-angle markers (e.g., reflection angles), ensure both `Angle(...)` calls sweep the same-sized small sector on their respective sides.
+- `Angle(<Polygon>)` creates all angles in mathematically positive (CCW) orientation. If the polygon was created CCW, you get interior angles; if CW, you get exterior angles.
+- `Angle(<Point>, <Apex>, <Angle>)` creates an angle of the given size and also creates a rotated point via `Rotate(<Point>, <Angle>, <Apex>)`.
 - Prefer `Angle(...)` over hardcoded text labels like `"30 deg"` unless the angle is intentionally fixed.
 - Use `SetFilling(alpha, 0.3)` to create a filled angle sector for visual emphasis.
 - **Use `Angle(...)` as the sole method for angle markers.** Do not use `CircularArc` for angle marking — it draws a decorative arc unrelated to angle measurement and produces incorrect visual output.
@@ -365,6 +376,15 @@ t4 = Text("A note", (2, 1))
 t5 = Text(alpha, (2, 1), true, true)
 ```
 
+### Positioned text with alignment
+```geogebra
+t6 = Text(alpha, (2, 1), true, true, -1, 0)
+```
+The last two parameters control horizontal and vertical alignment:
+- `-1`: shift left / shift down
+- `0`: center horizontally / vertically at the point
+- `1`: shift right / shift up
+
 Guidance:
 
 - `Text(...)` supports static, dynamic, mixed, and LaTeX text.
@@ -380,6 +400,9 @@ Guidance:
 ```geogebra
 X = Intersect(lineAB, c)
 Y = Intersect(c, d)
+Z = Intersect(lineAB, c, 2)     // 2nd intersection point (index-based)
+W = Intersect(f, g, C)          // intersection near initial point C (iterative)
+pts = Intersect(f, g, -1, 2)    // all intersections in x ∈ [-1, 2]
 P = Point(lineAB)
 Q = Point(c)
 ```
@@ -387,6 +410,9 @@ Q = Point(c)
 Guidance:
 
 - Prefer `Intersect(...)` over solving coordinates manually.
+- `Intersect(<Object>, <Object>, <Index>)` returns the n-th intersection point. Useful when two objects have multiple intersections.
+- `Intersect(<Object>, <Object>, <Initial Point>)` uses an iterative numerical method seeded at the initial point.
+- `Intersect(<Function>, <Function>, <Start x-Value>, <End x-Value>)` returns all intersection points in the given x-interval.
 - Prefer `Point(...)` over fake coordinate-based attachment.
 
 ---
@@ -395,12 +421,22 @@ Guidance:
 
 ```geogebra
 perp = PerpendicularLine(A, lineAB)
+perpSeg = PerpendicularLine(A, s)
+perpVec = PerpendicularLine(A, u)
 para = ParallelLine(C, lineAB)
 pb = PerpendicularBisector(A, B)
-bis = AngularBisector(B, A, C)
+pbSeg = PerpendicularBisector(s)
+bis = AngleBisector(B, A, C)
+bisLines = AngleBisector(line1, line2)
 ```
 
-Use these high-level commands instead of slope-based hand constructions unless the lesson is explicitly about coordinate methods.
+Guidance:
+
+- `PerpendicularLine` accepts a line, segment, or vector as the direction reference.
+- `PerpendicularBisector` accepts either two points or a segment.
+- `AngleBisector(<Point>, <Point>, <Point>)` returns the bisector of the angle at the middle point (apex).
+- `AngleBisector(<Line>, <Line>)` returns **both** angle bisectors of the two lines.
+- Use these high-level commands instead of slope-based hand constructions unless the lesson is explicitly about coordinate methods.
 
 ---
 
@@ -425,11 +461,13 @@ Guidance:
 
 ```geogebra
 obj2 = Translate(obj1, u)
-obj3 = Rotate(obj1, 60 deg, A)
-obj4 = Reflect(obj1, lineAB)
-obj5 = Reflect(obj1, A)
-obj6 = Reflect(obj1, c)
-obj7 = Dilate(obj1, 1.5, A)
+obj3 = Rotate(obj1, 60°)           // rotation around the origin
+obj4 = Rotate(obj1, 60°, A)        // rotation around point A
+obj5 = Reflect(obj1, lineAB)       // reflection across a line
+obj6 = Reflect(obj1, A)            // reflection through a point
+obj7 = Reflect(obj1, c)            // inversion with respect to a circle
+obj8 = Dilate(obj1, 1.5, A)        // dilation from center A by factor 1.5
+obj9 = Dilate(obj1, 2)             // dilation from origin by factor 2
 ```
 
 Officially supported reflection targets include:
@@ -437,6 +475,16 @@ Officially supported reflection targets include:
 - point
 - line
 - circle
+- plane (3D only)
+
+Additional `Rotate` forms:
+- `Rotate(<Object>, <Angle>)` — rotates around the origin.
+- `Rotate(<Object>, <Angle>, <Point>)` — rotates around a given point.
+- `Rotate(<Object>, <Angle>, <Axis of Rotation>)` — 3D rotation around an axis.
+
+Additional `Dilate` forms:
+- `Dilate(<Object>, <Factor>)` — dilates from the origin.
+- `Dilate(<Object>, <Factor>, <Center Point>)` — dilates from a given center point.
 
 Guidance:
 
@@ -453,7 +501,26 @@ g(x) = sin(x)
 P = Point(f)
 t = Tangent(P, f)
 fp(x) = Derivative(f)
+fp2(x) = Derivative(f, 2)           // second derivative
+fpx(x) = Derivative(x^3 * y^2, y)   // partial derivative w.r.t. y
 areaF = Integral(f, 0, 2)
+```
+
+### Tangent overloads
+```geogebra
+t1 = Tangent(P, f)                  // tangent to function at point P
+t2 = Tangent(2, f)                  // tangent to function at x = 2
+t3 = Tangent(P, conic1)             // tangent(s) through point to conic
+t4 = Tangent(lineAB, conic1)        // tangent(s) to conic parallel to lineAB
+t5 = Tangent(c1, c2)                // common tangents of two circles (up to 4)
+```
+
+### Derivative overloads
+```geogebra
+fp(x) = Derivative(f)                // first derivative
+fp2(x) = Derivative(f, 2)            // second derivative
+fpy = Derivative(x^3 * y^2, y)       // partial derivative w.r.t. y
+curveD = Derivative(Curve(cos(t), sin(t), t, 0, pi))  // derivative of parametric curve
 ```
 
 Guidance:
@@ -505,11 +572,12 @@ SetConditionToShowObject(helperLine, showHelpers)
 
 Important corrections:
 
-- `SetColor(<Object>, <Red>, <Green>, <Blue>)` is an official form, where each component is normally interpreted on the 0 to 1 scale.
-- `SetColor(<Object>, <"Color">)` is also official.
-- For text color input, use English color names for executable GeoGebraScript.
+- `SetColor(<Object>, <Red>, <Green>, <Blue>)` is an official form, where each component is normally interpreted on the 0 to 1 scale. A number _t_ outside [0,1] is mapped back into the interval.
+- `SetColor(<Object>, <"Color">)` is also official. In GeoGebraScript, you **must** use English color names.
 - Official text color inputs also include hexadecimal strings of the form `#RRGGBB` and `#AARRGGBB`.
-- `#AARRGGBB` includes alpha, red, green, and blue; `AA` controls transparency.
+- `#AARRGGBB` includes alpha, red, green, and blue; `AA` controls transparency (`01` = fully transparent, `FF` = fully opaque).
+- `SetLineThickness(<Object>, <Number>)` displays as _N/2_ pixels where _N_ is the given number.
+- `SetFilling(<Object>, <Number>)` sets opacity; the number must be in [0,1] where 0 = transparent and 1 = fully opaque. Numbers outside this interval are ignored.
 - Natural-language phrases like 鈥渂lue segment with medium thickness鈥?are **guidance**, not executable GeoGebra syntax.
 - If you want a command-level manual for an LLM, distinguish clearly between:
   - executable GeoGebra commands
@@ -519,8 +587,14 @@ Important corrections:
 Preferred color-name discipline for LLM output:
 
 - Use English names only.
-- Prefer common official names such as `BLUE`, `RED`, `GREEN`, `YELLOW`, `BLACK`, `WHITE`, `GRAY`, `LIGHTGRAY`, `DARKBLUE`, `DARKGREEN`, `ORANGE`, `GOLD`, `PURPLE`, `PINK`, `CYAN`, `TURQUOISE`, `LIGHTBLUE`.
-- If a very specific color is required, prefer an official hex string over an invented prose description.
+- Use the official color names exactly as documented (with spaces where needed):
+  `"Black"`, `"Dark Gray"`, `"Gray"`, `"Silver"`, `"Light Gray"`, `"White"`,
+  `"Dark Blue"`, `"Blue"`, `"Light Blue"`, `"Aqua"`, `"Cyan"`, `"Turquoise"`,
+  `"Dark Green"`, `"Green"`, `"Light Green"`, `"Lime"`,
+  `"Maroon"`, `"Crimson"`, `"Red"`, `"Pink"`, `"Orange"`, `"Light Orange"`, `"Gold"`, `"Yellow"`, `"Light Yellow"`,
+  `"Brown"`, `"Magenta"`, `"Indigo"`, `"Purple"`, `"Light Purple"`, `"Violet"`, `"Light Violet"`.
+- Note: In `SetColor(<Object>, <"Color">)` inside GeoGebraScript, you **must** use English color names.
+- If a very specific color is required, prefer an official hex string (`#RRGGBB` or `#AARRGGBB`) over an invented prose description.
 
 Recommended visual policy:
 
@@ -723,6 +797,13 @@ Do not collapse `CircularArc`, `Arc`, and `CircumcircularArc` into a single gene
 ### Correction 6: scripting commands are non-nesting side-effect commands
 These commands change properties but do not create returnable objects, so they should be generated in a separate styling / control phase.
 
+### Correction 7: `AngularBisector` is not the official command name
+The correct official command name is `AngleBisector`, not `AngularBisector`.
+```geogebra
+bis = AngleBisector(B, A, C)
+bisLines = AngleBisector(line1, line2)
+```
+
 ---
 
 ## 11. Recommended Rules for LLMs
@@ -738,6 +819,8 @@ These commands change properties but do not create returnable objects, so they s
 9. Keep coordinates moderate and layout readable.
 10. Keep dynamic objects truly dynamic.
 11. When in doubt, prefer the shortest official command that preserves dependency correctly.
+12. Use `AngleBisector(...)`, not `AngularBisector(...)`.
+13. Use official color names with correct spacing (e.g. `"Dark Blue"`, not `"DARKBLUE"`).
 
 ---
 
