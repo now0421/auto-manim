@@ -23,9 +23,6 @@ public final class ManimCodeUtils {
     private static final Pattern SCENE_CLASS = Pattern.compile(
             "class\\s+(\\w+)\\s*\\(.*?Scene.*?\\)");
 
-    private static final Pattern NON_ASCII_IDENTIFIER = Pattern.compile(
-            "(?:class|def)\\s+[^\\x00-\\x7F]+|self\\.[^\\x00-\\x7F]+|\\b[^\\x00-\\x7F_][^\\s(=:,]*");
-
     private static final Pattern RULE1_VIOLATION = Pattern.compile(
             "self\\.\\w+\\s*=\\s*(?:MathTex|Text|VGroup|Circle|Square|Line|Dot|Arrow|Axes|NumberPlane)");
 
@@ -83,12 +80,6 @@ public final class ManimCodeUtils {
         }
         if (!code.contains("def construct(")) {
             violations.add("Missing construct() method");
-        }
-
-        String nonAsciiEvidence = CodeValidationSupport.findFirstMatchEvidence(code, NON_ASCII_IDENTIFIER);
-        if (nonAsciiEvidence != null) {
-            violations.add("Contains non-ASCII class, method, or variable identifiers"
-                    + " (" + nonAsciiEvidence + ")");
         }
 
         return violations;

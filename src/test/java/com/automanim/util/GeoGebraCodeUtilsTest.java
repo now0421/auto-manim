@@ -56,15 +56,15 @@ class GeoGebraCodeUtilsTest {
     }
 
     @Test
-    void validateGeoGebraRules_detectsNonAsciiAndFullWidthPunctuation() {
+    void validateGeoGebraRules_detectsFullWidthPunctuationOnly() {
         String code = String.join("\n",
-                "\u4ea4\u70b9 = Intersect(A\uFF0CB)",
+                "point = Intersect(A\uFF0CB)",
                 "B = (4, 0)");
 
         List<String> violations = GeoGebraCodeUtils.validateGeoGebraRules(code);
 
         assertTrue(violations.stream().anyMatch(v -> v.contains("full-width punctuation")));
-        assertTrue(violations.stream().anyMatch(v -> v.contains("non-ASCII GeoGebra identifiers")));
+        assertFalse(violations.stream().anyMatch(v -> v.contains("non-ASCII")));
     }
 
     @Test
@@ -74,10 +74,10 @@ class GeoGebraCodeUtilsTest {
     }
 
     @Test
-    void validateGeoGebraRules_detectsNonAsciiExecutableText() {
+    void validateGeoGebraRules_allowsNonAsciiExecutableText() {
         List<String> violations = GeoGebraCodeUtils.validateGeoGebraRules(
-                "label = Text(\"鈮?\")");
-        assertTrue(violations.stream().anyMatch(v -> v.contains("ASCII-safe")));
+                "label = Text(\"最小值 = 2\")");
+        assertTrue(violations.isEmpty());
     }
 
     @Test

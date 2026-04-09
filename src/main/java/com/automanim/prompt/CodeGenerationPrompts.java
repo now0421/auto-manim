@@ -13,6 +13,7 @@ public final class CodeGenerationPrompts {
                     + "Treat the provided storyboard JSON as an execution specification, not loose inspiration.\n\n"
                     + "Mandatory rules:\n"
                     + "- Use `from manim import *`.\n"
+                    + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.MANIM_NAMING_RULES
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
                     + "- Do not store mobjects on `self` just to reuse them across scene methods.\n"
@@ -56,6 +57,7 @@ public final class CodeGenerationPrompts {
                     + "You will receive generated Manim code together with validation failures.\n"
                     + "Rewrite the full file so it becomes valid, consistent, and ready for the next workflow stage.\n"
                     + "Fix every reported validation problem, preserve the teaching content, keep the requested scene class name, and proactively fix nearby Python/Manim mistakes.\n\n"
+                    + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_VALIDATION_FIX_SYSTEM =
@@ -64,6 +66,7 @@ public final class CodeGenerationPrompts {
                     + "Rewrite the full command script so it becomes valid, dependency-safe, and ready for the next workflow stage.\n"
                     + "Fix every reported validation problem, preserve the teaching content, keep the requested figure naming intent, and proactively fix nearby GeoGebra mistakes.\n"
                     + "Use English GeoGebra command names.\n"
+                    + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES + "\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
@@ -74,6 +77,7 @@ public final class CodeGenerationPrompts {
                     + "Treat the storyboard as the source of truth for object identity, geometry meaning, layout intent, and teaching order.\n\n"
                     + "Mandatory rules:\n"
                     + "- Return GeoGebra commands, not Python and not JavaScript.\n"
+                    + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "- Prefer common, stable GeoGebra Classic commands over obscure tricks.\n"
                     + "- Build from base objects to derived objects in a clear dependency chain.\n"
@@ -87,11 +91,10 @@ public final class CodeGenerationPrompts {
                     + "- Do not invent unsupported convenience syntax such as `Point(line, x, y)` or similar guessed overloads.\n"
                     + "- When initial placement is requested for a constrained point, choose a dependency-safe construction that starts near that location; never break the constraint just to match the initial coordinates.\n"
                     + "- Ignore timing-only details such as scene duration, but preserve the same teaching order and object-state progression.\n"
-                    + "- Use style and visibility commands sparingly and semantically.\n"
+                    + "- Use style and visibility commands sparingly and semantically, and apply scripting commands after construction commands.\n"
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES
                     + "- Keep the script organized in scene order so downstream scene buttons can toggle the right visible objects.\n"
-                    + "- For angle markers with `Angle(B, A, C)`, the middle argument is the vertex and the angle is measured counterclockwise from ray AB to ray AC. Choose the point order so the counterclockwise sweep covers the intended small angle sector. For example, to mark the angle between an incoming segment from upper-left and a rightward horizontal at vertex P, use `Angle(rightPoint, P, upperLeftPoint)` so the CCW sweep is the small angle above the line.\n"
-                    + "- Use `Angle(...)` with `SetFilling` as the sole method for angle markers and sectors. Never use `CircularArc` for angle marker purposes; it draws decorative arcs unrelated to angle measurement and produces incorrect visual results.\n\n"
+                    + "- If a requested visual effect would require a command not documented in the manual, re-express it with documented commands or omit that unsupported decoration.\n\n"
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT.replace("corrected command script", "GeoGebra command script");
 
@@ -168,6 +171,7 @@ public final class CodeGenerationPrompts {
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL code so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
+                        + "Use only classes, functions, methods, arguments, and code forms documented in the attached Manim syntax manual. Replace any undocumented or guessed API usage with a documented equivalent.\n"
                         + "Keep `%s` as the exact scene class name, follow these naming rules, and also fix nearby Python/Manim mistakes.\n"
                         + "%s"
                         + "Return ONLY the full Python code block.",
@@ -194,6 +198,7 @@ public final class CodeGenerationPrompts {
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL command script so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
+                        + "Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n"
                         + "Use English GeoGebra command names, preserve the figure naming intent around `%s`, and follow these naming rules:\n"
                         + "%s"
                         + "Return ONLY the full GeoGebra code block.",

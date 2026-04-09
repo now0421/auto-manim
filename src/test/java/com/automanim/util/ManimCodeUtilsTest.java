@@ -86,6 +86,13 @@ class ManimCodeUtilsTest {
     }
 
     @Test
+    void validateStructure_allowsNonAsciiTextLiterals() {
+        String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n        label = Text(\"最小值 = 2, Δ\")";
+        List<String> violations = ManimCodeUtils.validateStructure(code);
+        assertTrue(violations.isEmpty());
+    }
+
+    @Test
     void validateManimRules_detectsInstanceFieldViolation() {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n        self.my_text = Text('hello')";
         List<String> violations = ManimCodeUtils.validateManimRules(code);

@@ -1,10 +1,17 @@
 # Manim Style Reference
 
-Use this compact reference when writing storyboard-level style properties. This stage does not write code, but all style language must stay compatible with later Manim code generation.
+Use this reference only for storyboard-level style planning. This stage does not write code; all style language must stay compatible with later Manim generation.
+
+## Rules
+
+* Use only whitelisted Manim color constants.
+* Use concise, backend-friendly style properties.
+* Prefer structured properties over vague prose.
+* Avoid CSS-style syntax, hex colors, gradients, shadows, blur, and unsupported rendering terms.
 
 ## 1. Allowed Color Constants
 
-If you mention Manim color names in `color_scheme`, `color_palette`, object `style`, or scene notes, use only names from this whitelist.
+Use only names from this whitelist in `color_scheme`, `color_palette`, object `style`, or scene notes.
 
 Base colors:
 
@@ -67,44 +74,28 @@ Logo colors:
 * `LOGO_GREEN`
 * `LOGO_RED`
 
-Never invent color constants outside this whitelist. For example, do not use `LIGHT_BLUE`.
+## 2. Safe Style Properties
 
-## 2. Safe Style Language
+Use concise key-value properties that can later map to Manim styling code.
 
-Describe style in terms that can later map cleanly to Manim:
+```text
+color            // overall color
+fill_color       // fill color
+fill_opacity     // 0..1
+stroke_color     // stroke color
+stroke_width     // numeric stroke width
+stroke_opacity   // 0..1
+opacity          // overall opacity
+scale            // relative size multiplier
+font_size        // text size when needed
+```
 
-* overall color
-* fill color and fill opacity
-* stroke color and stroke width
-* overall opacity
-* scale or relative visual weight
-
-Prefer short phrases such as:
-
-* `BLUE primary outline with medium stroke`
-* `YELLOW highlight accent`
-* `WHITE text, secondary opacity`
-* `GREEN fill with light opacity`
-
-Avoid CSS-style syntax, hex colors, gradients, shadows, blur, or unsupported rendering language.
-
-## 3. Style Planning Rules
-
-* Use semantic color mapping consistently across scenes.
-* Keep the same object category in the same color whenever possible.
-* Important objects should be brighter, less transparent, or have thicker strokes.
-* Secondary objects can use lower opacity or neutral colors.
-* Do not overload a single scene with too many saturated highlight colors.
-* Text and subtitles should not visually overpower the main geometry.
-* Keep foreground elements high-contrast against their local background or fill.
-* Avoid pale-on-pale combinations such as `YELLOW` text on `WHITE`, `WHITE` text on `YELLOW_A` or `LIGHTER_GRAY`, and similar washed-out pairings.
-* If a card or panel uses a light fill, use a darker text or border color on top of it rather than another light accent.
-
-## 4. Storyboard Output Guidance
+## 3. Storyboard Output Guidance
 
 When writing storyboard JSON:
 
 * `color_palette` should contain only whitelisted Manim color constants.
-* `color_scheme` should describe the semantic mapping of those safe colors.
+* `color_scheme` should describe semantic mapping, not implementation details.
 * Object `style` should stay concise and implementation-friendly.
+* Prefer structured properties such as `color`, `fill_opacity`, and `stroke_width` over free-form style prose.
 * `notes_for_codegen` may remind later stages to preserve palette consistency and emphasis hierarchy.

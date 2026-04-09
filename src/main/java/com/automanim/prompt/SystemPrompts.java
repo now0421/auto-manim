@@ -1,5 +1,7 @@
 package com.automanim.prompt;
 
+import com.automanim.util.GeoGebraValidationSupport;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -74,7 +76,7 @@ public final class SystemPrompts {
                     + "- `placement`, `layout_goal`, `safe_area_plan`, `screen_overlay_plan`: guide readable coordinates, label placement, and visibility choices.\n"
                     + "- `behavior = follows_anchor` or `derived`: object should be defined from its source geometry so it updates automatically.\n"
                     + "- `behavior = static`: independently defined object; can still be fixed, draggable, or moved later depending on `actions`, `geometry_constraints`, `constraint_note`, and `notes_for_codegen`.\n"
-                    + "- For constrained motion, prefer explicit GeoGebra constructions such as `Point(path)`, `Intersect(...)`, `Reflect(...)`, `Midpoint(...)`, `PerpendicularLine(...)`, `ParallelLine(...)`, or slider-driven parameterizations with declared bounds.\n"
+                    + "- For constrained motion, prefer explicit documented GeoGebra constructions such as `Point(path)`, `PointIn(region)`, `Intersect(...)`, `Reflect(...)`, `Midpoint(...)`, or slider-driven parameterizations with declared bounds.\n"
                     + "- When a point should remain on a line, segment, circle, or similar object, the generated command should visibly encode that incidence relation.\n";
 
     /** Storyboard field guide for scene evaluation/repair pass. */
@@ -136,6 +138,12 @@ public final class SystemPrompts {
                     + "- Translate ASCII-spelled ids to GeoGebra-native math names when needed: `Bprime` -> `B'`, `ABprime` -> `AB'`, `Pstar` -> `P_{*}`, `Popt` -> `P_{opt}`, `P1` -> `P_1`. If native names like `B'` or `P_{opt}` are already used, keep them verbatim.\n"
                     + "- Do not use reserved names such as `x`, `y`, `z`, `xAxis`, `yAxis`, `zAxis`, `e`, `i`, `pi`, `sin`, `cos`, `tan`, `exp`, `log`, `ln`, `abs`, `sqrt`, `floor`, `ceil`, `round`, `random`, `arg`, `gamma`, `beta`, `sec`, `csc`, or `cot` as object identifiers.\n";
 
+    /** Manim API whitelist rules sourced from the attached syntax manual. */
+    public static final String MANIM_MANUAL_ONLY_RULES = buildManimManualOnlyRules();
+
+    /** GeoGebra command whitelist rules sourced from the attached syntax manual. */
+    public static final String GEOGEBRA_MANUAL_ONLY_RULES = buildGeoGebraManualOnlyRules();
+
     /** Tool call hint for structured output prompts. */
     public static final String TOOL_CALL_HINT =
             "If tools are available, call them.\n";
@@ -163,8 +171,10 @@ public final class SystemPrompts {
                     + "Return exactly one fenced `geogebra` code block containing the full corrected command script.\n\n"
                     + "Example output:\n"
                     + "```geogebra\n"
-                    + "A = (0, 0)\n"
-                    + "B = (4, 0)\n"
+                    + "A = Point({0, 0})\n"
+                    + "SetFixed(A, true)\n"
+                    + "B = Point({4, 0})\n"
+                    + "SetFixed(B, true)\n"
                     + "lineAB = Line(A, B)\n"
                     + "```\n\n"
                     + "Do not add any explanation before or after the code block.";
@@ -184,6 +194,7 @@ public final class SystemPrompts {
                     + "- Use `screen_overlay_plan` with `add_fixed_in_frame_mobjects` for fixed explanatory text.\n"
                     + "- Respect `safe_area_plan` and dynamic attachment for labels on moving objects.\n"
                     + "- Read `behavior`, `anchor_id`, and `dependency_note` literally: if an object follows a moving anchor, implement it with `always_redraw(...)` or an updater.\n"
+                    + MANIM_MANUAL_ONLY_RULES
                     + "- Treat `geometry_constraints` and `constraint_note` as hard invariants. If the frame is tight, preserve the construction and recenter/scale the whole constrained group instead of breaking the math.\n";
 
     /** Storyboard codegen preamble for GeoGebra output. */
@@ -198,18 +209,21 @@ public final class SystemPrompts {
                     + "- If a storyboard specifies a bounded range for motion, encode that bound in the construction itself, such as a segment, ray, restricted path, or slider domain, instead of leaving the point free on an unbounded line.\n"
                     + "- When `actions` move an object, preserve its constraint during that move; do not redefine the object as free just to make the motion easy.\n"
                     + "- When `content`, `dependency_note`, or other object fields mention another object, treat those mentions as object ids only. Do not reinterpret kind words from prose and do not invent a second object type for the same id.\n"
-                    + "- Prefer GeoGebra's native labels for named geometric objects. If an object is named `A`, `l`, `c`, `AB`, or similar, use that object itself as the visible label instead of creating a separate text object like `aLabel = Text(...)`.\n"
+                    + GEOGEBRA_MANUAL_ONLY_RULES
+                    + "- Prefer GeoGebra's native labels for named geometric objects. If an object is named `A`, `l`, `c`, `AB`, or similar, use that object itself as the visible label instead of creating a separate label helper object.\n"
                     + "- Treat storyboard object ids as the naming source for generated GeoGebra variables. Preserve those ids in code, and when you must introduce a helper name, use concise camelCase or math-style identifiers.\n"
                     + GEOGEBRA_NAMING_RULES
-                    + "- For functions, use parenthesized variables such as `f(x) = ...`; for lines, circles, or conics defined by equations, use equation-label syntax such as `g: y = x + 3`.\n"
-                    + "- This naming convention applies to all geometric objects with native names: points, lines, segments, rays, circles, polygons, angles, vectors, and functions.\n"
+                    + "- This naming convention applies to all generated geometric objects and helpers.\n"
                     + "- Create a separate label/text object only when the visible text is not the object's own native label, such as overlays, formulas, counters, captions, or explanatory annotations.\n"
                     + "- If the storyboard contains a redundant geometry-label pair, prefer keeping the geometry object and dropping the extra label object in the generated GeoGebra commands.\n"
                     + "- Choose readable coordinates and label placement that respect `layout_goal`, `placement`, and `safe_area_plan`.\n"
-                    + HIGH_CONTRAST_COLOR_RULES_BULLETS
+                    + HIGH_CONTRAST_COLOR_RULES_BULLETS /*
                     + "- For angle markers, use only `Angle(B, vertex, C)` with `SetFilling`; never `CircularArc`. The angle sweeps counterclockwise from ray(vertex→B) to ray(vertex→C), so place the starting-ray point first: e.g. for the small angle between a rightward horizontal and an upper-left segment at vertex P, use `Angle((x(P)+1,0), P, A)` (CCW from right to upper-left = small angle above line).\n";
 
     // ========================================================================
+
+                    */
+                    + "- If the storyboard asks for an effect that would require an undocumented command, preserve the core geometry with documented commands only and do not invent syntax.\n";
 
     private static final String WORKFLOW_OVERVIEW =
             "Stage 0 Exploration -> Stage 1a Mathematical Enrichment -> Stage 1b Visual Design"
@@ -232,6 +246,28 @@ public final class SystemPrompts {
 
     private static final class GeoGebraStyleReferenceHolder {
         private static final String VALUE = loadPromptResource(GEOGEBRA_STYLE_REFERENCE_RESOURCE);
+    }
+
+    private static String buildManimManualOnlyRules() {
+        return "Treat the attached Manim syntax manual as the authoritative whitelist.\n"
+                + "Use only classes, functions, methods, arguments, scene patterns, and code forms documented there.\n"
+                + "Never invent Manim APIs, guessed helper methods, unsupported keyword arguments, or private/internal shortcuts.\n"
+                + "If the current code uses an undocumented or unstable API, replace it with a documented stable equivalent while preserving the scene intent.\n"
+                + "If a desired effect is not covered by the manual, simplify it with documented Manim constructs rather than guessing syntax.\n";
+    }
+
+    private static String buildGeoGebraManualOnlyRules() {
+        return "Treat the attached GeoGebra syntax manual as the authoritative whitelist.\n"
+                + "Use only command names and syntax forms documented there.\n"
+                + "Never invent aliases, tool names, guessed overloads, shorthand assignments, or undocumented commands.\n"
+                + "If the current script contains an undocumented command, replace it with a documented equivalent or remove the unsupported decoration while preserving the construction.\n"
+                + "If a requested effect is not covered by the manual, re-express it with documented commands or omit that effect rather than guessing syntax.\n"
+                + "Documented construction commands: `"
+                + String.join("`, `", GeoGebraValidationSupport.documentedConstructionCommandNames())
+                + "`.\n"
+                + "Documented scripting commands: `"
+                + String.join("`, `", GeoGebraValidationSupport.documentedScriptingCommandNames())
+                + "`.\n";
     }
 
     public static String sanitize(String text, String defaultValue) {

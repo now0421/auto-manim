@@ -44,8 +44,60 @@ class GeoGebraAppletEnvironmentTest {
                 "SetColor(lineAB, \"gray\")",
                 "SetLineThickness(segmentAB, 6)",
                 "SetLineStyle(segmentAB, 2)",
+                "SetLabelMode(lineAB, 3)",
+                "SetLayer(segmentAB, 2)",
+                "SetTrace(A, false)",
                 "SetFilling(triangleABO, 0.4)",
-                "ShowLabel(A, true)"
+                "ShowLabel(A, true)",
+                "ShowGrid(1, false)"
+        );
+
+        GeoGebraRenderService.ValidationReport report =
+                service.probeEnvironment(GeoGebraCodeUtils.EXPECTED_FIGURE_NAME, commands);
+
+        assertNotNull(report, "Validation report should not be null");
+        assertTrue(report.appletLoaded, diagnosticMessage(report));
+        assertTrue(report.completed, diagnosticMessage(report));
+        assertEquals(commands.size(), report.successfulCommands, diagnosticMessage(report));
+        assertEquals(0, report.failedCommands, diagnosticMessage(report));
+        assertTrue(report.error == null || report.error.isBlank(), diagnosticMessage(report));
+    }
+
+    @Test
+    void geogebraAppletExecutesDeferredScriptingCommandsViaValidationRuntime() {
+        ProbeGeoGebraRenderService service = new ProbeGeoGebraRenderService();
+        List<String> commands = List.of(
+                "A = (0, 0)",
+                "t = Slider(0, 10, 1, 1, 120, false, true, false, false)",
+                "helperText = Text(\"helper\", (1, 1), false, false)",
+                "SetFixed(A, true)",
+                "SetConditionToShowObject(helperText, t > 2)"
+        );
+
+        GeoGebraRenderService.ValidationReport report =
+                service.probeEnvironment(GeoGebraCodeUtils.EXPECTED_FIGURE_NAME, commands);
+
+        assertNotNull(report, "Validation report should not be null");
+        assertTrue(report.appletLoaded, diagnosticMessage(report));
+        assertTrue(report.completed, diagnosticMessage(report));
+        assertEquals(commands.size(), report.successfulCommands, diagnosticMessage(report));
+        assertEquals(0, report.failedCommands, diagnosticMessage(report));
+        assertTrue(report.error == null || report.error.isBlank(), diagnosticMessage(report));
+    }
+
+    @Test
+    void geogebraAppletExecutesManualStyleScriptingCommandsViaValidationRuntime() {
+        ProbeGeoGebraRenderService service = new ProbeGeoGebraRenderService();
+        List<String> commands = List.of(
+                "A = (0, 0)",
+                "B = (4, 0)",
+                "segmentAB = Segment(A, B)",
+                "SetBackgroundColor(\"#F7F7F5\")",
+                "SetDynamicColor(A, 1, 0, 0, 0.7)",
+                "SetLineOpacity(segmentAB, 128)",
+                "SetDecoration(segmentAB, 1)",
+                "SetTooltipMode(A, 3)",
+                "SetVisibleInView(segmentAB, 1, true)"
         );
 
         GeoGebraRenderService.ValidationReport report =

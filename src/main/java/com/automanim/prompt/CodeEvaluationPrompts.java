@@ -78,6 +78,7 @@ public final class CodeEvaluationPrompts {
                     + "You will receive storyboard JSON, static visual findings, a structured review, and the current code.\n"
                     + "Rewrite the full code so it is visually safer before render.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
+                    + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.ANGLE_MARKER_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
@@ -89,6 +90,7 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full command script so it better aligns with the storyboard before render.\n"
                     + "Preserve dependency-safe geometry, object identities, scene visibility progression, and teaching intent.\n"
                     + "Fix storyboard misalignments such as missing constructions, incorrect scene visibility, incorrect substitutions for requested geometry, and captions unsupported by the actual construction.\n"
+                    + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
@@ -216,6 +218,7 @@ public final class CodeEvaluationPrompts {
                             + "Current GeoGebra command script:\n```geogebra\n%s\n```\n\n"
                             + "Rewrite the FULL command script to better match the storyboard, preserve dependency-safe geometry, correct scene visibility progression, and restore missing visual evidence requested by the storyboard.\n"
                             + "Preserve storyboard geometric invariants and the teaching goal.\n"
+                            + "Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n"
                             + "Return ONLY the full GeoGebra code block.",
                     targetConcept, sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode);
         }
@@ -228,6 +231,7 @@ public final class CodeEvaluationPrompts {
                         + "Current Manim code:\n```python\n%s\n```\n\n"
                         + "Rewrite the FULL code to reduce clutter, preserve continuity, correct semantically wrong placements such as angle arcs or labels attached to the wrong geometry, better match pacing to narration, and keep 3D overlays readable.\n"
                         + "Preserve any storyboard geometric invariants such as symmetry, reflection, collinearity, and intersection definitions while making layout safer.\n"
+                        + "Use only classes, functions, methods, arguments, and code forms documented in the attached Manim syntax manual. Replace any undocumented or guessed API usage with a documented equivalent.\n"
                         + "Also fix nearby Python/Manim runtime mistakes. Preserve the scene class name and teaching goal.\n"
                         + "Return ONLY the full Python code block.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode);

@@ -12,6 +12,7 @@ public final class RenderFixPrompts {
             "You are a Manim Community debugging expert.\n"
                     + "Fix the code so it renders successfully.\n"
                     + "Preserve the original scene class name and intended animation meaning.\n"
+                    + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.MANIM_NAMING_RULES
                     + "Color rules:\n"
@@ -24,9 +25,10 @@ public final class RenderFixPrompts {
 
     private static final String GEOGEBRA_SYSTEM =
             "You are a GeoGebra Classic debugging expert.\n"
-                    + "Fix the GeoGebra command script so each command succeeds when replayed in order via `evalCommand(...)`.\n"
+                    + "Fix the GeoGebra command script so every reported failure is resolved when the full script is replayed in order via `evalCommand(...)`.\n"
                     + "Preserve the intended construction meaning, object dependency chain, and storyboard teaching order.\n"
                     + "Use English GeoGebra command names.\n"
+                    + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "Color rules:\n"
@@ -81,6 +83,7 @@ public final class RenderFixPrompts {
                 .append("Error output:\n```\n").append(error).append("\n```\n\n")
                 .append("Please fix the reported error and also inspect nearby and structurally similar code paths for the same root cause.\n")
                 .append("If the storyboard encodes geometric constraints or derived constructions, preserve them while fixing the render failure.\n")
+                .append("Use only classes, functions, methods, arguments, and code forms documented in the attached Manim syntax manual. Replace any undocumented or guessed API usage with a documented equivalent.\n")
                 .append("If you must rename or introduce identifiers, follow these naming rules:\n")
                 .append(SystemPrompts.MANIM_NAMING_RULES)
                 .append("Also keep colors, labels, strokes, and fills high-contrast against their background by following these color rules:\n")
@@ -108,14 +111,15 @@ public final class RenderFixPrompts {
                                             String storyboardJson,
                                             List<String> fixHistory) {
         StringBuilder sb = new StringBuilder();
-        sb.append("The following GeoGebra command script failed runtime validation when commands were replayed in order through `evalCommand(...)`.\n\n")
+        sb.append("The following GeoGebra command script failed runtime validation after one full replay pass through `evalCommand(...)`.\n\n")
                 .append(storyboardJson != null && !storyboardJson.isBlank()
                         ? "Compact storyboard JSON (source of truth):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
                 .append("```geogebra\n").append(generatedCode).append("\n```\n\n")
-                .append("Validation failure details:\n```\n").append(error).append("\n```\n\n")
-                .append("Please rewrite the FULL command script so the failing commands become valid and downstream dependent commands remain correct.\n")
+                .append("Validation failure details collected from that full pass:\n```\n").append(error).append("\n```\n\n")
+                .append("Please rewrite the FULL command script so all reported failures become valid in one pass and downstream dependent commands remain correct.\n")
+                .append("Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n")
                 .append("Use English GeoGebra command names, preserve geometric dependency constraints from the storyboard, and follow these naming rules:\n")
                 .append(SystemPrompts.GEOGEBRA_NAMING_RULES)
                 .append("Also keep colors, labels, strokes, and fills high-contrast against their background by following these color rules:\n")

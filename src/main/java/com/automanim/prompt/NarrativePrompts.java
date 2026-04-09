@@ -49,13 +49,13 @@ public final class NarrativePrompts {
 
     private static final String GEOGEBRA_RULES =
             "GeoGebra-specific storyboard rules:\n"
-                    + "- Prefer native GeoGebra labels for named geometric objects such as points, lines, segments, rays, circles, polygons, and angles.\n"
+                    + "- Prefer native GeoGebra labels for named geometric objects such as points, lines, segments, rays, circles, and polygons.\n"
                     + "- If the visible text is just the object's own name or symbol, keep it as the object's native label rather than creating a separate `label` or `text` storyboard object.\n"
                     + "- Create separate `label` or `text` objects only for overlays, formulas, counters, captions, explanatory annotations, or text that is semantically different from the object's native label. Avoid redundant pairs such as `A` plus `aLabel`, `lineL` plus `labelL`, or `circleO` plus `labelO`.\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "- Use `fixed_overlay` mainly for explanatory text, counters, captions, formulas, and similar viewport-fixed overlays. For geometric points, lines, circles, angle markers, and bullseye-style highlights that belong to the construction, prefer `static` or `derived` unless the object is truly an overlay.\n"
                     + "- Use style changes (color, line thickness, dash style) on existing objects rather than creating visual duplicates on the same endpoints. GeoGebra objects persist globally, so every redundant object adds permanent clutter.\n"
-                    + "- For angle markers, use `Angle(B, A, C)` with `SetFilling` for filled sectors. Use `CircularArc` only for decorative arcs not associated with angle measurement.\n";
+                    + "- Do not mention specific GeoGebra command names in storyboard notes unless they are documented in the active syntax manual; describe unsupported effects generically instead.\n";
 
     private static final String MANIM_RULES =
             "Manim-specific storyboard rules:\n"

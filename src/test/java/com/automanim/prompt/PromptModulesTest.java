@@ -163,4 +163,20 @@ class PromptModulesTest {
         assertTrue(geogebraPrompt.contains("Use `fixed_overlay` mainly for explanatory text"));
         assertTrue(geogebraPrompt.contains("bullseye-style highlights"));
     }
+
+    @Test
+    void geogebraRenderFixPromptMentionsFullValidationPassAndAllFailures() {
+        String prompt = RenderFixPrompts.geoGebraUserPrompt(
+                "A = Point({1, 0})",
+                "GeoGebra validation found 2 failing commands out of 3 after replaying the full script:\n"
+                        + "- Command 1 returned false: SetFixed(A, true)\n"
+                        + "- Command 3 returned false: SetConditionToShowObject(floorLine, inSegment)",
+                "{\"scenes\":[]}",
+                java.util.List.of()
+        );
+
+        assertTrue(prompt.contains("one full replay pass"));
+        assertTrue(prompt.contains("all reported failures become valid in one pass"));
+        assertTrue(prompt.contains("Validation failure details collected from that full pass"));
+    }
 }

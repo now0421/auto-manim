@@ -1,10 +1,18 @@
 # GeoGebra Style Reference
 
-Use this compact reference when writing storyboard-level style properties for GeoGebra output. This stage does not write code, but all style language must stay compatible with later GeoGebra command generation.
+Use this reference only for storyboard-level style planning. This stage does not write code; all style language must stay compatible with later GeoGebra command generation.
+
+## Rules
+
+* Use only official GeoGebra color inputs.
+* Use concise, backend-friendly style properties.
+* Prefer restyling an existing object over creating a visual duplicate on the same geometry.
+* Prefer native labels for named geometric objects instead of separate duplicate text objects.
+* Avoid CSS-style syntax, gradients, shadows, blur, glow, and browser-specific styling terms.
 
 ## 1. Allowed Color Inputs
 
-If you mention GeoGebra colors in `color_scheme`, `color_palette`, object `style`, or scene notes, use only official `SetColor`-compatible inputs:
+Use only the following safe inputs in `color_scheme`, `color_palette`, object `style`, or scene notes.
 
 Named colors:
 
@@ -41,58 +49,39 @@ Named colors:
 * `LIGHTGREEN`
 * `WHITE`
 
-Additional official color names from the GeoGebra colors reference are also allowed. Keep them in English.
-
 Hex colors:
 
 * `#RRGGBB`
 * `#AARRGGBB`
 
-Rules:
+## 2. Safe Style Properties
 
-* Use English color names only.
-* Prefer named colors in storyboard output unless a very specific official hex color is necessary.
-* Do not invent CSS color names, gradients, shadows, or browser-specific styling terms.
+Use concise key-value properties that can later map to GeoGebra styling commands.
 
-## 2. Safe Style Language
+```text
+color               // named color token or official hex color
+line_thickness      // stronger or lighter stroke emphasis
+line_style          // solid | dashed_long | dashed_short | dotted | dash_dot
+point_size          // numeric point size
+point_style         // dot | cross | empty_dot | plus | diamond | triangle
+fill_opacity        // 0..1
+label_visible       // true | false
+caption             // short displayed caption
+fixed               // true | false
+selection_allowed   // true | false
+tooltip_mode        // automatic | on | off | caption
+layer               // 0..9
+visible             // true | false
+show_axes           // true | false
+show_grid           // true | false
+```
 
-Describe style in simple GeoGebra-friendly terms:
-
-* overall color
-* line thickness
-* line style
-* point size
-* point style
-* fill opacity
-* label visibility
-* object visibility
-
-Prefer short phrases such as:
-
-* `BLUE primary segment with medium thickness`
-* `RED highlight point`
-* `DARKGRAY dashed helper line`
-* `LIGHTGREEN lightly filled polygon`
-* `hide auxiliary bisectors after construction`
-* `show labels only for key points`
-
-## 3. Style Planning Rules
-
-* Use semantic color mapping consistently across the figure.
-* Keep the same object category in the same color whenever possible.
-* Important objects should be brighter, thicker, or more visible than helper objects.
-* Helper objects can use dashed lines, neutral colors, or reduced emphasis.
-* Do not overload one figure with too many saturated highlight colors.
-* Labels and measurements should support the construction rather than crowd it.
-* Keep foreground elements high-contrast against their local background or fill.
-* Avoid pale-on-pale combinations such as `YELLOW` on `WHITE`, `WHITE` on `LIGHTYELLOW`, or `LIGHTGRAY` on `WHITE`.
-* If a region uses a light fill, use a darker text or stroke color on top of it rather than another light accent.
-
-## 4. Storyboard Output Guidance
+## 3. Storyboard Output Guidance
 
 When writing storyboard JSON:
 
-* `color_palette` should contain only official GeoGebra named colors or official hex strings.
+* `color_palette` should contain only safe named colors or official hex strings.
 * `color_scheme` should describe semantic mapping, not implementation details.
-* Object `style` should stay concise and construction-friendly.
-* `notes_for_codegen` may remind later stages to preserve helper visibility, label policy, and emphasis hierarchy.
+* Object `style` should stay concise, structured, and construction-friendly.
+* Prefer structured properties such as `color`, `line_style`, `fill_opacity`, and `label_visible` over free-form style prose.
+* `notes_for_codegen` may remind later stages to preserve helper visibility, grid/axes policy, label policy, and emphasis hierarchy.

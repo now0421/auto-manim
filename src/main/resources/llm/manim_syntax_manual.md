@@ -1,178 +1,73 @@
 # Manim Usage Guide
 
-Please strictly use common, stable, and highly readable **Manim Community** patterns when generating animation code. The code should prioritize clarity, stability, and ease of rendering first, and only then pursue flashy effects.
+Please strictly use common, stable, and highly readable **Manim Community** patterns when generating animation code. Prioritize clarity, stability, and ease of rendering before flashy effects.
 
-## I. Scene Types
+## Rules
 
-### 1. `Scene`
+- Create objects first, then position them, then style them, then animate them.
+- Prefer one clear step per line.
+- Use `ThreeDScene` only for actual 3D content or camera motion.
 
-Used for the vast majority of **2D instructional animations**, for example:
+## Scene
 
-* title pages
-* formula derivations
-* plane geometry
-* coordinate systems and function graphs
-* flowcharts, block diagrams, and summary pages
+```python
+class MyScene(Scene)
+class MyScene(ThreeDScene)
+```
 
-Common pattern:
+- Use `Scene` for ordinary 2D scenes.
+- Use `ThreeDScene` when the scene contains `Surface`, `Dot3D`, `ThreeDAxes`, solid objects, or camera motion.
 
 ```python
 class MyScene(Scene):
     def construct(self):
         ...
-```
 
-### 2. `ThreeDScene`
-
-Used for **3D animations**, for example:
-
-* surfaces
-* solid geometry
-* polyhedra
-* 3D trajectories
-* 3D coordinate systems
-* camera-motion demonstrations
-
-Common pattern:
-
-```python
 class MyScene(ThreeDScene):
     def construct(self):
         ...
 ```
 
-If the scene contains `Surface`, `Dot3D`, `ThreeDAxes`, solid objects, camera rotation, or similar content, prefer using `ThreeDScene`.
+## Basic Geometric Objects
 
----
+```python
+Dot()
+Line(start, end)
+Arrow(start, end)
+DashedLine(start, end)
+Circle()
+Square()
+Rectangle(width=..., height=...)
+Triangle()
+Polygon(*points)
+SurroundingRectangle(obj, buff=...)
+Angle(line1, line2, radius=..., quadrant=..., other_angle=False)
+RightAngle(line1, line2, length=...)
+```
 
-## II. Basic Object System
-
-Elements on the screen in Manim are essentially all **Mobjects**.
-Always follow this way of thinking:
-
-1. Create the object first.
-2. Then set its position.
-3. Then set its style.
-4. Finally play the animation.
-
-Do not cram "creation, positioning, animation, and cleanup" into one extremely complicated line.
-
----
-
-## III. Common Object Classes and Their Uses
-
-## 1. Basic Geometric Objects
-
-### `Dot`
-
-Used for:
-
-* points
-* nodes
-* key positions
-* coordinate points
+- Use `DashedLine` for dashed segments instead of undocumented dash arguments on other mobjects.
+- `Angle(...)` and `RightAngle(...)` should use the actual rays sharing the same vertex.
+- When the angle sector is ambiguous, set `quadrant=...`; for the smaller interior angle, keep `other_angle=False`.
+- For moving geometry, rebuild the full angle inside `always_redraw(...)`.
 
 ```python
 dot = Dot()
 dot = Dot(point=ORIGIN, color=YELLOW)
-```
 
-### `Line`
-
-Used for:
-
-* line segments
-* connecting lines
-* construction helper lines
-
-```python
 line = Line(LEFT, RIGHT)
-```
-
-### `Arrow`
-
-Used for:
-
-* vectors
-* indicating direction
-* flow relationships
-
-```python
 arrow = Arrow(LEFT, RIGHT)
-```
-
-### `DashedLine`
-
-Used for:
-
-* dashed helper lines
-* projection lines
-* geometric construction lines
-
-```python
 dashed = DashedLine(LEFT, RIGHT)
-```
 
-Compatibility rule:
-
-* If you need a dashed segment, prefer `DashedLine` directly.
-* Do not assume generic mobjects support dashed styling through `set_stroke(...)`.
-* In the current environment, do not invent or rely on arguments such as `dash_array`, `dash_length`, or other unlisted dash-related keyword arguments for `Line`, `Polygon`, `VMobject`, or `set_stroke(...)`.
-* If you need a dashed polygonal boundary, build it from multiple `DashedLine` segments instead of styling a `Polygon` with unsupported dash arguments.
-
-### `Circle`, `Square`, `Rectangle`, `Triangle`, `Polygon`
-
-Used for:
-
-* basic shapes
-* geometric objects
-* emphasis boxes
-* plane polygons
-
-```python
 circle = Circle()
 square = Square()
 rect = Rectangle(width=4, height=2)
 triangle = Triangle()
 poly = Polygon(LEFT, RIGHT, UP)
-```
 
-### `SurroundingRectangle`
-
-Used for:
-
-* highlighting titles
-* highlighting formulas
-* highlighting conclusions
-* boxing a specific object
-
-```python
 box = SurroundingRectangle(obj, color=YELLOW, buff=0.2)
-```
-
-### `Angle`
-
-Used for:
-
-* showing an angle
-* angle markers in plane geometry
-
-```python
 angle = Angle(line1, line2, radius=0.5)
+ra = RightAngle(line1, line2, length=0.2)
 ```
-
-Angle safety rules:
-
-* Prefer `Angle(line1, line2, ...)` over manually constructing `Arc(start_angle=..., angle=...)` for geometric angle markers.
-* The two inputs should be the actual rays that define the angle and should share the same vertex.
-* Build each ray so its first point is the vertex and its second point lies on the intended side of the angle. Do not pass a long line that visually continues through the vertex and creates ambiguity about which sector should be marked.
-* For moving geometry, rebuild those defining rays from the shared vertex inside the same `always_redraw(...)` lambda that creates the `Angle(...)`.
-* When the intended mark is the smaller interior angle, explicitly keep `other_angle=False` instead of relying on implicit defaults.
-* When several sectors are possible, especially around a normal, reflection line, or crossing helper lines, explicitly set `quadrant=...` so the arc stays in the intended region as points move.
-* Do not fake angle placement by drawing a free-floating arc and shifting or rotating it into place after the fact; this often puts the arc on the wrong side of the vertex.
-* If the angle is meant to compare two small equal angles, do not draw a near-full circle or large exterior angle around the vertex.
-
-Recommended pattern for a dynamic angle at point `P`:
 
 ```python
 angle = always_redraw(
@@ -184,11 +79,7 @@ angle = always_redraw(
         color=PURE_CYAN,
     )
 )
-```
 
-Recommended pattern when measuring against a normal or helper ray through the same point:
-
-```python
 angle_in = always_redraw(
     lambda: Angle(
         Line(P.get_center(), P.get_center() + UP),
@@ -212,140 +103,64 @@ angle_out = always_redraw(
 )
 ```
 
-Interpretation note:
+- In the common "upward normal" case, `quadrant=(-1, 1)` and `quadrant=(1, 1)` are often the correct left and right sectors.
 
-* If `A` is above-left of `P` and `B` is above-right of `P`, then the two desired equal angles with an upward normal usually live in the upper-left and upper-right sectors. In that common case, `quadrant=(-1, 1)` and `quadrant=(1, 1)` are safer than leaving the sector implicit.
-
-### `RightAngle`
-
-Used for:
-
-* showing a right-angle marker
+## Text and Formula Objects
 
 ```python
-ra = RightAngle(line1, line2, length=0.2)
+Text(text)
+MarkupText(markup)
+MathTex(*tex_strings)
+Tex(*tex_strings)
+DecimalNumber(value, num_decimal_places=...)
 ```
 
----
-
-## 2. Text and Formula Objects
-
-### `Text`
-
-Used for plain text:
-
-* titles
-* subtitles
-* explanations
-* labels
-* summary statements
+- Use `Text` for plain language and `MathTex` for mathematical notation.
+- If the string contains LaTeX commands or expressions such as `A'`, `A_1`, `x^2`, or inequalities, use `MathTex`.
+- Split `MathTex` into segments when you need partial coloring or matching transforms.
+- Prefer raw strings for LaTeX, for example `r"\geq"`.
 
 ```python
 title = Text("Dot Product", font_size=48)
-```
-
-Use `Text` only for ordinary language.
-Do not put LaTeX commands such as `\approx`, `\geq`, `\frac`, superscripts, subscripts, or math-mode syntax into `Text`.
-
-### `MarkupText`
-
-Used for text with rich-text styling, but only when it is truly needed.
-
-```python
 txt = MarkupText('<span fgcolor="YELLOW">Important</span>')
-```
 
-### `MathTex`
-
-Used for mathematical formulas:
-
-* single variables
-* equations
-* derivation steps
-* geometric labels
-* parameter displays
-
-```python
 eq = MathTex(r"\vec{a}\cdot\vec{b}=|a||b|\cos\theta")
-```
 
-Recommended practice:
-
-* Prefer `MathTex` for mathematical content.
-* If partial coloring is needed, split it into multiple segments.
-* If the content contains LaTeX commands or mathematical notation, use `MathTex` rather than `Tex` or `Text`.
-* Labels like `A'`, `B'`, `A_1`, `x^2`, `AP + PB`, and inequalities should be written with `MathTex`.
-* When writing strings containing backslashes, prefer raw strings such as `r"\geq"` to reduce escaping mistakes.
-
-```python
 eq = MathTex(r"V", r"-", r"E", r"+", r"F", r"=", r"2")
 eq[0].set_color(BLUE)
 eq[2].set_color(YELLOW)
 eq[4].set_color(GREEN)
-```
 
-Common safe examples:
-
-```python
 label = MathTex("A'")
 ineq = MathTex(r"AP + PB \geq A'B")
 value = VGroup(Text("Minimum length:"), MathTex(r"A'B")).arrange(RIGHT, buff=0.2)
-```
+number = DecimalNumber(3.14, num_decimal_places=2)
 
-### `Tex`
-
-Use `Tex` only for plain LaTeX text when mathematical layout is not the focus.
-
-```python
 subtitle = Tex(r"Reflect point A across line l")
 ```
 
-Safety rules:
+## Grouping
 
-* Do not mix plain-text narration with mathematical symbols in a way that depends on implicit math mode.
-* If there is any doubt whether a string is "text" or "math", prefer `MathTex` for the mathematical part or split the content into `Text(...)` plus `MathTex(...)` inside a `VGroup`.
-* Avoid patterns like `Tex("AP + PB \\approx")`; this is fragile and can produce LaTeX compilation errors. Use `MathTex(r"AP + PB \\approx")` instead.
+```python
+VGroup(*mobjects)
+```
 
----
-
-## 3. Grouping Objects
-
-### `VGroup`
-
-Used to package multiple objects into a single whole, making it easy to:
-
-* move them together
-* fade them out together
-* lay them out together
-* transform them together
+- Use `VGroup` when multiple objects should move, lay out, or animate together.
 
 ```python
 group = VGroup(title, subtitle, formula)
 ```
 
-Common scenarios:
+## Coordinate Systems and Graphs
 
-* title groups
-* label groups
-* list groups
-* vertex groups
-* edge groups
-* face groups
-* combinations of multiple curve segments or multiple patches
+```python
+Axes(x_range=..., y_range=..., x_length=..., y_length=...)
+ax.c2p(x, y)
+ax.plot(func, ...)
+NumberPlane()
+```
 
----
-
-## 4. Coordinate Systems and Graph Objects
-
-### `Axes`
-
-Used for:
-
-* function graphs
-* coordinate-system explanations
-* analytic geometry
-* moving-point problems
-* derivative/integral visualization
+- Use `Axes` for coordinate-based content and `NumberPlane` for grid backgrounds.
 
 ```python
 ax = Axes(
@@ -354,56 +169,22 @@ ax = Axes(
     x_length=6,
     y_length=5,
 )
-```
 
-Common companion usage:
-
-#### `c2p`
-
-Convert mathematical coordinates into scene coordinates:
-
-```python
 dot = Dot(ax.c2p(2, 3))
-```
-
-#### `plot`
-
-Draw a function graph on the axes:
-
-```python
 graph = ax.plot(lambda x: x**2, color=BLUE)
-```
 
-### `NumberPlane`
-
-Used for:
-
-* grid backgrounds
-* plane-geometry illustrations
-* vector problems
-* moving-point problems in the plane
-
-```python
 plane = NumberPlane()
 ```
 
-Principles:
+## Curve Objects
 
-* Prefer `Axes` when discussing functions and coordinates.
-* Prefer `NumberPlane` when showing planar relationships and grid backgrounds.
+```python
+VMobject()
+curve.set_points_smoothly(points)
+curve.set_stroke(color, width=..., opacity=...)
+```
 
----
-
-## 5. Curve Objects
-
-### `VMobject`
-
-Used for:
-
-* custom paths
-* smooth trajectories
-* spatial trajectories
-* complex curve segments
+- Use `VMobject` for custom curves and paths.
 
 ```python
 curve = VMobject()
@@ -411,50 +192,26 @@ curve.set_points_smoothly([LEFT, UP, RIGHT])
 curve.set_stroke(BLUE, width=3)
 ```
 
-Suitable for:
+## 3D Objects
 
-* trajectory-style animations
-* curves that require manually specified points
-* multi-segment smooth paths
+```python
+Dot3D(point=..., color=...)
+ThreeDAxes()
+Surface(func, u_range=..., v_range=..., resolution=...)
+Sphere()
+Cube()
+Cone()
+Torus()
+Tetrahedron()
+```
 
----
-
-## 6. 3D Objects
-
-### `Dot3D`
-
-Used for:
-
-* 3D points
-* vertices
-* starfield particles
-* highlighted points in 3D
+- `Surface` expects `func(u, v) -> np.array([x, y, z])`.
+- Use a lower `resolution` while debugging.
 
 ```python
 dot3d = Dot3D(point=ORIGIN, color=YELLOW)
-```
-
-### `ThreeDAxes`
-
-Used for:
-
-* 3D coordinate systems
-* reference axes for spatial curves or surfaces
-
-```python
 axes3d = ThreeDAxes()
-```
 
-### `Surface`
-
-Used for parametric surfaces:
-
-* spheres
-* wave surfaces
-* paraboloids
-* various parameterized 3D surfaces
-
-```python
 surface = Surface(
     lambda u, v: np.array([u, v, np.sin(u) * np.cos(v)]),
     u_range=[-3, 3],
@@ -463,100 +220,47 @@ surface = Surface(
 )
 ```
 
-Usage principles:
+## Positioning
 
-* `Surface` accepts a function of the form `(u, v) -> (x, y, z)`.
-* It is suitable for parametric surfaces.
-* Use a lower resolution while debugging, then increase it for the final version.
+```python
+obj.move_to(point)
+obj.shift(vector)
+obj.to_edge(direction)
+obj.to_corner(corner)
+```
 
-### Common Standard 3D Objects
-
-Use as needed:
-
-* `Sphere`
-* `Cube`
-* `Cone`
-* `Torus`
-* `Tetrahedron`
-
-Use them only when a standard solid is truly needed, and avoid meaningless piling on.
-
----
-
-## IV. Positioning and Layout
-
-When generating code, the layout must be clear. Do not hardcode large numbers of arbitrary coordinates.
-
-## 1. Absolute Positioning
-
-### `move_to`
-
-Move an object to a point:
+- Prefer relative layout before hardcoded coordinates.
 
 ```python
 obj.move_to(ORIGIN)
-```
-
-### `shift`
-
-Relative translation:
-
-```python
 obj.shift(RIGHT * 2 + UP)
-```
-
-### `to_edge`
-
-Place against the edge of the screen:
-
-```python
 title.to_edge(UP)
-```
-
-### `to_corner`
-
-Place in a corner of the screen:
-
-```python
 title.to_corner(UL)
 ```
 
----
+## Relative Layout
 
-## 2. Relative Layout
+```python
+obj.next_to(other, direction, buff=...)
+obj.align_to(other, edge)
+obj.match_height(other)
+obj.match_width(other)
+```
 
-### `next_to`
-
-The most commonly used method. Used to place labels, explanatory text, or formulas relative to another object:
+- `next_to(...)` is the default choice for labels and nearby annotations.
 
 ```python
 label.next_to(dot, RIGHT, buff=0.2)
-```
-
-### `align_to`
-
-Used to align edges:
-
-```python
 obj2.align_to(obj1, LEFT)
 ```
 
-### `match_height`, `match_width`
+## Arrangement
 
-Used to make objects consistent in size.
+```python
+VGroup(...).arrange(direction, buff=..., aligned_edge=...)
+```
 
----
-
-## 3. Automatic Arrangement
-
-### `arrange`
-
-Highly recommended. Suitable for:
-
-* multi-line text
-* summary pages
-* titles and subtitles
-* bullet-point lists
+- Use `arrange(...)` for repeated linear layout.
 
 ```python
 items = VGroup(
@@ -566,20 +270,11 @@ items = VGroup(
 ).arrange(DOWN, buff=0.3, aligned_edge=LEFT)
 ```
 
-Principles:
-
-* For multiple parallel text objects, prefer `VGroup(...).arrange(...)`.
-* Avoid manually writing `move_to` one by one.
-
----
-
-## V. Style Settings
-
-## 1. Basic Style Functions
+## Style
 
 ### Whitelisted Color Constants
 
-When generating code, use only the following known-safe Manim color constants from the current environment.
+Use only the following known-safe Manim color constants from the current environment.
 
 Base colors:
 
@@ -644,243 +339,269 @@ Logo colors:
 
 Use only names from this whitelist when assigning Manim colors.
 
-### `set_color`
+```python
+obj.set_color(color)
+obj.set_fill(color, opacity=...)
+obj.set_stroke(color, width=..., opacity=...)
+obj.set_opacity(opacity)
+obj.scale(factor)
+```
 
-Set the overall color:
+- For `set_stroke(...)`, keep to `color`, `width`, and `opacity`.
+- Do not use undocumented arguments such as `dash_array=...`; use `DashedLine` for dashed geometry.
+- Keep color usage consistent and restrained.
 
 ```python
 obj.set_color(BLUE)
-```
-
-### `set_fill`
-
-Set fill color and opacity:
-
-```python
 obj.set_fill(BLUE, opacity=0.6)
-```
-
-### `set_stroke`
-
-Set stroke color, width, and opacity:
-
-```python
 obj.set_stroke(WHITE, width=2, opacity=1)
-```
-
-Compatibility rules:
-
-* Treat `color`, `width`, and `opacity` as the default safe arguments.
-* Do not assume undocumented keyword arguments are supported in the current Manim version.
-* In particular, do not use `dash_array=...` with `set_stroke(...)`.
-* To create dashed geometry, prefer dedicated dashed mobjects such as `DashedLine`.
-
-### `set_opacity`
-
-Set overall opacity:
-
-```python
 obj.set_opacity(0.5)
-```
-
-### `scale`
-
-Scale the object's size:
-
-```python
 obj.scale(1.2)
 ```
 
----
-
-## 2. Style Usage Suggestions
-
-* Use **semantic color schemes** for vertices, edges, and faces whenever possible.
-* Objects of the same category should use the same color whenever possible.
-* Important objects should be brighter, less transparent, and have thicker lines.
-* Secondary objects can use lower opacity.
-* Do not use highly saturated colors everywhere in the scene.
-* Do not let subtitles compete with the main figure for visual focus.
-
----
-
-## VI. Animation Functions and Their Common Uses
-
-## 1. Entrance Animations
-
-### `Create`
-
-Used for:
-
-* lines
-* circles
-* polygons
-* axes
-* curves
-* image outlines
+## Timing and Utility Animation
 
 ```python
+Add(*mobjects)
+Wait(run_time=...)
+self.wait(duration)
+```
+
+- Prefer `self.add(...)` and `self.wait(...)` in ordinary scenes.
+- Use `Add(...)` when the insertion must happen inside another animation.
+
+```python
+self.add(title, graph)
+self.wait(0.5)
+self.play(Add(label))
+self.play(Succession(
+    Write(title),
+    Wait(0.5),
+    FadeIn(subtitle),
+))
+```
+
+## Entrance Animation
+
+```python
+Create(mobject)
+Write(mobject)
+FadeIn(mobject)
+GrowFromCenter(mobject)
+GrowFromPoint(mobject, point)
+GrowFromEdge(mobject, edge)
+GrowArrow(arrow)
+SpinInFromNothing(mobject)
+DrawBorderThenFill(mobject)
+SpiralIn(mobject)
+AddTextLetterByLetter(text)
+AddTextWordByWord(text)
+ShowIncreasingSubsets(group)
+ShowSubmobjectsOneByOne(group)
+TypeWithCursor(text, cursor)
+```
+
+- `Create`, `Write`, and `DrawBorderThenFill` are the default entrance choices.
+- `TypeWithCursor(...)` is for `Text`.
+- `ShowIncreasingSubsets(...)` keeps previous submobjects visible; `ShowSubmobjectsOneByOne(...)` shows only one at a time.
+
+```python
+self.play(ShowIncreasingSubsets(VGroup(a, b, c)))
+self.play(ShowSubmobjectsOneByOne(VGroup(step1, step2, step3)))
 self.play(Create(circle))
-```
-
-### `Write`
-
-Used for:
-
-* titles
-* text
-* mathematical formulas
-
-```python
 self.play(Write(title))
-```
-
-### `FadeIn`
-
-Used for:
-
-* labels
-* images
-* text
-* making an already-prepared object appear as a whole
-
-```python
 self.play(FadeIn(obj))
-```
-
-### `GrowFromCenter`
-
-Used for:
-
-* points
-* small shapes
-* local components
-* a central expansion feeling of "appearing from nothing"
-
-```python
 self.play(GrowFromCenter(dot))
+self.play(GrowFromPoint(square, ORIGIN))
+self.play(GrowFromEdge(rect, LEFT))
+self.play(GrowArrow(arrow))
+self.play(SpinInFromNothing(poly))
+self.play(DrawBorderThenFill(box))
+self.play(AddTextLetterByLetter(Text("Step 1")))
+self.play(AddTextWordByWord(Text("Now compare the two sides")))
+typed = Text("Typing effect")
+cursor = Rectangle(height=0.8, width=0.08, fill_opacity=1).move_to(typed[0])
+self.play(TypeWithCursor(typed, cursor))
 ```
 
-### `DrawBorderThenFill`
-
-Used for:
-
-* closed shapes with borders and fill
-* title boxes
-* highlight boxes
+## Exit Animation
 
 ```python
-self.play(DrawBorderThenFill(box))
+FadeOut(mobject)
+Uncreate(mobject)
+Unwrite(mobject)
+RemoveTextLetterByLetter(text)
+UntypeWithCursor(text, cursor=None)
 ```
-
----
-
-## 2. Exit Animations
-
-### `FadeOut`
-
-Used for normal fading out:
 
 ```python
 self.play(FadeOut(obj))
+self.play(Uncreate(line))
+self.play(Unwrite(formula))
+self.play(RemoveTextLetterByLetter(Text("Temporary note")))
+typed = Text("Typing effect")
+cursor = Rectangle(height=0.8, width=0.08, fill_opacity=1).move_to(typed[0])
+self.play(UntypeWithCursor(typed, cursor))
 ```
 
-### `Uncreate`
-
-Used for reverse "erasing-style" disappearance, suitable for lines and geometric objects:
+## Transform Animation
 
 ```python
-self.play(Uncreate(line))
+Transform(old_obj, new_obj)
+ReplacementTransform(old_obj, new_obj)
+TransformFromCopy(source, target)
+FadeTransform(source, target)
+FadeTransformPieces(source, target)
+FadeToColor(mobject, color)
+ScaleInPlace(mobject, scale_factor)
+ShrinkToCenter(mobject)
+MoveToTarget(mobject)
+Restore(mobject)
 ```
 
----
-
-## 3. Transform Animations
-
-### `Transform`
-
-Used for:
-
-* shrinking a title and moving it to a corner
-* updating a formula
-* turning one object into another
-* deforming a surface or geometric solid
+- Use `Transform(...)` or `ReplacementTransform(...)` as the default replacement animations.
+- `MoveToTarget(...)` requires `mobject.generate_target()` and edits on `mobject.target`.
+- `Restore(...)` requires `mobject.save_state()`.
 
 ```python
 self.play(Transform(old_obj, new_obj))
+self.play(ReplacementTransform(obj1, obj2))
+self.play(TransformFromCopy(label, formula))
+self.play(FadeTransform(shape1, shape2))
+self.play(FadeTransformPieces(eq1, eq2))
+self.play(FadeToColor(obj, YELLOW))
+self.play(ScaleInPlace(obj, 1.2))
+self.play(ShrinkToCenter(obj))
+
+obj.generate_target()
+obj.target.shift(RIGHT * 2).set_color(GREEN)
+self.play(MoveToTarget(obj))
+
+obj.save_state()
+self.play(obj.animate.shift(UP).set_opacity(0.3))
+self.play(Restore(obj))
 ```
 
-### `ReplacementTransform`
-
-Used for:
-
-* one object exiting and being replaced by another
-* making scene replacement feel more natural
+## Matching Transform Animation
 
 ```python
-self.play(ReplacementTransform(obj1, obj2))
+TransformMatchingTex(source, target)
+TransformMatchingShapes(source, target)
 ```
 
-Principles:
+- `TransformMatchingTex(...)` works best when reusable parts are split consistently, for example with `{{...}}`.
+- Use `TransformMatchingShapes(...)` for text or shape rearrangements.
 
-* For simple replacements, prefer `Transform` / `ReplacementTransform`.
-* If two objects differ too much in structure, you can also directly use `FadeOut` + `FadeIn`.
+```python
+eq1 = MathTex("{{a}}^2", "+", "{{b}}^2", "=", "{{c}}^2")
+eq2 = MathTex("{{a}}^2", "=", "{{c}}^2", "-", "{{b}}^2")
+self.play(TransformMatchingTex(eq1, eq2))
 
----
+src = Text("the morse code")
+tar = Text("here come dots")
+self.play(TransformMatchingShapes(src, tar))
+```
 
-## 4. Emphasis Animations
+## Advanced Transform Animation
 
-### `Flash`
+```python
+ApplyMethod(mobject.method, *args)
+ApplyFunction(func, mobject)
+ApplyPointwiseFunction(func, mobject)
+ApplyPointwiseFunctionToCenter(func, mobject)
+ApplyComplexFunction(func, mobject)
+ApplyMatrix(matrix, mobject)
+ClockwiseTransform(source, target)
+CounterclockwiseTransform(source, target)
+Swap(mobject1, mobject2)
+CyclicReplace(*mobjects)
+TransformAnimations(anim1, anim2)
+```
 
-Used for:
+- Prefer `.animate` or ordinary `Transform` unless you need function-based deformation or cyclic replacement.
 
-* flashing to emphasize a point
-* point-by-point counting
-* emphasizing a vertex or key position
+```python
+self.play(ApplyMethod(title.shift, UP))
+self.play(ApplyMatrix([[0, -1], [1, 0]], square))
+self.play(ClockwiseTransform(circle, square))
+self.play(Swap(a, b))
+self.play(CyclicReplace(obj1, obj2, obj3))
+```
+
+## Movement Animation
+
+```python
+MoveAlongPath(mobject, path)
+Homotopy(function, mobject)
+ComplexHomotopy(function, mobject)
+SmoothedVectorizedHomotopy(function, mobject)
+PhaseFlow(function, mobject)
+```
+
+- Use `MoveAlongPath(...)` for ordinary path-following motion; use the homotopy family when the object itself must deform.
+
+```python
+path = Circle(radius=2)
+self.play(MoveAlongPath(dot, path))
+
+self.play(Homotopy(
+    lambda x, y, z, t: (x + 0.5 * np.sin(PI * t), y, z),
+    square,
+))
+```
+
+## Rotation Animation
+
+```python
+Rotate(mobject, angle=..., about_point=...)
+Rotating(mobject, angle=..., about_point=..., run_time=...)
+```
+
+- `Rotate(...)` is the common choice; `Rotating(...)` is the standalone animation form.
+
+```python
+self.play(Rotate(square, angle=PI / 2))
+self.play(Rotating(arrow, angle=PI, about_point=ORIGIN, run_time=2))
+```
+
+## Emphasis Animation
+
+```python
+Flash(mobject)
+Indicate(mobject)
+Circumscribe(mobject)
+FocusOn(point_or_mobject)
+ApplyWave(mobject)
+Blink(mobject)
+ShowPassingFlash(vmobject, time_width=...)
+ShowPassingFlashWithThinningStrokeWidth(vmobject)
+Wiggle(mobject)
+Broadcast(mobject)
+```
+
+- `ShowPassingFlash(...)` and `ShowPassingFlashWithThinningStrokeWidth(...)` are for stroke-based `VMobject` content.
 
 ```python
 self.play(Flash(dot, color=YELLOW))
-```
-
-### `Indicate`
-
-Used for:
-
-* highlighting a specific object
-
-```python
 self.play(Indicate(formula))
-```
-
-### `Circumscribe`
-
-Used for:
-
-* circling a formula
-* circling a conclusion
-* emphasizing a block of content
-
-```python
 self.play(Circumscribe(eq))
+self.play(FocusOn(dot))
+self.play(ApplyWave(title))
+self.play(Blink(title, blinks=2))
+self.play(ShowPassingFlash(line.copy().set_color(YELLOW)))
+self.play(ShowPassingFlashWithThinningStrokeWidth(curve.copy().set_color(BLUE)))
+self.play(Wiggle(triangle))
+self.play(Broadcast(circle))
 ```
 
-### `FocusOn`
-
-Used for:
-
-* a camera-like focus on a certain position
+## Combined Animation
 
 ```python
-self.play(FocusOn(dot))
+AnimationGroup(*animations)
+LaggedStart(*animations, lag_ratio=...)
+LaggedStartMap(AnimationClass, group, arg_creator=..., lag_ratio=...)
+Succession(*animations)
 ```
-
----
-
-## 5. Combined Animations
-
-### `AnimationGroup`
-
-Multiple animations in parallel:
 
 ```python
 self.play(AnimationGroup(
@@ -888,24 +609,18 @@ self.play(AnimationGroup(
     FadeIn(b),
     FadeIn(c),
 ))
-```
 
-### `LaggedStart`
-
-Appear in a staggered sequence, suitable for lists, batches of points, or batches of lines:
-
-```python
 self.play(LaggedStart(
     *[FadeIn(obj) for obj in objs],
     lag_ratio=0.2
 ))
-```
 
-### `Succession`
+self.play(LaggedStartMap(
+    FadeIn,
+    VGroup(a, b, c),
+    lag_ratio=0.2,
+))
 
-Animations chained in sequence:
-
-```python
 self.play(Succession(
     Write(title),
     FadeIn(subtitle),
@@ -913,47 +628,65 @@ self.play(Succession(
 ))
 ```
 
----
+## `.animate`
 
-## VII. `.animate` Usage
+```python
+mobject.animate.method(...)
+mobject.animate(run_time=..., rate_func=...).method(...)
+```
 
-This is one of the syntax patterns most recommended for LLMs to prefer.
-
-Suitable for simple property changes:
+- Use `.animate` for simple property changes and `Transform` for structural replacement.
 
 ```python
 self.play(obj.animate.shift(RIGHT * 2))
+self.play(obj.animate(run_time=2).shift(RIGHT * 2))
 self.play(obj.animate.scale(0.5))
 self.play(obj.animate.set_color(RED))
 self.play(obj.animate.set_opacity(0.3))
 self.play(title.animate.to_corner(UL))
 ```
 
-Applicable scenarios:
+## Number Animation
 
-* translation
-* scaling
-* recoloring
-* changing opacity
-* slight position adjustments
-* tucking away a title
+```python
+ChangeDecimalToValue(decimal_number, target_value)
+ChangingDecimal(decimal_number, number_update_func)
+```
 
-Principles:
+- Use these animations with `DecimalNumber(...)`.
 
-* Prefer `.animate` for simple changes.
-* Prefer `Transform` for complex replacements.
+```python
+number = DecimalNumber(0, num_decimal_places=2)
+self.add(number)
+self.play(ChangeDecimalToValue(number, 10, run_time=2))
+self.play(ChangingDecimal(number, lambda a: 10 + 5 * np.sin(PI * a), run_time=2))
+```
 
----
+## Speed Modifier Animation
 
-## VIII. Dedicated 3D Scene Usage
+```python
+ChangeSpeed(animation, speedinfo=..., rate_func=...)
+```
 
-If using `ThreeDScene`, be comfortable with the following methods.
+- Use `ChangeSpeed(...)` only when ordinary `run_time` and `rate_func` are not enough.
 
-## 1. Camera Settings
+```python
+self.play(ChangeSpeed(
+    dot.animate.shift(RIGHT * 4),
+    speedinfo={0.3: 1, 0.6: 0.2, 1: 1},
+    rate_func=linear,
+))
+```
 
-### `set_camera_orientation`
+## 3D Camera
 
-Set the initial viewing angle:
+```python
+self.set_camera_orientation(phi=..., theta=..., zoom=...)
+self.move_camera(phi=..., theta=..., zoom=..., run_time=...)
+self.begin_ambient_camera_rotation(rate=...)
+self.stop_ambient_camera_rotation()
+```
+- Use these methods inside `ThreeDScene`.
 
 ```python
 self.set_camera_orientation(
@@ -961,141 +694,102 @@ self.set_camera_orientation(
     theta=-45 * DEGREES,
     zoom=0.8
 )
-```
 
-### `move_camera`
-
-Move the camera:
-
-```python
 self.move_camera(
     phi=60 * DEGREES,
     theta=30 * DEGREES,
     zoom=1.0,
     run_time=2
 )
-```
 
-### `begin_ambient_camera_rotation`
-
-Start slow automatic camera rotation:
-
-```python
 self.begin_ambient_camera_rotation(rate=0.1)
-```
-
-### `stop_ambient_camera_rotation`
-
-Stop automatic rotation:
-
-```python
 self.stop_ambient_camera_rotation()
 ```
 
-Applicable for:
+## Fixed Screen Objects
 
-* showcasing solid figures
-* observing surfaces
-* explaining polyhedron rotation
-* displaying 3D trajectories
+```python
+self.add_fixed_in_frame_mobjects(*mobjects)
+```
 
----
-
-## 2. Fixed Screen Objects
-
-### `add_fixed_in_frame_mobjects`
-
-Used to keep subtitles, formulas, and titles fixed in a 3D scene so that they do not rotate with the camera:
+- Use this to keep text or formulas fixed on screen in a `ThreeDScene`.
 
 ```python
 title = Text("Gyroid Surface")
 self.add_fixed_in_frame_mobjects(title)
 ```
 
-This is very important in 3D instructional animations.
-Principles:
+## Dynamic Update
 
-* Titles, subtitles, and formulas are usually fixed on the screen layer.
-* 3D geometric objects belong on the world layer.
+```python
+always(method, *args, **kwargs)
+f_always(method, *arg_generators)
+always_redraw(lambda: ...)
+always_shift(mobject, direction, rate=...)
+always_rotate(mobject, rate=..., ...)
+turn_animation_into_updater(animation, ...)
+cycle_animation(animation, ...)
+ValueTracker(value)
+AnimatedBoundary(vmobject, ...)
+TracedPath(callable, ...)
+```
 
----
-
-## IX. Dynamic Update Mechanisms
-
-## 1. `always_redraw`
-
-Used to regenerate an object every frame, suitable for:
-
-* moving-point labels
-* dynamic connecting lines
-* dynamic projection lines
-* dynamic tangents
-* dynamic auxiliary graphics
+- Use `always_redraw(...)` when the object itself must be rebuilt from moving dependencies.
+- Use `always(...)` or `f_always(...)` when updating an existing object is enough.
+- `always_shift(...)` and `always_rotate(...)` are for continuous background motion.
+- `ValueTracker(...)` stores changing values; `TracedPath(...)` traces a moving point.
+- `turn_animation_into_updater(...)` and `cycle_animation(...)` are advanced patterns.
 
 ```python
 label = always_redraw(lambda: Text("A").next_to(dot, UP))
 line = always_redraw(lambda: Line(dot1.get_center(), dot2.get_center()))
-```
+always(label.next_to, dot, UP)
+always_shift(cloud, RIGHT, rate=0.5)
+always_rotate(spinner, rate=PI)
 
-Principles:
-
-* Prefer it for objects that "depend on position changes of other objects."
-* If a point, endpoint, vertex, or marker moves, then its label must also be dynamic. Do not write a one-time `label = Text(...).next_to(dot, ...)` and then animate the dot separately.
-* For moving geometry, labels should usually use `always_redraw(lambda: MathTex(...).next_to(moving_obj, ...))` or `always_redraw(lambda: Text(...).next_to(moving_obj, ...))`.
-* The same rule applies to helper lines, braces, angle markers, and any annotation whose placement depends on a moving object.
-* If a label should appear only after a point finishes moving, either create the label after the motion has finished, or still use `always_redraw`. Do not precompute `next_to(...)` before the move and merely `FadeIn` it later, because that keeps the old coordinates.
-* Do not abuse it for large and complex static objects.
-
----
-
-## 2. `ValueTracker`
-
-Used to store numerical values that can change through animation, often in combination with `always_redraw`:
-
-```python
 x_tracker = ValueTracker(-2)
 self.play(x_tracker.animate.set_value(2), run_time=4)
-```
 
-Applicable for:
-
-* the x-coordinate of a moving point
-* parameter changes
-* angle changes
-* length changes
-* function-parameter visualization
-
----
-
-## 3. `TracedPath`
-
-Used to trace the trajectory of a point's motion:
-
-```python
+boundary = AnimatedBoundary(title, colors=[RED, GREEN, BLUE], cycle_rate=2)
 path = TracedPath(dot.get_center, stroke_color=YELLOW, stroke_width=4)
 ```
 
-Applicable for:
+## Update Animation
 
-* trajectory-style animations
-* moving-point problems
-* phase portraits
-* particle motion
+```python
+UpdateFromFunc(mobject, update_function)
+UpdateFromAlphaFunc(mobject, update_function)
+MaintainPositionRelativeTo(mobject, tracked)
+```
 
----
+- Use these when the update is local to a single `self.play(...)`.
+- For long-lived dependencies, prefer `always_redraw(...)`.
 
-## X. Code Organization Suggestions
+```python
+self.play(
+    dot.animate.shift(RIGHT * 3),
+    UpdateFromFunc(label, lambda m: m.next_to(dot, UP)),
+)
 
-For longer animations, do not pile all logic into `construct()`.
+self.play(UpdateFromAlphaFunc(
+    square,
+    lambda m, a: m.set_opacity(0.2 + 0.8 * a),
+))
 
-Recommended:
+self.play(
+    dot.animate.shift(UP * 2),
+    MaintainPositionRelativeTo(label, dot),
+)
+```
+
+## Code Organization
 
 ```python
 class MyScene(Scene):
     def construct(self):
-        self.intro()
-        self.main_part()
-        self.summary()
+        self.intro()       # opening section
+        self.main_part()   # main teaching section
+        self.summary()     # closing section
 
     def intro(self):
         ...
@@ -1107,21 +801,10 @@ class MyScene(Scene):
         ...
 ```
 
-Applicable for:
+- Keep `construct()` focused on scene flow.
+- Move repeated or complex object-building logic into helper methods.
 
-* multi-section animations
-* staged instructional explanations
-* long 3D demonstrations
-
-Principles:
-
-* Let `construct()` keep only the overall flow.
-* Split concrete content into helper functions.
-* Creation of complex objects can be written separately as `create_xxx()` functions.
-
----
-
-## XI. Recommended Principles When Generating Manim Code
+## Recommended Rules
 
 1. Prefer common and stable objects and animations; do not use obscure and complex patterns just to be flashy.
 2. Prioritize clean layout and clear information hierarchy.
@@ -1133,5 +816,3 @@ Principles:
 8. Use lower resolution for surfaces and 3D objects during debugging.
 9. Do not hardcode large numbers of absolute coordinates; prefer relative layout.
 10. Whenever possible, let colors, animation order, and object appearance order carry instructional meaning.
-
----
