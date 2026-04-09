@@ -5,11 +5,13 @@ package com.automanim.prompt;
  */
 public final class CodeEvaluationPrompts {
 
-    private static final String REVIEW_SYSTEM =
+    private static final String REVIEW_SYSTEM_MANIM =
             "You are a senior Manim code reviewer.\n"
                     + "Your job is NOT to debug runtime errors.\n"
+                    + "Your primary job is storyboard-to-code alignment review before render.\n"
                     + "Predict whether the generated animation is likely to feel visually discontinuous, semantically mis-attached, hard to read in 3D, or badly paced against the storyboard narration.\n\n"
                     + "The storyboard JSON is the source of truth.\n"
+                    + "- Explicitly review storyboard/code alignment, not just generic code quality.\n"
                     + "- Compare the code against storyboard continuity, safe-area intent, layout goals, and scene pacing.\n"
                     + "- Compare the code against storyboard geometric invariants: reflection, symmetry, collinearity, intersections, equal-length constructions must survive layout choices.\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE.replace("\n", "\n- ").trim() + "\n"
@@ -37,7 +39,41 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.TOOL_CALL_HINT
                     + SystemPrompts.JSON_ONLY_OUTPUT;
 
-    private static final String REVISION_SYSTEM =
+    private static final String REVIEW_SYSTEM_GEOGEBRA =
+            "You are a senior GeoGebra construction reviewer.\n"
+                    + "Your job is NOT to debug runtime errors unless they directly affect storyboard fidelity.\n"
+                    + "Your primary job is storyboard-to-code alignment review for a GeoGebra teaching construction before render.\n"
+                    + "Judge whether the command script truly realizes the storyboard's objects, scene progression, and teaching intent.\n\n"
+                    + "The storyboard JSON is the source of truth.\n"
+                    + "- Explicitly review storyboard/code alignment, not just generic code quality.\n"
+                    + "- Check whether required constructed objects are actually present, not merely suggested by captions, counts, or comments.\n"
+                    + "- Check whether scene-level visibility progression matches `entering_objects`, `persistent_objects`, `exiting_objects`, and `actions`.\n"
+                    + "- Compare the code against storyboard continuity, layout goals, safe-area intent, and screen-overlay intent.\n"
+                    + "- Compare the code against storyboard geometric invariants: reflections, symmetry, collinearity, intersections, equal lengths, grids, partitions, and dependency-safe constructions must survive layout choices.\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA.replace("\n", "\n- ").trim() + "\n"
+                    + "- Penalize semantically wrong substitutions, such as drawing a border where a full grid was requested, or showing result text without constructing the matching geometry.\n"
+                    + "- Penalize scripts that define helper or cloned objects but fail to include them in the scene visibility progression.\n"
+                    + "- A later geometry-based stage will inspect rendered geometry for actual overlap/offscreen issues. Do not duplicate that stage.\n"
+                    + "- GeoGebra is interactive, so do not over-penalize pure zoomability issues. Focus on likely initial-view readability and storyboard fidelity.\n\n"
+                    + "Output format:\n"
+                    + "Return a JSON object with this shape:\n"
+                    + "{\n"
+                    + "  \"approved_for_render\": \"boolean, whether the code is safe enough to proceed to render\",\n"
+                    + "  \"layout_score\": \"integer 1-10, quality of overall layout and storyboard realization\",\n"
+                    + "  \"continuity_score\": \"integer 1-10, how well object reuse and scene continuity match the storyboard\",\n"
+                    + "  \"pacing_score\": \"integer 1-10, how well scene progression matches the storyboard beat structure\",\n"
+                    + "  \"clutter_risk\": \"integer 1-10, risk that the construction feels crowded or visually overloaded\",\n"
+                    + "  \"likely_offscreen_risk\": \"integer 1-10, risk that important content is initially framed poorly or reads as out of place\",\n"
+                    + "  \"summary\": \"string, concise overall judgment of code quality against the storyboard\",\n"
+                    + "  \"strengths\": [\"string, specific strength that should be preserved\"],\n"
+                    + "  \"blocking_issues\": [\"string, issue serious enough to block confident render approval\"],\n"
+                    + "  \"revision_directives\": [\"string, concrete change request for the next revision\"]\n"
+                    + "}\n\n"
+                    + "Scores use 1 to 10 integers.\n"
+                    + SystemPrompts.TOOL_CALL_HINT
+                    + SystemPrompts.JSON_ONLY_OUTPUT;
+
+    private static final String REVISION_SYSTEM_MANIM =
             "You are a Manim code revision specialist.\n"
                     + "You will receive storyboard JSON, static visual findings, a structured review, and the current code.\n"
                     + "Rewrite the full code so it is visually safer before render.\n"
@@ -47,16 +83,41 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
+    private static final String REVISION_SYSTEM_GEOGEBRA =
+            "You are a GeoGebra command revision specialist.\n"
+                    + "You will receive storyboard JSON, static visual findings, a structured review, and the current command script.\n"
+                    + "Rewrite the full command script so it better aligns with the storyboard before render.\n"
+                    + "Preserve dependency-safe geometry, object identities, scene visibility progression, and teaching intent.\n"
+                    + "Fix storyboard misalignments such as missing constructions, incorrect scene visibility, incorrect substitutions for requested geometry, and captions unsupported by the actual construction.\n"
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR
+                    + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
+                    + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
+
     private CodeEvaluationPrompts() {}
 
     public static String reviewSystemPrompt(String targetConcept, String targetDescription) {
+        return reviewSystemPrompt(targetConcept, targetDescription, "manim");
+    }
+
+    public static String reviewSystemPrompt(String targetConcept,
+                                            String targetDescription,
+                                            String outputTarget) {
+        if ("geogebra".equalsIgnoreCase(outputTarget)) {
+            return SystemPrompts.ensureGeoGebraSyntaxManual(SystemPrompts.buildWorkflowPrefix(
+                    "Stage 3 / Code Evaluation",
+                    "Review GeoGebra code for storyboard alignment, layout, continuity, and clutter risk",
+                    targetConcept,
+                    targetDescription,
+                    "geogebra"
+            ) + REVIEW_SYSTEM_GEOGEBRA);
+        }
         return SystemPrompts.buildWorkflowPrefix(
                 "Stage 3 / Code Evaluation",
-                "Review code for layout, continuity, pacing, and clutter risk",
+                "Review code for storyboard alignment, layout, continuity, pacing, and clutter risk",
                 targetConcept,
                 targetDescription,
                 "manim"
-        ) + REVIEW_SYSTEM;
+        ) + REVIEW_SYSTEM_MANIM;
     }
 
     public static String reviewUserPrompt(String targetConcept,
@@ -64,6 +125,27 @@ public final class CodeEvaluationPrompts {
                                           String storyboardJson,
                                           String staticAnalysisJson,
                                           String generatedCode) {
+        return reviewUserPrompt(targetConcept, sceneName, storyboardJson, staticAnalysisJson, generatedCode, "manim");
+    }
+
+    public static String reviewUserPrompt(String targetConcept,
+                                          String sceneName,
+                                          String storyboardJson,
+                                          String staticAnalysisJson,
+                                          String generatedCode,
+                                          String outputTarget) {
+        if ("geogebra".equalsIgnoreCase(outputTarget)) {
+            return String.format(
+                    "Target concept: %s\n"
+                            + "Figure name: %s\n\n"
+                            + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                            + "Static visual analysis:\n```json\n%s\n```\n\n"
+                            + "GeoGebra command script to review:\n```geogebra\n%s\n```\n\n"
+                            + "Review for storyboard/code alignment problems before render.\n"
+                            + "Focus on whether the actual construction, scene visibility progression, and teaching evidence match the storyboard.\n"
+                            + "Return only the structured review output.",
+                    targetConcept, sceneName, storyboardJson, staticAnalysisJson, generatedCode);
+        }
         return String.format(
                 "Target concept: %s\n"
                         + "Scene class name: %s\n\n"
@@ -77,13 +159,28 @@ public final class CodeEvaluationPrompts {
     }
 
     public static String revisionSystemPrompt(String targetConcept, String targetDescription) {
+        return revisionSystemPrompt(targetConcept, targetDescription, "manim");
+    }
+
+    public static String revisionSystemPrompt(String targetConcept,
+                                              String targetDescription,
+                                              String outputTarget) {
+        if ("geogebra".equalsIgnoreCase(outputTarget)) {
+            return SystemPrompts.ensureGeoGebraSyntaxManual(SystemPrompts.buildWorkflowPrefix(
+                    "Stage 3 / Code Evaluation",
+                    "Revise GeoGebra code after storyboard alignment review before render",
+                    targetConcept,
+                    targetDescription,
+                    "geogebra"
+            ) + REVISION_SYSTEM_GEOGEBRA);
+        }
         return SystemPrompts.ensureManimSyntaxManual(SystemPrompts.buildWorkflowPrefix(
                 "Stage 3 / Code Evaluation",
                 "Revise Manim code after code evaluation before render",
                 targetConcept,
                 targetDescription,
                 "manim"
-        ) + REVISION_SYSTEM);
+        ) + REVISION_SYSTEM_MANIM);
     }
 
     public static String revisionUserPrompt(String targetConcept,
@@ -92,6 +189,36 @@ public final class CodeEvaluationPrompts {
                                             String staticAnalysisJson,
                                             String reviewJson,
                                             String generatedCode) {
+        return revisionUserPrompt(
+                targetConcept,
+                sceneName,
+                storyboardJson,
+                staticAnalysisJson,
+                reviewJson,
+                generatedCode,
+                "manim");
+    }
+
+    public static String revisionUserPrompt(String targetConcept,
+                                            String sceneName,
+                                            String storyboardJson,
+                                            String staticAnalysisJson,
+                                            String reviewJson,
+                                            String generatedCode,
+                                            String outputTarget) {
+        if ("geogebra".equalsIgnoreCase(outputTarget)) {
+            return String.format(
+                    "Target concept: %s\n"
+                            + "Figure name: %s\n\n"
+                            + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                            + "Static visual analysis:\n```json\n%s\n```\n\n"
+                            + "Structured code review:\n```json\n%s\n```\n\n"
+                            + "Current GeoGebra command script:\n```geogebra\n%s\n```\n\n"
+                            + "Rewrite the FULL command script to better match the storyboard, preserve dependency-safe geometry, correct scene visibility progression, and restore missing visual evidence requested by the storyboard.\n"
+                            + "Preserve storyboard geometric invariants and the teaching goal.\n"
+                            + "Return ONLY the full GeoGebra code block.",
+                    targetConcept, sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode);
+        }
         return String.format(
                 "Target concept: %s\n"
                         + "Scene class name: %s\n\n"

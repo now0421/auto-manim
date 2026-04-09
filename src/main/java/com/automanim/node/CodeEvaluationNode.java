@@ -25,6 +25,7 @@ import com.automanim.service.FileOutputService;
 import com.automanim.util.AiRequestUtils;
 import com.automanim.util.ConcurrencyUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.util.JsonUtils;
 import com.automanim.util.ManimCodeUtils;
 import com.automanim.util.NodeConversationContext;
@@ -174,19 +175,6 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         fixState.setRequestFix(false);
 
         CodeEvaluationResult result = new CodeEvaluationResult();
-        if (input.config() != null && input.config().isGeoGebraTarget()) {
-            result.setApprovedForRender(true);
-            result.setGateReason("Code evaluation skipped: GeoGebra target does not use Manim code review");
-            result.setRevisionAttempts(0);
-            result.setRevisionTriggered(false);
-            result.setRevisedCodeApplied(false);
-            result.setToolCalls(0);
-            result.setExecutionTimeSeconds(TimeUtils.secondsSince(start));
-            if (codeResult != null) {
-                result.setSceneName(codeResult.getSceneName());
-            }
-            return result;
-        }
         if (codeResult == null || !codeResult.hasCode()) {
             result.setApprovedForRender(false);
             result.setGateReason("No code available for code evaluation");
@@ -199,7 +187,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         }
 
         String currentCode = codeResult.getGeneratedCode();
-        String sceneName = ManimCodeUtils.extractSceneName(currentCode, codeResult.getSceneName());
+        String sceneName = resolveEvaluationArtifactName(currentCode, codeResult.getSceneName());
         codeResult.setSceneName(sceneName);
         result.setSceneName(sceneName);
         initializeConversationContexts(codeResult, sceneName);
@@ -330,7 +318,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON;
         String staticAnalysisJson = JsonUtils.toPrettyJson(analysis);
         String userPrompt = CodeEvaluationPrompts.reviewUserPrompt(
-                targetConcept, sceneName, storyboardJson, staticAnalysisJson, code);
+                targetConcept, sceneName, storyboardJson, staticAnalysisJson, code, resolveOutputTarget());
 
         try {
             JsonNode payload = AiRequestUtils.requestJsonObjectAsync(
@@ -368,7 +356,24 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
         this.reviewConversationContext = new NodeConversationContext(maxInputTokens);
         this.reviewConversationContext.setSystemMessage(
-                CodeEvaluationPrompts.reviewSystemPrompt(targetConcept, targetDescription));
+                CodeEvaluationPrompts.reviewSystemPrompt(
+                        targetConcept,
+                        targetDescription,
+                        resolveOutputTarget()));
+    }
+
+    private String resolveEvaluationArtifactName(String code, String fallbackName) {
+        if (workflowConfig != null && workflowConfig.isGeoGebraTarget()) {
+            if (fallbackName != null && !fallbackName.isBlank()) {
+                return fallbackName;
+            }
+            return GeoGebraCodeUtils.EXPECTED_FIGURE_NAME;
+        }
+        return ManimCodeUtils.extractSceneName(code, fallbackName);
+    }
+
+    private String resolveOutputTarget() {
+        return workflowConfig != null ? workflowConfig.getOutputTarget() : WorkflowConfig.OUTPUT_TARGET_MANIM;
     }
 
     private CodeFixRequest buildEvaluationFixRequest(CodeEvaluationInput input,
@@ -1251,4 +1256,3 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         }
     }
 }
-

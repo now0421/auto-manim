@@ -446,7 +446,7 @@ public final class ToolSchemas {
             + "  \"type\": \"function\","
             + "  \"function\": {"
             + "    \"name\": \"write_code_review\","
-            + "    \"description\": \"Return structured code review for Manim animation quality.\","
+            + "    \"description\": \"Return structured storyboard-alignment review for Manim or GeoGebra output quality.\","
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
