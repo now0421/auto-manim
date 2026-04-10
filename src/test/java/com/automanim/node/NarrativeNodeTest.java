@@ -88,6 +88,8 @@ class NarrativeNodeTest {
         assertFalse(userPrompt.contains("id:"));
         assertFalse(userPrompt.contains("Planning reason from previous stage"));
         assertFalse(userPrompt.contains("Optional mathematical enrichment"));
+        assertFalse(userPrompt.contains("Treat equations and definitions as optional supporting material"));
+        assertFalse(userPrompt.contains("Keep important screen-space content inside x in [-7, 7], y in [-4, 4]."));
 
         assertNotNull(aiClient.lastSystemPrompt);
         assertFalse(aiClient.lastSystemPrompt.contains("Use symmetry to convert a broken path into a straight-line comparison."));
@@ -135,7 +137,8 @@ class NarrativeNodeTest {
         Narrative narrative = (Narrative) ctx.get(WorkflowKeys.NARRATIVE);
         assertNotNull(narrative);
         assertTrue(narrative.getVerbosePrompt().contains("Python code block"));
-        assertTrue(narrative.getVerbosePrompt().contains("ThreeDScene"));
+        assertTrue(narrative.getVerbosePrompt().contains("Compact storyboard JSON"));
+        assertFalse(narrative.getVerbosePrompt().contains("GeoGebra code block"));
     }
 
     private static Map<String, Object> buildContext(AiClient aiClient) {
@@ -203,7 +206,7 @@ class NarrativeNodeTest {
         model.setProvider("openai");
         model.setApiKeyEnv("TEST_API_KEY");
         model.setBaseUrl("https://example.com");
-        model.setMaxInputTokens(4096);
+        model.setMaxInputTokens(32768);
         model.setMaxOutputTokens(1024);
 
         ModelCatalogConfig catalog = new ModelCatalogConfig();

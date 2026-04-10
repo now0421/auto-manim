@@ -97,9 +97,12 @@ class CodeGenerationNodeRoutingTest {
         assertTrue(aiClient.lastUserMessage.contains("\"safe_area_plan\""));
         assertTrue(aiClient.lastUserMessage.contains("\"goal\""));
         assertTrue(aiClient.lastUserMessage.contains("\"layout_goal\""));
+        assertTrue(aiClient.lastUserMessage.contains("Scene class name: MainScene"));
 
         assertFalse(aiClient.lastUserMessage.contains("\"hook\""));
         assertFalse(aiClient.lastUserMessage.contains("\"summary\""));
+        assertFalse(aiClient.lastUserMessage.contains("attached Manim syntax manual"));
+        assertFalse(aiClient.lastUserMessage.contains("ASCII identifiers only"));
     }
 
     @Test
@@ -182,6 +185,7 @@ class CodeGenerationNodeRoutingTest {
         assertTrue(aiClient.lastSystemPrompt.contains("GeoGebra"));
         assertTrue(aiClient.lastUserMessage.contains("Figure name: GeoGebraFigure"));
         assertFalse(aiClient.lastUserMessage.contains("Scene class name:"));
+        assertFalse(aiClient.lastUserMessage.contains("attached GeoGebra syntax manual"));
     }
 
     @Test
@@ -201,9 +205,12 @@ class CodeGenerationNodeRoutingTest {
 
         new CodeGenerationNode().run(ctx);
 
+        assertNotNull(aiClient.lastSystemPrompt);
         assertNotNull(aiClient.lastUserMessage);
-        assertTrue(aiClient.lastUserMessage.contains("`B'`, `AB'`, and `P_{opt}` are allowed and preferred"));
-        assertFalse(aiClient.lastUserMessage.contains("All object names and identifiers must use ASCII only."));
+        assertTrue(aiClient.lastSystemPrompt.contains("`B'"));
+        assertTrue(aiClient.lastSystemPrompt.contains("`P_{opt}`"));
+        assertFalse(aiClient.lastUserMessage.contains("`B'`, `AB'`, and `P_{opt}` are allowed and preferred"));
+        assertFalse(aiClient.lastUserMessage.contains("ASCII-safe"));
     }
 
     @Test

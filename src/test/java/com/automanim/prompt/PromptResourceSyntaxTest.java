@@ -25,6 +25,8 @@ class PromptResourceSyntaxTest {
             Pattern.compile("```([A-Za-z0-9_+-]*)\\R(.*?)\\R```", Pattern.DOTALL);
     private static final Pattern GEOGEBRA_ASSIGNMENT =
             Pattern.compile("[A-Za-z][A-Za-z0-9_]*(?:\\([^()]*\\))?\\s*=\\s*.+");
+    private static final Pattern GEOGEBRA_COMMAND =
+            Pattern.compile("[A-Za-z][A-Za-z0-9_]*\\s*\\(.*\\)");
 
     @Test
     void manimSyntaxManualPythonExamplesParseAsPython() throws Exception {
@@ -66,9 +68,10 @@ class PromptResourceSyntaxTest {
                 }
                 assertFalse(line.contains("`"),
                         "GeoGebra block #" + (i + 1) + " contains stray markdown fencing:\n" + line);
-                assertTrue(GEOGEBRA_ASSIGNMENT.matcher(line).matches(),
+                assertTrue(GEOGEBRA_ASSIGNMENT.matcher(line).matches()
+                                || GEOGEBRA_COMMAND.matcher(line).matches(),
                         "GeoGebra block #" + (i + 1)
-                                + " should use assignment-style GeoGebra syntax:\n" + line);
+                                + " should use assignment-style or command-style GeoGebra syntax:\n" + line);
             }
         }
     }

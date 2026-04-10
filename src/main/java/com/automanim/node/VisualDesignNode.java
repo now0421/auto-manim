@@ -194,11 +194,11 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     private String buildPrerequisiteSpecContext(KnowledgeNode node) {
         List<KnowledgeNode> prerequisites = getNearestPrerequisites(node);
         if (prerequisites.isEmpty()) {
-            return "This is a foundation step. Keep the visual state concrete, intuitive, and reusable later.";
+            return "Prerequisite visual specs:\n- none yet.";
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Already-designed prerequisite steps:\n");
+        sb.append("Prerequisite visual specs already chosen:\n");
         for (KnowledgeNode prerequisite : prerequisites) {
             Map<String, Object> prerequisiteSpec = prerequisite.getVisualSpec();
             sb.append(String.format("- %s%n", prerequisite.getStep()));
@@ -216,8 +216,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                 sb.append("  Motion: ").append(prerequisiteSpec.get("motion_plan")).append("\n");
             }
         }
-        sb.append("Reuse motifs from these prerequisites so the full presentation feels like one system.");
-        return sb.toString();
+        return sb.toString().trim();
     }
 
     private List<KnowledgeNode> getNearestPrerequisites(KnowledgeNode node) {
@@ -238,15 +237,12 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     }
 
     private String buildGlobalStyleGuide(KnowledgeGraph graph) {
-        return String.format(
-                "Treat every step as part of one coherent visual presentation about %s for the %s backend. "
-                + "Start with concrete, approachable visuals for foundational ideas, then "
-                + "gradually increase abstraction toward the final teaching step. "
-                + "Keep layout grammar, state-transition rhythm, recurring shapes, and overall palette "
-                + "consistent across all nodes.",
-                graph.getTargetConcept(),
-                outputTarget
-        );
+        StringBuilder sb = new StringBuilder();
+        sb.append("Global visual context:\n");
+        sb.append("- Target concept: ").append(graph.getTargetConcept()).append("\n");
+        sb.append("- Output target: ").append(outputTarget).append("\n");
+        sb.append("- Input mode: ").append(graph.isProblemMode() ? "problem" : "concept");
+        return sb.toString();
     }
 
     private boolean shouldDesignNode(KnowledgeNode node) {
@@ -256,7 +252,6 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
     private String buildCurrentStepPrompt(KnowledgeNode node) {
         StringBuilder sb = new StringBuilder();
         sb.append("Current step:\n");
-        sb.append("- Output target: ").append(outputTarget).append("\n");
         sb.append("- Step: ").append(node.getStep()).append("\n");
         if (node.getEquations() != null && !node.getEquations().isEmpty()) {
             sb.append("Equations:\n");
@@ -281,10 +276,6 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                 }
             }
         }
-        sb.append("Design the visuals for this current step only, while staying consistent with"
-                + " the full problem and solution path.\n");
-        sb.append("Keep the plan backend-neutral where possible, but make it practical for the ")
-                .append(outputTarget).append(" output target.\n");
         return sb.toString().trim();
     }
 
@@ -307,11 +298,9 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
 
         String solutionChain = TargetDescriptionBuilder.buildSolutionChain(graph, currentStep);
         if (!solutionChain.isBlank()) {
-            sb.append("Ordered solution-step chain (do not invent extra steps):\n")
+            sb.append("Ordered solution-step chain:\n")
                     .append(solutionChain);
         }
-        sb.append("Design only the current step, but keep object identities, notation, and"
-                + " relative spatial relationships consistent with the full solution.\n");
         return sb.toString().trim();
     }
 

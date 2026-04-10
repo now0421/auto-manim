@@ -289,9 +289,9 @@ public class FileOutputService {
         return value != null && !value.isNull() ? value.asText("").trim() : "";
     }
 
-    private static String extractSceneName(String code, String fallback) {
-        if (code != null) {
-            Matcher matcher = SCENE_CLASS_PATTERN.matcher(code);
+    private static String extractSceneName(String generatedCode, String fallback) {
+        if (generatedCode != null) {
+            Matcher matcher = SCENE_CLASS_PATTERN.matcher(generatedCode);
             if (matcher.find()) {
                 return matcher.group(1);
             }

@@ -8,6 +8,10 @@ Use this reference only for storyboard-level style planning. This stage does not
 * Use concise, backend-friendly style properties.
 * Prefer structured properties over vague prose.
 * Avoid CSS-style syntax, hex colors, gradients, shadows, blur, and unsupported rendering terms.
+* Treat style as part of teaching, not decoration alone.
+* Assign colors to concepts, not random mobjects.
+* Keep one clear visual focus per scene.
+* Preserve intentional empty space; do not saturate the whole frame.
 
 ## 1. Allowed Color Constants
 
@@ -90,12 +94,66 @@ scale            // relative size multiplier
 font_size        // text size when needed
 ```
 
-## 3. Storyboard Output Guidance
+## 3. Style Planning Rules
+
+These rules are for storyboard-level style planning and should remain compatible
+with later Manim code generation.
+
+### Semantic Palette
+
+* `color_scheme` should map colors to roles or concepts, for example
+  "moving point = GREEN, fixed anchors = RED/BLUE, result highlight = YELLOW".
+* Keep the same concept in the same color across scenes.
+* Prefer a small consistent palette over many unrelated colors.
+
+### Opacity Hierarchy
+
+Use opacity to direct attention:
+
+* Primary focus: `opacity = 1.0`
+* Context that should remain visible but secondary: around `0.35` to `0.5`
+* Structural elements such as axes, helper grids, or reference baselines:
+  around `0.12` to `0.2`
+
+Do not keep every object at full opacity.
+
+### Empty Space And Visual Weight
+
+* Leave meaningful breathing room around the main focus.
+* Keep at least a modest empty region for overlays, captions, or later reveals.
+* Do not cluster all heavy content on one side unless comparison is the goal.
+* Large opaque cards should sit in a clearly reserved area, not on top of the
+  active geometry.
+
+### Typography And Readability
+
+* Prefer monospace fonts for storyboard text planning, for example `Menlo`,
+  `JetBrains Mono`, `DejaVu Sans Mono`, or `Courier New`.
+* Keep `font_size >= 18` for readable supporting text.
+* Use larger sizes for scene titles, section headers, and key conclusions.
+* If text must overlap busy geometry, plan a background box or backstroke-style
+  readability treatment.
+
+### Layout And Motion Vocabulary
+
+* Prefer spatial consistency: the same concept should stay in the same screen
+  region across scenes unless the move itself teaches something.
+* Prefer progressive disclosure: show the simple state first, then add one new
+  idea.
+* Prefer transform- or restyle-based continuity over replacing everything.
+* Use motion only when it clarifies change, causality, or comparison.
+
+## 4. Storyboard Output Guidance
 
 When writing storyboard JSON:
 
 * `color_palette` should contain only whitelisted Manim color constants.
-* `color_scheme` should describe semantic mapping, not implementation details.
+* `color_scheme` should describe semantic mapping, not implementation details or
+  raw code.
 * Object `style` should stay concise and implementation-friendly.
 * Prefer structured properties such as `color`, `fill_opacity`, and `stroke_width` over free-form style prose.
-* `notes_for_codegen` may remind later stages to preserve palette consistency and emphasis hierarchy.
+* Use `opacity`, `fill_opacity`, and `stroke_opacity` deliberately to encode
+  hierarchy.
+* Use `font_size` to separate title, body, label, and caption roles.
+* `notes_for_codegen` may remind later stages to preserve palette consistency,
+  emphasis hierarchy, overlay safety, and text readability.

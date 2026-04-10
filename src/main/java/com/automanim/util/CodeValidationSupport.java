@@ -10,16 +10,16 @@ public final class CodeValidationSupport {
 
     private CodeValidationSupport() {}
 
-    public static String normalizeForComparison(String code) {
-        return code == null ? "" : code.trim().replace("\r\n", "\n");
+    public static String normalizeForComparison(String generatedCode) {
+        return generatedCode == null ? "" : generatedCode.trim().replace("\r\n", "\n");
     }
 
-    public static String findFirstMatchEvidence(String code, Pattern pattern) {
-        if (code == null || code.isBlank() || pattern == null) {
+    public static String findFirstMatchEvidence(String generatedCode, Pattern pattern) {
+        if (generatedCode == null || generatedCode.isBlank() || pattern == null) {
             return null;
         }
 
-        String[] lines = code.split("\\R");
+        String[] lines = generatedCode.split("\\R");
         for (int i = 0; i < lines.length; i++) {
             Matcher matcher = pattern.matcher(lines[i]);
             if (matcher.find()) {
@@ -38,10 +38,10 @@ public final class CodeValidationSupport {
         return null;
     }
 
-    public static int countLines(String code) {
-        if (code == null || code.isBlank()) {
+    public static int countLines(String generatedCode) {
+        if (generatedCode == null || generatedCode.isBlank()) {
             return 0;
         }
-        return code.split("\\R").length;
+        return generatedCode.split("\\R").length;
     }
 }

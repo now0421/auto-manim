@@ -448,7 +448,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         return skipped;
     }
 
-    private RenderResult failureResult(String code,
+    private RenderResult failureResult(String generatedCode,
                                        String sceneName,
                                        int attempts,
                                        String error,
@@ -459,7 +459,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
                                        boolean isGeoGebra) {
         RenderResult result = new RenderResult();
         result.setSuccess(false);
-        result.setFinalGeneratedCode(code);
+        result.setFinalGeneratedCode(generatedCode);
         result.setSceneName(sceneName);
         result.setOutputTarget(isGeoGebra ? WorkflowConfig.OUTPUT_TARGET_GEOGEBRA : WorkflowConfig.OUTPUT_TARGET_MANIM);
         result.setArtifactType(isGeoGebra ? "geogebra_preview_html" : "video");

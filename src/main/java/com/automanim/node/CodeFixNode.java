@@ -16,6 +16,7 @@ import com.automanim.prompt.SceneEvaluationPrompts;
 import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.service.AiClient;
 import com.automanim.service.FileOutputService;
+import com.automanim.node.support.NodeSupport;
 import com.automanim.util.CodeValidationSupport;
 import com.automanim.util.GeoGebraCodeUtils;
 import com.automanim.util.ConcurrencyUtils;
@@ -111,7 +112,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             String fixedCode = extractReturnedCode(response);
             if (fixedCode == null || fixedCode.isBlank()) {
                 result.setFailureReason("Code fix returned no parseable "
-                        + (isGeoGebraTarget() ? "GeoGebra code" : "Python code"));
+                        + (NodeSupport.isGeoGebraTarget(workflowConfig) ? "GeoGebra code" : "Python code"));
             } else if (CodeValidationSupport.normalizeForComparison(fixedCode)
                     .equals(CodeValidationSupport.normalizeForComparison(request.getGeneratedCode()))) {
                 result.setFailureReason("Code fix produced no meaningful code change");
@@ -207,17 +208,17 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             systemPrompt = CodeEvaluationPrompts.revisionSystemPrompt(
                     targetConcept,
                     targetDescription,
-                    resolveOutputTarget());
+                    NodeSupport.resolveOutputTarget(workflowConfig));
         } else if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
-            systemPrompt = isGeoGebraTarget()
+            systemPrompt = NodeSupport.isGeoGebraTarget(workflowConfig)
                     ? CodeGenerationPrompts.geoGebraValidationFixSystemPrompt(targetConcept, targetDescription)
                     : CodeGenerationPrompts.validationFixSystemPrompt(targetConcept, targetDescription);
         } else if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
-            systemPrompt = isGeoGebraTarget()
+            systemPrompt = NodeSupport.isGeoGebraTarget(workflowConfig)
                     ? SceneEvaluationPrompts.geoGebraLayoutFixSystemPrompt(targetConcept, targetDescription)
                     : SceneEvaluationPrompts.layoutFixSystemPrompt(targetConcept, targetDescription);
         } else {
-            systemPrompt = isGeoGebraTarget()
+            systemPrompt = NodeSupport.isGeoGebraTarget(workflowConfig)
                     ? RenderFixPrompts.geoGebraSystemPrompt(targetConcept, targetDescription)
                     : RenderFixPrompts.systemPrompt(targetConcept, targetDescription);
         }
@@ -229,7 +230,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             String artifactName = TextUtils.firstNonBlank(
                     request.getSceneName(),
                     request.getExpectedSceneName(),
-                    isGeoGebraTarget() ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : "MainScene");
+                    NodeSupport.isGeoGebraTarget(workflowConfig) ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : "MainScene");
             return CodeEvaluationPrompts.revisionUserPrompt(
                     TextUtils.firstNonBlank(request.getTargetConcept(), request.getSceneName(), "Unknown target"),
                     artifactName,
@@ -237,11 +238,11 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                     TextUtils.defaultIfBlank(request.getStaticAnalysisJson(), "{}"),
                     TextUtils.defaultIfBlank(request.getReviewJson(), "{}"),
                     request.getGeneratedCode(),
-                    resolveOutputTarget()
+                    NodeSupport.resolveOutputTarget(workflowConfig)
             );
         }
         if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
-            if (isGeoGebraTarget()) {
+            if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
                 return CodeGenerationPrompts.geoGebraValidationFixUserPrompt(
                         TextUtils.firstNonBlank(
                                 request.getExpectedSceneName(), request.getSceneName(), GeoGebraCodeUtils.EXPECTED_FIGURE_NAME),
@@ -258,7 +259,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             );
         }
         if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
-            if (isGeoGebraTarget()) {
+            if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
                 return SceneEvaluationPrompts.geoGebraLayoutFixUserPrompt(
                         TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
                         request.getGeneratedCode(),
@@ -275,7 +276,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                     request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
             );
         }
-        return isGeoGebraTarget()
+        return NodeSupport.isGeoGebraTarget(workflowConfig)
                 ? RenderFixPrompts.geoGebraUserPrompt(
                 request.getGeneratedCode(),
                 TextUtils.firstNonBlank(request.getErrorReason(), "Unknown render failure"),
@@ -309,7 +310,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
             return codeBlock;
         }
         String trimmed = response.trim();
-        if (isGeoGebraTarget()) {
+        if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
             return GeoGebraCodeUtils.looksLikeCommandBlock(trimmed) ? trimmed : null;
         }
         if (trimmed.toLowerCase(Locale.ROOT).contains("from manim import")
@@ -319,11 +320,4 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         return null;
     }
 
-    private boolean isGeoGebraTarget() {
-        return workflowConfig != null && workflowConfig.isGeoGebraTarget();
-    }
-
-    private String resolveOutputTarget() {
-        return workflowConfig != null ? workflowConfig.getOutputTarget() : WorkflowConfig.OUTPUT_TARGET_MANIM;
-    }
 }

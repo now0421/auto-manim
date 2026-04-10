@@ -132,4 +132,13 @@ class ToolSchemasTest {
         assertTrue(ToolSchemas.STORYBOARD.contains("Use `fixed_overlay` mainly for explanatory text"));
         assertTrue(ToolSchemas.STORYBOARD.contains("rather than native geometry"));
     }
+
+    @Test
+    void schemasCaptureBeatMappingAndExplicitObjectContracts() {
+        assertTrue(ToolSchemas.VISUAL_DESIGN.contains("empty breathing room"));
+        assertTrue(ToolSchemas.VISUAL_DESIGN.contains("animate-vs-static intent"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("learner-visible object"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("learner-visible beat"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("what the learner should notice"));
+    }
 }

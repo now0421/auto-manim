@@ -52,9 +52,12 @@ class VisualDesignNodeTest {
         assertTrue(aiClient.lastUserMessage.contains("Definitions:"));
         assertTrue(aiClient.lastUserMessage.contains("AP = A'P"));
         assertTrue(aiClient.lastUserMessage.contains("A': reflection of A across l"));
+        assertTrue(aiClient.lastUserMessage.contains("Global visual context:"));
         assertFalse(aiClient.lastUserMessage.contains("- Node type:"));
         assertFalse(aiClient.lastUserMessage.contains("- Depth:"));
         assertFalse(aiClient.lastUserMessage.contains("- Reason from Stage 0:"));
+        assertFalse(aiClient.lastUserMessage.contains("gradually increase abstraction"));
+        assertFalse(aiClient.lastUserMessage.contains("backend-neutral where possible"));
 
         assertNotNull(aiClient.lastSystemPrompt);
         assertFalse(aiClient.lastSystemPrompt.contains("Reflection creates an equal-length path."));

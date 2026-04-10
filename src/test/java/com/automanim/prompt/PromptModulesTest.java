@@ -42,9 +42,7 @@ class PromptModulesTest {
     void promptsMentionThreeDPlanningAndOverlayRules() {
         String visualPrompt = VisualDesignPrompts.systemPrompt("Vector Field", "3D demo", "manim");
         String narrativePrompt = NarrativePrompts.systemPrompt("Vector Field", "3D demo", "manim");
-        String codegenPrompt = NarrativePrompts.storyboardCodegenPrompt(
-                "Vector Field",
-                "{\"scenes\":[{\"scene_mode\":\"3d\",\"camera_plan\":\"orbit\",\"screen_overlay_plan\":\"Keep title fixed\"}]}");
+        String codegenPrompt = CodeGenerationPrompts.systemPrompt("Vector Field", "3D demo", "manim");
         String reviewPrompt = CodeEvaluationPrompts.reviewSystemPrompt("Vector Field", "3D demo");
 
         assertTrue(visualPrompt.contains("scene_mode"));
@@ -52,7 +50,7 @@ class PromptModulesTest {
         assertTrue(narrativePrompt.contains("camera_plan"));
         assertTrue(narrativePrompt.contains("scene_mode"));
         assertTrue(codegenPrompt.contains("ThreeDScene"));
-        assertTrue(codegenPrompt.contains("add_fixed_in_frame_mobjects"));
+        assertTrue(codegenPrompt.contains("fixed overlays readable in screen space"));
         assertTrue(reviewPrompt.contains("3D scenes"));
         assertTrue(reviewPrompt.contains("fixed-in-frame overlays"));
     }
@@ -65,7 +63,7 @@ class PromptModulesTest {
         assertTrue(manimPrompt.contains("Manim syntax reference manual:"));
         assertTrue(geogebraPrompt.contains("GeoGebra syntax reference manual:"));
         assertTrue(geogebraPrompt.contains("GeoGebra Classic"));
-        assertTrue(geogebraPrompt.contains("Define the base objects first."));
+        assertTrue(geogebraPrompt.contains("Build from base objects to derived objects in a clear dependency chain."));
     }
 
     @Test
@@ -76,9 +74,22 @@ class PromptModulesTest {
         assertTrue(manimPrompt.contains("Manim style reference:"));
         assertTrue(geogebraPrompt.contains("GeoGebra style reference:"));
         assertTrue(geogebraPrompt.contains("Allowed Color Inputs"));
-        assertTrue(geogebraPrompt.contains("official `SetColor`-compatible inputs"));
-        assertTrue(manimPrompt.contains("high-contrast"));
-        assertTrue(geogebraPrompt.contains("YELLOW` on `WHITE"));
+        assertTrue(geogebraPrompt.contains("official GeoGebra color inputs"));
+        assertTrue(manimPrompt.contains("visually distinct from their background"));
+        assertTrue(geogebraPrompt.contains("yellow on white"));
+    }
+
+    @Test
+    void geogebraPromptsStayFreeOfManimOnlyNarrativeContracts() {
+        String manimNarrative = NarrativePrompts.systemPrompt("Triangle", "Demo", "manim");
+        String geogebraNarrative = NarrativePrompts.systemPrompt("Triangle", "Demo", "geogebra");
+        String geogebraVisual = VisualDesignPrompts.systemPrompt("Triangle", "Demo", "geogebra");
+
+        assertTrue(manimNarrative.contains("Manim teaching philosophy"));
+        assertFalse(geogebraNarrative.contains("Manim teaching philosophy"));
+        assertFalse(geogebraNarrative.contains("create a separate label object"));
+        assertFalse(geogebraVisual.contains("always_redraw"));
+        assertFalse(geogebraVisual.contains("monospace fonts"));
     }
 
     @Test
@@ -100,6 +111,7 @@ class PromptModulesTest {
     @Test
     void narrativePromptsRequireObjectReferencesToUseIdsOnly() {
         String systemPrompt = NarrativePrompts.systemPrompt("Triangle", "Demo", "geogebra");
+        String codegenSystemPrompt = CodeGenerationPrompts.systemPrompt("Triangle", "Demo", "geogebra");
         String codegenPrompt = NarrativePrompts.storyboardCodegenPrompt(
                 "Triangle",
                 "{\"scenes\":[{\"entering_objects\":[{\"id\":\"angle_in\",\"kind\":\"angle\",\"content\":\"angle between AP and l at P\"}]}]}",
@@ -107,12 +119,14 @@ class PromptModulesTest {
 
         assertTrue(systemPrompt.contains("refer to that object by id only"));
         assertTrue(systemPrompt.contains("angle between AP and l at P"));
-        assertTrue(codegenPrompt.contains("treat those mentions as object ids only"));
+        assertTrue(codegenSystemPrompt.contains("treat those mentions as object ids only"));
+        assertFalse(codegenPrompt.contains("treat those mentions as object ids only"));
     }
 
     @Test
     void narrativePromptsRequireConciseMathStyleIds() {
         String systemPrompt = NarrativePrompts.systemPrompt("Triangle", "Demo", "geogebra");
+        String codegenSystemPrompt = CodeGenerationPrompts.systemPrompt("Triangle", "Demo", "geogebra");
         String codegenPrompt = NarrativePrompts.storyboardCodegenPrompt(
                 "Triangle",
                 "{\"scenes\":[{\"entering_objects\":[{\"id\":\"aLabel\",\"kind\":\"label\",\"content\":\"A\"}]}]}",
@@ -121,7 +135,8 @@ class PromptModulesTest {
         assertTrue(systemPrompt.contains("Keep object ids concise"));
         assertTrue(systemPrompt.contains("Follow GeoGebra naming conventions"));
         assertTrue(systemPrompt.contains("native names like `B'`"));
-        assertTrue(codegenPrompt.contains("naming source"));
+        assertTrue(codegenSystemPrompt.contains("naming source"));
+        assertFalse(codegenPrompt.contains("naming source"));
     }
 
     @Test
@@ -131,7 +146,7 @@ class PromptModulesTest {
         String geogebraCodegenPrompt = CodeGenerationPrompts.systemPrompt("Triangle", "Demo", "geogebra");
         String manimCodegenPrompt = CodeGenerationPrompts.systemPrompt("Triangle", "Demo", "manim");
 
-        assertTrue(visualPrompt.contains("high-contrast"));
+        assertTrue(visualPrompt.contains("visually distinct from their background"));
         assertTrue(visualPrompt.contains("yellow on white"));
         assertTrue(narrativePrompt.contains("visually distinct"));
         assertTrue(narrativePrompt.contains("yellow on white"));

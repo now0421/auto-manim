@@ -1,4 +1,4 @@
-package com.automanim.node;
+﻿package com.automanim.node;
 
 import com.automanim.config.ModelConfig;
 import com.automanim.config.WorkflowConfig;
@@ -17,6 +17,7 @@ import com.automanim.model.CodeEvaluationResult.StaticFinding;
 import com.automanim.model.WorkflowActions;
 import com.automanim.model.WorkflowKeys;
 import com.automanim.node.support.FixRetryState;
+import com.automanim.node.support.NodeSupport;
 import com.automanim.prompt.CodeEvaluationPrompts;
 import com.automanim.prompt.StoryboardJsonBuilder;
 import com.automanim.prompt.ToolSchemas;
@@ -146,7 +147,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             ctx.put(WorkflowKeys.CODE_EVALUATION_FIX_STATE, fixState);
         }
 
-        CodeFixResult previousFixResult = consumeFixResult(ctx, CodeFixSource.EVALUATION_REVIEW);
+        CodeFixResult previousFixResult = NodeSupport.consumeFixResult(ctx, CodeFixSource.EVALUATION_REVIEW);
         if (previousFixResult != null) {
             fixState.addFixToolCalls(previousFixResult.getToolCalls());
             if (previousFixResult.isApplied()) {
@@ -271,27 +272,27 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
     private StaticAnalysis analyzeStaticQuality(Narrative narrative,
                                                 CodeResult codeResult,
-                                                String code) {
+                                                String generatedCode) {
         StaticAnalysis analysis = new StaticAnalysis();
         analysis.setCodeLines(codeResult.codeLineCount());
-        analysis.setToEdgeCount(countMatches(code, TO_EDGE_PATTERN));
-        analysis.setShiftCount(countMatches(code, SHIFT_PATTERN));
-        analysis.setLargeShiftCount(countLargeShiftMatches(code));
-        analysis.setFadeInCount(countMatches(code, FADE_IN_PATTERN));
-        analysis.setFadeOutCount(countMatches(code, FADE_OUT_PATTERN));
-        analysis.setTransformCount(countMatches(code, TRANSFORM_PATTERN) + countMatches(code, ANIMATE_PATTERN));
-        analysis.setReplacementTransformCount(countMatches(code, REPLACEMENT_TRANSFORM_PATTERN));
-        analysis.setFadeTransformCount(countMatches(code, FADE_TRANSFORM_PATTERN));
-        analysis.setArrangeCount(countMatches(code, ARRANGE_PATTERN));
-        analysis.setNextToCount(countMatches(code, NEXT_TO_PATTERN));
-        analysis.setMathTexCount(countMatches(code, MATH_TEX_PATTERN));
-        analysis.setTextCount(countMatches(code, TEXT_PATTERN));
-        analysis.setThreeDScene(THREE_D_SCENE_PATTERN.matcher(code).find());
-        analysis.setThreeDObjectCount(countMatches(code, THREE_D_OBJECT_PATTERN));
-        analysis.setCameraOrientationCount(countMatches(code, CAMERA_ORIENTATION_PATTERN));
-        analysis.setCameraMotionCount(countMatches(code, CAMERA_MOTION_PATTERN));
-        analysis.setFixedInFrameCount(countMatches(code, FIXED_IN_FRAME_PATTERN));
-        analysis.setFixedOrientationCount(countMatches(code, FIXED_ORIENTATION_PATTERN));
+        analysis.setToEdgeCount(countMatches(generatedCode, TO_EDGE_PATTERN));
+        analysis.setShiftCount(countMatches(generatedCode, SHIFT_PATTERN));
+        analysis.setLargeShiftCount(countLargeShiftMatches(generatedCode));
+        analysis.setFadeInCount(countMatches(generatedCode, FADE_IN_PATTERN));
+        analysis.setFadeOutCount(countMatches(generatedCode, FADE_OUT_PATTERN));
+        analysis.setTransformCount(countMatches(generatedCode, TRANSFORM_PATTERN) + countMatches(generatedCode, ANIMATE_PATTERN));
+        analysis.setReplacementTransformCount(countMatches(generatedCode, REPLACEMENT_TRANSFORM_PATTERN));
+        analysis.setFadeTransformCount(countMatches(generatedCode, FADE_TRANSFORM_PATTERN));
+        analysis.setArrangeCount(countMatches(generatedCode, ARRANGE_PATTERN));
+        analysis.setNextToCount(countMatches(generatedCode, NEXT_TO_PATTERN));
+        analysis.setMathTexCount(countMatches(generatedCode, MATH_TEX_PATTERN));
+        analysis.setTextCount(countMatches(generatedCode, TEXT_PATTERN));
+        analysis.setThreeDScene(THREE_D_SCENE_PATTERN.matcher(generatedCode).find());
+        analysis.setThreeDObjectCount(countMatches(generatedCode, THREE_D_OBJECT_PATTERN));
+        analysis.setCameraOrientationCount(countMatches(generatedCode, CAMERA_ORIENTATION_PATTERN));
+        analysis.setCameraMotionCount(countMatches(generatedCode, CAMERA_MOTION_PATTERN));
+        analysis.setFixedInFrameCount(countMatches(generatedCode, FIXED_IN_FRAME_PATTERN));
+        analysis.setFixedOrientationCount(countMatches(generatedCode, FIXED_ORIENTATION_PATTERN));
 
         Storyboard storyboard = narrative != null ? narrative.getStoryboard() : null;
         if (storyboard != null && storyboard.getScenes() != null) {
@@ -308,7 +309,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
     private ReviewSnapshot requestCodeReview(Narrative narrative,
                                              CodeResult codeResult,
                                              String sceneName,
-                                             String code,
+                                             String generatedCode,
                                              StaticAnalysis analysis) {
         String targetConcept = codeResult.getTargetConcept() != null
                 ? codeResult.getTargetConcept()
@@ -318,7 +319,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON;
         String staticAnalysisJson = JsonUtils.toPrettyJson(analysis);
         String userPrompt = CodeEvaluationPrompts.reviewUserPrompt(
-                targetConcept, sceneName, storyboardJson, staticAnalysisJson, code, resolveOutputTarget());
+                targetConcept, sceneName, storyboardJson, staticAnalysisJson, generatedCode, NodeSupport.resolveOutputTarget(workflowConfig));
 
         try {
             JsonNode payload = AiRequestUtils.requestJsonObjectAsync(
@@ -359,21 +360,17 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 CodeEvaluationPrompts.reviewSystemPrompt(
                         targetConcept,
                         targetDescription,
-                        resolveOutputTarget()));
+                        NodeSupport.resolveOutputTarget(workflowConfig)));
     }
 
-    private String resolveEvaluationArtifactName(String code, String fallbackName) {
-        if (workflowConfig != null && workflowConfig.isGeoGebraTarget()) {
+    private String resolveEvaluationArtifactName(String generatedCode, String fallbackName) {
+        if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
             if (fallbackName != null && !fallbackName.isBlank()) {
                 return fallbackName;
             }
             return GeoGebraCodeUtils.EXPECTED_FIGURE_NAME;
         }
-        return ManimCodeUtils.extractSceneName(code, fallbackName);
-    }
-
-    private String resolveOutputTarget() {
-        return workflowConfig != null ? workflowConfig.getOutputTarget() : WorkflowConfig.OUTPUT_TARGET_MANIM;
+        return ManimCodeUtils.extractSceneName(generatedCode, fallbackName);
     }
 
     private CodeFixRequest buildEvaluationFixRequest(CodeEvaluationInput input,
@@ -403,7 +400,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         return request;
     }
 
-    private String buildDetailedEvaluationFixReason(String code,
+    private String buildDetailedEvaluationFixReason(String generatedCode,
                                                     StaticAnalysis analysis,
                                                     ReviewSnapshot review,
                                                     String gateReason) {
@@ -425,7 +422,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                     item.append(" [evidence: ").append(finding.getEvidence().trim()).append("]");
                 }
 
-                List<String> snippets = extractRelevantCodeEvidence(code, finding.getRuleId());
+                List<String> snippets = extractRelevantCodeEvidence(generatedCode, finding.getRuleId());
                 if (!snippets.isEmpty()) {
                     item.append(" [code: ").append(String.join(" | ", snippets)).append("]");
                 }
@@ -445,9 +442,9 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         return String.join("\n", reasons);
     }
 
-    private List<String> extractRelevantCodeEvidence(String code, String ruleId) {
+    private List<String> extractRelevantCodeEvidence(String generatedCode, String ruleId) {
         List<String> snippets = new ArrayList<>();
-        if (code == null || code.isBlank() || ruleId == null || ruleId.isBlank()) {
+        if (generatedCode == null || generatedCode.isBlank() || ruleId == null || ruleId.isBlank()) {
             return snippets;
         }
 
@@ -456,7 +453,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             return snippets;
         }
 
-        String[] lines = code.split("\\R");
+        String[] lines = generatedCode.split("\\R");
         for (int i = 0; i < lines.length && snippets.size() < 3; i++) {
             String line = lines[i];
             for (Pattern pattern : patterns) {
@@ -518,15 +515,6 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 break;
         }
         return patterns;
-    }
-
-    private CodeFixResult consumeFixResult(Map<String, Object> ctx, CodeFixSource expectedSource) {
-        CodeFixResult result = (CodeFixResult) ctx.get(WorkflowKeys.CODE_FIX_RESULT);
-        if (result != null && result.getSource() == expectedSource) {
-            ctx.remove(WorkflowKeys.CODE_FIX_RESULT);
-            return result;
-        }
-        return null;
     }
 
     private boolean passesGate(ReviewSnapshot review, StaticAnalysis analysis) {
@@ -738,13 +726,13 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         return count;
     }
 
-    private int countLargeShiftMatches(String code) {
-        if (code == null || code.isBlank()) {
+    private int countLargeShiftMatches(String generatedCode) {
+        if (generatedCode == null || generatedCode.isBlank()) {
             return 0;
         }
 
         int count = 0;
-        for (String line : code.split("\\R")) {
+        for (String line : generatedCode.split("\\R")) {
             if (!line.contains(".shift(")) {
                 continue;
             }

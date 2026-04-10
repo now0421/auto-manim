@@ -11,13 +11,18 @@ public final class SceneEvaluationPrompts {
             "You are fixing Manim code that rendered but has layout issues detected by geometry analysis.\n"
                     + "Preserve the teaching goal, visual intent, scene class name, and continuity.\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
+                    + SystemPrompts.MANIM_COMPOSITION_RULES
+                    + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
+                    + SystemPrompts.MANIM_OBJECT_LIFECYCLE_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.MANIM_NAMING_RULES
                     + "Prefer adjusting positioning, scaling, grouping, and spacing over deleting explanatory content.\n"
                     + "For frame repair, use translation/recentering and uniform scaling as the default first-choice strategy before changing geometric constructions or attachment logic.\n"
                     + "Also correct semantically wrong geometric attachments you notice, especially angle markers that are drawn on the wrong side or detached from their true vertex.\n"
                     + "Treat storyboard geometric constraints as hard requirements: if a point is defined as a reflection, midpoint, foot, or intersection, preserve that definition while fixing layout.\n"
+                    + "Do not reintroduce banned dynamic patterns during layout fixes, especially conditionally empty redraw targets that will be animated directly later.\n"
                     + "When a constrained construction goes out of frame, prefer recentering or uniformly scaling the whole related diagram, or moving overlays, instead of moving one constrained point independently.\n\n"
+                    + "Maintain a clean final-frame impression: leave breathing room, avoid overlay-on-geometry collisions, and remove temporary annotations once they have taught their point.\n\n"
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_SYSTEM =
@@ -76,13 +81,12 @@ public final class SceneEvaluationPrompts {
                 .append("2. For overlap and offscreen repair, first try translation/recentering and uniform scaling of the affected overlay or constrained group before changing geometry or redefining attachments.\n")
                 .append("3. Fix overlap only through text/overlay layout changes, spacing, grouping, recentering, or uniform scaling of constrained groups.\n")
                 .append("4. Fix offscreen issues using `safe_area_plan` and `layout_goal`; do not push text farther off frame just to avoid overlap.\n")
-                .append("5. Preserve reflections, symmetry, intersections, equal distances, and anchor-follow relationships exactly.\n\n")
+                .append("5. Preserve reflections, symmetry, intersections, equal distances, and anchor-follow relationships exactly.\n")
+                .append("6. Prefer cleaning up temporary annotations or stale overlays over covering them with new opaque cards.\n")
+                .append("7. Preserve a readable empty zone for overlays and key conclusions.\n\n")
                 .append("Please fix the code so the reported sampled frames no longer have elements overlapping or going outside the frame.\n")
                 .append("Preserve the intended teaching flow and animation meaning.\n")
                 .append("Preserve geometric invariants from the storyboard; do not fix offscreen issues by breaking reflections, symmetry, intersections, equal distances, or other defining constructions.\n")
-                .append("Use only classes, functions, methods, arguments, and code forms documented in the attached Manim syntax manual. Replace any undocumented or guessed API usage with a documented equivalent.\n")
-                .append("If you must rename or introduce identifiers, follow these naming rules:\n")
-                .append(SystemPrompts.MANIM_NAMING_RULES)
                 .append("Also proactively check for common Python and Manim runtime mistakes.\n")
                 .append("Remember: Return ONLY the single Python code block containing the full file. No explanation.\n");
 
@@ -112,9 +116,6 @@ public final class SceneEvaluationPrompts {
                 .append("Please fix the command script so the reported text overlap issues are resolved.\n")
                 .append("Preserve the intended teaching flow and construction meaning.\n")
                 .append("Preserve geometric invariants from the storyboard; do not fix overlap by breaking reflections, symmetry, intersections, or other defining constructions.\n")
-                .append("Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n")
-                .append("If you must rename or introduce identifiers, follow these naming rules:\n")
-                .append(SystemPrompts.GEOGEBRA_NAMING_RULES)
                 .append("Remember: Return ONLY the single fenced `geogebra` code block. No explanation.\n");
 
         appendFixHistory(sb, fixHistory);

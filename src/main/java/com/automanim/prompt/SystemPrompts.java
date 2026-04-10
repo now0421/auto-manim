@@ -13,6 +13,8 @@ public final class SystemPrompts {
 
     private static final String MANIM_SYNTAX_MANUAL_RESOURCE = "llm/manim_syntax_manual.md";
     private static final String MANIM_STYLE_REFERENCE_RESOURCE = "llm/manim_style_reference.md";
+    private static final String MANIM_CONSTRAINT_MATRIX_RESOURCE =
+            "llm/manim_constraint_matrix.md";
     private static final String GEOGEBRA_SYNTAX_MANUAL_RESOURCE = "llm/geogebra_syntax_manual.md";
     private static final String GEOGEBRA_STYLE_REFERENCE_RESOURCE = "llm/geogebra_style_reference.md";
 
@@ -25,6 +27,13 @@ public final class SystemPrompts {
             "Keep important content within x[-7,7] and y[-4,4].\n"
                     + "Leave about 1 unit of edge margin.\n"
                     + "Usually keep each step to 6 to 8 main visual elements.\n";
+
+    /** Manim-specific layout and readability budget derived from production planning rules. */
+    public static final String MANIM_LAYOUT_FRAME_RULES =
+            "Keep important content within x[-6.5,6.5] and y[-3.5,3.5] whenever possible.\n"
+                    + "Reserve a readable top title band and a bottom note band instead of packing the whole frame.\n"
+                    + "Keep simultaneously active foreground elements around 5 to 6 unless the scene is explicitly comparison-heavy.\n"
+                    + "Leave a meaningful empty zone for overlays, captions, or upcoming reveals.\n";
 
     /** Storyboard field interpretation guide — core fields for code generation and evaluation stages. */
     public static final String STORYBOARD_FIELD_GUIDE_CORE =
@@ -108,11 +117,104 @@ public final class SystemPrompts {
     /** High-contrast color rules to avoid pale-on-pale combinations. */
     public static final String HIGH_CONTRAST_COLOR_RULES =
             "Keep text, labels, strokes, and fills visually distinct from their background.\n"
-                    + "Avoid low-contrast pairings such as yellow on white, white on light yellow, or similar pale-on-pale combinations.\n";
+                    + "Avoid low-contrast pairings such as yellow on white, white on light yellow, or similar pale-on-pale combinations.\n"
+                    + "In Manim, MathTex and Tex default to WHITE text. When placing them inside a WHITE BackgroundRectangle or on any light-colored card, always set the text color to BLACK (or another dark color) explicitly with `.set_color(BLACK)`.\n";
 
     /** High-contrast color rules formatted as bullet lines for direct prompt insertion. */
     public static final String HIGH_CONTRAST_COLOR_RULES_BULLETS =
             "- " + HIGH_CONTRAST_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
+
+    /** Shared Manim storytelling philosophy. */
+    public static final String MANIM_NARRATIVE_PHILOSOPHY =
+            "Manim teaching philosophy:\n"
+                    + "- Treat every scene as educational cinema: each scene should move the learner toward one clear insight.\n"
+                    + "- Start from a hook, question, failed intuition, or contrast whenever it improves understanding.\n"
+                    + "- Explain why before how when both cannot fit comfortably.\n"
+                    + "- Put geometry or visual intuition before algebra whenever possible so formulas feel earned.\n"
+                    + "- A problem storyboard may include observation, failed attempt, key insight, evidence, and conclusion beats; it is not limited to raw solving steps.\n";
+
+    /** Shared Manim visual planning rules. */
+    public static final String MANIM_VISUAL_PLANNING_RULES =
+            "Manim visual planning rules:\n"
+                    + "- One new idea per scene or per major beat.\n"
+                    + "- Prefer progressive disclosure: show the simplest readable state first, then add complexity.\n"
+                    + "- Keep the same concept in the same region and color across scenes unless the move itself teaches something.\n"
+                    + "- Use color semantically: assign colors to concepts, not to arbitrary mobjects.\n"
+                    + "- Prefer transform- or restyle-based continuity over replacing everything.\n"
+                    + "- Decide intentionally whether a concept should animate or remain static; motion should clarify change, not add load.\n";
+
+    /** Shared Manim motion and pacing rules. */
+    public static final String MANIM_MOTION_AND_PACING_RULES =
+            "Manim motion and pacing rules:\n"
+                    + "- Write narration with visual beats in mind: what the learner hears should match what the learner sees.\n"
+                    + "- Treat one beat as one small `self.play(...)` group or one stable visual hold.\n"
+                    + "- After each important reveal, leave breathing room with `self.wait(...)` so the learner can read and absorb it.\n"
+                    + "- Vary tempo: slower for core reveals, faster for supporting details, and a longer pause around the key insight.\n"
+                    + "- Prefer the \"see, then hear\" timing pattern for major ideas.\n";
+
+    /** Shared Manim composition and empty-space rules. */
+    public static final String MANIM_COMPOSITION_RULES =
+            "Manim composition rules:\n"
+                    + "- Maintain one clear focus per frame using size, color, brightness, or placement.\n"
+                    + "- Use opacity layering: primary focus at full strength, context dimmed, structural elements faint.\n"
+                    + "- Keep visual weight balanced across the frame instead of clustering everything on one side.\n"
+                    + "- Preserve intentional empty space and a safe overlay zone; do not solve layout problems by stacking opaque cards over the active geometry.\n"
+                    + "- If a scene becomes crowded, split the content, dim the old context, or remove temporary annotations instead of squeezing everything tighter.\n";
+
+    /** Shared Manim text and readability rules. */
+    public static final String MANIM_TEXT_AND_READABILITY_RULES =
+            "Manim text and readability rules:\n"
+                    + "- Prefer monospace fonts for `Text(...)` and `MarkupText(...)` content that must remain highly readable.\n"
+                    + "- Keep supporting text comfortably readable; avoid tiny labels and long edge-to-edge strings.\n"
+                    + "- If text overlaps busy geometry, plan a background box or backstroke-style treatment.\n"
+                    + "- Use screen-fixed overlays for explanatory text only when that text should stay independent of world motion.\n";
+
+    /** Shared Manim animation-tool selection rules. */
+    public static final String MANIM_ANIMATION_SELECTION_RULES =
+            "Manim animation selection rules:\n"
+                    + "- Use `Create`, `Write`, `FadeIn`, or `GrowFromCenter` for first appearance.\n"
+                    + "- Use `Transform`, `ReplacementTransform`, or `FadeTransform` when the learner should see continuity between states.\n"
+                    + "- Use `Indicate`, `Circumscribe`, `Flash`, or `ShowPassingFlash` to direct attention without changing the underlying object.\n"
+                    + "- Use `always_redraw(...)`, `add_updater(...)`, or `ValueTracker(...)` for continuous dependencies.\n"
+                    + "- Use `FadeOut`, `Uncreate`, or `ShrinkToCenter` for temporary objects that have served their purpose.\n";
+
+    /** Shared Manim object lifecycle and storyboard contract rules. */
+    public static final String MANIM_OBJECT_LIFECYCLE_RULES =
+            "Manim storyboard and object-lifecycle rules:\n"
+                    + "- Every learner-visible object that should appear in the animation must be declared explicitly in the storyboard; do not rely on unstated inferred visuals.\n"
+                    + "- If an object remains visible across beats, keep the same visual identity instead of silently recreating it.\n"
+                    + "- If an object depends on another object's motion, make the dependency explicit in storyboard fields and preserve it in code.\n"
+                    + "- Temporary annotations, comparison aids, and helper overlays need an exit plan; once they have taught their point, remove or dim them.\n"
+                    + "- End scenes cleanly: use clean breaks, carry-forward anchors, or transform bridges intentionally rather than leaving accidental residue.\n";
+
+    /** Shared Manim implementation and code-hygiene rules. */
+    public static final String MANIM_CODE_HYGIENE_RULES =
+            "Manim implementation rules:\n"
+                    + "- Use the right collection type: prefer `Group(...)` for mixed text-and-shape collections and `VGroup(...)` for vectorized mobjects.\n"
+                    + "- Use raw strings for LaTeX and keep `MathTex(...)` segments stable when matching transforms will be needed later.\n"
+                    + "- Prefer helper builders, shared style constants, and stable layout helpers over scattered ad hoc coordinates.\n"
+                    + "- Keep background color, palette meaning, and typography consistent across the full file.\n"
+                    + "- Use subcaptions or subtitle-ready beats for major reveals when narration alignment matters.\n";
+
+    /** Shared Manim review checklist. */
+    public static final String MANIM_REVIEW_CHECKLIST =
+            "Manim review checklist:\n"
+                    + "- Does each scene have one clear focus and enough empty space?\n"
+                    + "- Are major reveals given enough on-screen time and `self.wait(...)` breathing room?\n"
+                    + "- Are text size, contrast, edge margins, and overlap risks acceptable?\n"
+                    + "- Are dynamic dependencies implemented continuously rather than placed once?\n"
+                    + "- Are animation targets guaranteed non-empty and stable at animation start?\n"
+                    + "- Are temporary annotations cleaned up instead of lingering as clutter?\n"
+                    + "- Do transforms, replacements, subtitles, and camera choices support teaching clarity rather than just motion?\n";
+
+    /** Shared guardrails for common runtime render failures. */
+    public static final String COMMON_RENDER_FAILURE_GUARDRAILS =
+            "Common render-failure guardrails:\n"
+                    + "- Never animate (`Create`, `FadeOut`, `Transform`, `ReplacementTransform`) a conditionally empty redraw result.\n"
+                    + "- Avoid long-lived `always_redraw(...)` branches like `if cond else VMobject()` when that object may later be animated directly.\n"
+                    + "- Prefer stable base mobjects with visibility/style control (`set_opacity`, `set_stroke`, `become`) over swapping to empty placeholders.\n"
+                    + "- Before cleanup animations, freeze or remove related updaters and confirm targets are non-empty and still attached to intended geometry.\n"
+                    + "- Ensure animation targets are present in scene and have geometric points before transform/fade operations.\n";
 
     /** Angle marker best practices for Manim. */
     public static final String ANGLE_MARKER_RULES =
@@ -188,12 +290,14 @@ public final class SystemPrompts {
     public static final String STORYBOARD_CODEGEN_INTRO_MANIM =
             "Use the following compact storyboard JSON as the source of truth for staging, object identity, continuity, and scene execution.\n"
                     + "- Treat every object id as a stable visual identity.\n"
+                    + "- Treat the storyboard as a complete learner-visible visual specification; do not invent unstated objects or implied labels.\n"
                     + "- If an id persists, keep or transform the same mobject instead of redrawing it.\n"
                     + "- When `content`, `dependency_note`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
                     + "- If a scene uses `scene_mode = 3d`, use `ThreeDScene`, follow `camera_plan`, and judge layout in projected screen space.\n"
                     + "- Use `screen_overlay_plan` with `add_fixed_in_frame_mobjects` for fixed explanatory text.\n"
                     + "- Respect `safe_area_plan` and dynamic attachment for labels on moving objects.\n"
                     + "- Read `behavior`, `anchor_id`, and `dependency_note` literally: if an object follows a moving anchor, implement it with `always_redraw(...)` or an updater.\n"
+                    + "- Preserve scene beats, scene exits, and overlay zones from the storyboard instead of compressing everything into one crowded final frame.\n"
                     + MANIM_MANUAL_ONLY_RULES
                     + "- Treat `geometry_constraints` and `constraint_note` as hard invariants. If the frame is tight, preserve the construction and recenter/scale the whole constrained group instead of breaking the math.\n";
 
@@ -228,7 +332,9 @@ public final class SystemPrompts {
     private static final String WORKFLOW_OVERVIEW =
             "Stage 0 Exploration -> Stage 1a Mathematical Enrichment -> Stage 1b Visual Design"
                     + " -> Stage 1c Narrative Composition -> Stage 2 Code Generation"
-                    + " -> Stage 3 Code Evaluation -> Stage 4 Render Fix";
+                    + " -> Stage 3 Code Evaluation -> Stage 4 Code Rendering"
+                    + " -> Stage 5 Scene Evaluation"
+                    + " (Stages 2–5 may each route to the shared Code Fix node for iterative repair)";
 
     private SystemPrompts() {}
 
@@ -238,6 +344,10 @@ public final class SystemPrompts {
 
     private static final class ManimStyleReferenceHolder {
         private static final String VALUE = loadPromptResource(MANIM_STYLE_REFERENCE_RESOURCE);
+    }
+
+    private static final class ManimConstraintMatrixHolder {
+        private static final String VALUE = loadPromptResource(MANIM_CONSTRAINT_MATRIX_RESOURCE);
     }
 
     private static final class GeoGebraSyntaxManualHolder {
@@ -333,6 +443,15 @@ public final class SystemPrompts {
                 + "\n\nManim style reference:\n"
                 + "Follow the guidance below whenever you assign storyboard-level colors or style properties.\n\n"
                 + ManimStyleReferenceHolder.VALUE;
+    }
+
+    public static String manimCoverageNote() {
+        return "Manim source-of-truth is tracked in the internal constraint matrix resource.\n"
+                + "Use the shared Manim prompt fragments as the executable form of that matrix.\n";
+    }
+
+    public static String getManimConstraintMatrix() {
+        return ManimConstraintMatrixHolder.VALUE;
     }
 
     public static String ensureGeoGebraSyntaxManual(String prompt) {

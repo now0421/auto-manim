@@ -10,17 +10,21 @@ public final class CodeEvaluationPrompts {
                     + "Your job is NOT to debug runtime errors.\n"
                     + "Your primary job is storyboard-to-code alignment review before render.\n"
                     + "Predict whether the generated animation is likely to feel visually discontinuous, semantically mis-attached, hard to read in 3D, or badly paced against the storyboard narration.\n\n"
+                    + SystemPrompts.MANIM_REVIEW_CHECKLIST
                     + "The storyboard JSON is the source of truth.\n"
                     + "- Explicitly review storyboard/code alignment, not just generic code quality.\n"
                     + "- Compare the code against storyboard continuity, safe-area intent, layout goals, and scene pacing.\n"
                     + "- Compare the code against storyboard geometric invariants: reflection, symmetry, collinearity, intersections, equal-length constructions must survive layout choices.\n"
-                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE.replace("\n", "\n- ").trim() + "\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL.replace("\n", "\n- ").trim() + "\n"
                     + "- A later geometry-based stage will inspect rendered frames for actual overlap/offscreen issues. Do not duplicate that stage.\n"
                     + "- For 3D scenes, judge projected readability, camera clarity, and fixed-in-frame overlays.\n"
                     + "- Penalize semantically wrong placements such as angle arcs on the wrong side, labels attached to the wrong point or segment, braces spanning the wrong expression, or highlights pointing at the wrong target.\n"
                     + "- For angle markers, check that the code uses the true shared vertex and stable defining rays; flag hand-built `Arc(...)` angle formulas when they can drift, flip sides, or detach from the intended geometry.\n"
                     + "- Also flag `Angle(...)` usage when the intended small interior sector is ambiguous but `quadrant` or `other_angle` is left implicit, causing the code to mark a large exterior angle or the wrong side of a normal.\n"
                     + "- Penalize labels on moving objects when they are placed once but not kept attached with `always_redraw(...)` or an updater.\n\n"
+                    + "- Detect runtime fragility patterns: conditionally empty `always_redraw` outputs that are later passed to `Create`/`FadeOut`/`Transform`, or cleanup animations that may target no-point mobjects.\n"
+                    + "- Penalize scenes that keep too many active objects at full strength, lack breathing room after key reveals, or leave temporary annotations lingering without cleanup.\n"
+                    + "- Penalize missing subtitle-ready beats, unreadable text size, edge-clipped text, or busy backgrounds without readability treatment when those issues are likely from the code.\n\n"
                     + "Output format:\n"
                     + "Return a JSON object with this shape:\n"
                     + "{\n"
@@ -79,8 +83,12 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full code so it is visually safer before render.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
+                    + SystemPrompts.MANIM_COMPOSITION_RULES
+                    + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
+                    + SystemPrompts.MANIM_CODE_HYGIENE_RULES
+                    + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
                     + SystemPrompts.ANGLE_MARKER_RULES
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
@@ -155,7 +163,7 @@ public final class CodeEvaluationPrompts {
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Manim code to review:\n```python\n%s\n```\n\n"
                         + "Review for likely presentation quality problems before render.\n"
-                        + "Focus on continuity, pacing versus narration, 3D readability, fixed-in-frame overlays, and correct spatial relationships.\n"
+                        + "Focus on continuity, pacing versus narration, 3D readability, fixed-in-frame overlays, correct spatial relationships, text readability, and scene clutter.\n"
                         + "Return only the structured review output.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, generatedCode);
     }
@@ -231,7 +239,6 @@ public final class CodeEvaluationPrompts {
                         + "Current Manim code:\n```python\n%s\n```\n\n"
                         + "Rewrite the FULL code to reduce clutter, preserve continuity, correct semantically wrong placements such as angle arcs or labels attached to the wrong geometry, better match pacing to narration, and keep 3D overlays readable.\n"
                         + "Preserve any storyboard geometric invariants such as symmetry, reflection, collinearity, and intersection definitions while making layout safer.\n"
-                        + "Use only classes, functions, methods, arguments, and code forms documented in the attached Manim syntax manual. Replace any undocumented or guessed API usage with a documented equivalent.\n"
                         + "Also fix nearby Python/Manim runtime mistakes. Preserve the scene class name and teaching goal.\n"
                         + "Return ONLY the full Python code block.",
                 targetConcept, sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode);

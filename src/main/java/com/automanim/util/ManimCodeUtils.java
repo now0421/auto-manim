@@ -40,11 +40,11 @@ public final class ManimCodeUtils {
         return response.trim();
     }
 
-    public static String enforceMainSceneName(String code) {
-        if (code == null || code.isBlank()) {
-            return code;
+    public static String enforceMainSceneName(String manimCode) {
+        if (manimCode == null || manimCode.isBlank()) {
+            return manimCode;
         }
-        return ANY_SCENE_CLASS.matcher(code)
+        return ANY_SCENE_CLASS.matcher(manimCode)
                 .replaceFirst("class MainScene($1)");
     }
 
@@ -52,9 +52,9 @@ public final class ManimCodeUtils {
         return EXPECTED_SCENE_NAME;
     }
 
-    public static String extractSceneName(String code, String fallback) {
-        if (code != null) {
-            Matcher matcher = SCENE_CLASS.matcher(code);
+    public static String extractSceneName(String manimCode, String fallback) {
+        if (manimCode != null) {
+            Matcher matcher = SCENE_CLASS.matcher(manimCode);
             if (matcher.find()) {
                 return matcher.group(1);
             }
@@ -65,39 +65,39 @@ public final class ManimCodeUtils {
         return EXPECTED_SCENE_NAME;
     }
 
-    public static List<String> validateStructure(String code) {
+    public static List<String> validateStructure(String manimCode) {
         List<String> violations = new ArrayList<>();
-        if (code == null || code.isBlank()) {
+        if (manimCode == null || manimCode.isBlank()) {
             violations.add("Code is empty");
             return violations;
         }
 
-        if (!code.contains("from manim import")) {
+        if (!manimCode.contains("from manim import")) {
             violations.add("Missing 'from manim import' statement");
         }
-        if (!MAIN_SCENE_CLASS.matcher(code).find()) {
+        if (!MAIN_SCENE_CLASS.matcher(manimCode).find()) {
             violations.add("Scene class must be named MainScene");
         }
-        if (!code.contains("def construct(")) {
+        if (!manimCode.contains("def construct(")) {
             violations.add("Missing construct() method");
         }
 
         return violations;
     }
 
-    public static List<String> validateManimRules(String code) {
+    public static List<String> validateManimRules(String manimCode) {
         List<String> violations = new ArrayList<>();
-        if (code == null || code.isBlank()) {
+        if (manimCode == null || manimCode.isBlank()) {
             return violations;
         }
 
-        String rule1Evidence = CodeValidationSupport.findFirstMatchEvidence(code, RULE1_VIOLATION);
+        String rule1Evidence = CodeValidationSupport.findFirstMatchEvidence(manimCode, RULE1_VIOLATION);
         if (rule1Evidence != null) {
             violations.add("Rule 1 violation: stores mobjects on instance fields across scenes"
                     + " (" + rule1Evidence + ")");
         }
 
-        String rule3Evidence = CodeValidationSupport.findFirstMatchEvidence(code, RULE3_VIOLATION);
+        String rule3Evidence = CodeValidationSupport.findFirstMatchEvidence(manimCode, RULE3_VIOLATION);
         if (rule3Evidence != null) {
             violations.add("Rule 3 violation: hardcoded MathTex subobject indexing"
                     + " (" + rule3Evidence + ")");
@@ -106,18 +106,18 @@ public final class ManimCodeUtils {
         return violations;
     }
 
-    public static List<String> validateFull(String code) {
+    public static List<String> validateFull(String manimCode) {
         List<String> violations = new ArrayList<>();
-        violations.addAll(validateStructure(code));
-        violations.addAll(validateManimRules(code));
+        violations.addAll(validateStructure(manimCode));
+        violations.addAll(validateManimRules(manimCode));
         return violations;
     }
 
-    public static boolean hasMainSceneClass(String code) {
-        return code != null && MAIN_SCENE_CLASS.matcher(code).find();
+    public static boolean hasMainSceneClass(String manimCode) {
+        return manimCode != null && MAIN_SCENE_CLASS.matcher(manimCode).find();
     }
 
-    public static int countLines(String code) {
-        return CodeValidationSupport.countLines(code);
+    public static int countLines(String manimCode) {
+        return CodeValidationSupport.countLines(manimCode);
     }
 }

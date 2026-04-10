@@ -14,42 +14,55 @@ public final class CodeGenerationPrompts {
                     + "Mandatory rules:\n"
                     + "- Use `from manim import *`.\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
+                    + SystemPrompts.MANIM_NARRATIVE_PHILOSOPHY
+                    + SystemPrompts.MANIM_VISUAL_PLANNING_RULES
+                    + SystemPrompts.MANIM_MOTION_AND_PACING_RULES
+                    + SystemPrompts.MANIM_COMPOSITION_RULES
+                    + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
+                    + SystemPrompts.MANIM_ANIMATION_SELECTION_RULES
+                    + SystemPrompts.MANIM_OBJECT_LIFECYCLE_RULES
+                    + SystemPrompts.MANIM_CODE_HYGIENE_RULES
+                    + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
                     + SystemPrompts.MANIM_NAMING_RULES
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
                     + "- Do not store mobjects on `self` just to reuse them across scene methods.\n"
                     + "- Do not hardcode numeric MathTex subobject indexing.\n"
                     + "- Use `ThreeDScene` only when needed and keep overlays fixed in frame when appropriate.\n"
-                    + "- Keep content inside x[-7,7], y[-4,4] and prefer stable anchors plus `arrange`/`next_to`.\n"
-                    + "- Keep labels dynamically attached to moving objects.\n"
+                    + "- Keep content inside the readable safe frame and prefer stable anchors plus `arrange`/`next_to`.\n"
+                    + "- Do not invent learner-visible objects that are not declared in the storyboard.\n"
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES
                     + "- " + SystemPrompts.ANGLE_MARKER_RULES
                     + "- Do not place a free-floating arc by shifting/rotating it near the vertex, and do not accidentally mark a large exterior angle when the scene intends two small equal angles.\n"
                     + "- Treat storyboard `geometry_constraints` and object `constraint_note` fields as hard mathematical invariants.\n"
                     + "- " + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE + "\n"
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL + "\n"
                     + "Additional storyboard field rules:\n"
                     + "- `continuity_plan` and `global_visual_rules` define global constraints that should shape the whole file.\n"
                     + "- `entering_objects[].id` is a stable visual identity. Reuse the same mobject variable for that id whenever the object persists or is transformed later.\n"
                     + "- `persistent_objects` means those object ids should stay on screen from earlier beats; do not recreate them unless replacement is unavoidable.\n"
                     + "- `exiting_objects` means those object ids should explicitly leave the scene with a clear removal animation when appropriate.\n"
-                    + "- `actions` are the main execution plan. Respect their order, targets, and visible intent when deciding the animation sequence.\n"
+                    + "- `actions` are the main execution plan. Respect their order, targets, and visible intent when deciding the animation sequence and beat timing.\n"
                     + "- `entering_objects[].content` tells you what must be shown.\n"
+                    + "- When `content`, `dependency_note`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
                     + "- `notes_for_codegen` are implementation hints and should be followed unless they conflict with Manim correctness.\n"
-                    + "- `step_refs`, `title`, and `narration` explain the teaching purpose of the beat and should help you choose clear animation structure.\n\n"
+                    + "- `step_refs`, `title`, and `narration` explain the teaching purpose of the beat and should help you choose clear animation structure.\n"
+                    + "- If a storyboard object uses `behavior = follows_anchor`, `derived`, or an equivalent dependency note, implement that relationship continuously with the appropriate Manim mechanism.\n\n"
                     + "Continuity and object-management rules:\n"
                     + "- Build a stable object registry in local variables or dictionaries when useful so ids can be reused across beats.\n"
                     + "- Prefer transforming existing mobjects over fading out and redrawing the same concept.\n"
                     + "- Keep a persistent base diagram stable while adding, highlighting, or updating only the necessary layer.\n"
-                    + "- When an action targets an existing id, animate that existing object instead of silently creating a duplicate.\n\n"
+                    + "- When an action targets an existing id, animate that existing object instead of silently creating a duplicate.\n"
+                    + "- Use clean exits for temporary annotations, comparisons, and overlays rather than leaving them to accumulate.\n\n"
                     + "Layout and camera rules:\n"
                     + "- Convert `placement`, `camera_anchor`, `camera_plan`, `safe_area_plan`, and `screen_overlay_plan` into concrete Manim layout and camera code.\n"
                     + "- Choose readable absolute coordinates that preserve continuity and keep important content inside the safe frame.\n"
-                    + "- Prefer `VGroup`, `arrange`, `next_to`, alignment helpers, and anchored groups over brittle hardcoded coordinates everywhere.\n"
+                    + "- Prefer `Group`/`VGroup`, `arrange`, `next_to`, alignment helpers, and anchored groups over brittle hardcoded coordinates everywhere.\n"
                     + "- If a scene is marked `3d`, use `ThreeDScene`, apply the camera plan explicitly, and keep fixed overlays readable in screen space.\n\n"
                     + "Code quality rules:\n"
                     + "- Return one full runnable file with helper methods when they improve clarity.\n"
                     + "- Use descriptive ASCII variable names derived from storyboard ids or roles.\n"
-                    + "- Ensure the generated code clearly reflects the storyboard scene order and action order.\n\n"
+                    + "- Ensure the generated code clearly reflects the storyboard scene order and action order.\n"
+                    + "- Use subtitle-ready beats for major reveals when narration alignment matters.\n\n"
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT.replace("corrected", "runnable");
 
     private static final String VALIDATION_FIX_SYSTEM =
@@ -58,6 +71,8 @@ public final class CodeGenerationPrompts {
                     + "Rewrite the full file so it becomes valid, consistent, and ready for the next workflow stage.\n"
                     + "Fix every reported validation problem, preserve the teaching content, keep the requested scene class name, and proactively fix nearby Python/Manim mistakes.\n\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
+                    + SystemPrompts.MANIM_CODE_HYGIENE_RULES
+                    + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_VALIDATION_FIX_SYSTEM =
@@ -96,6 +111,9 @@ public final class CodeGenerationPrompts {
                     + "- Keep the script organized in scene order so downstream scene buttons can toggle the right visible objects.\n"
                     + "- If a requested visual effect would require a command not documented in the manual, re-express it with documented commands or omit that unsupported decoration.\n\n"
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
+                    + "Additional storyboard field rules:\n"
+                    + "- When `content`, `dependency_note`, or other object fields mention another object, treat those mentions as object ids only. Do not reinterpret kind words from prose and do not invent a second object type for the same id.\n"
+                    + "- Treat storyboard object ids as the naming source for generated GeoGebra variables. Preserve those ids in code, and when you must introduce a helper name, use concise camelCase or math-style identifiers.\n\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT.replace("corrected command script", "GeoGebra command script");
 
     private CodeGenerationPrompts() {}
@@ -171,11 +189,9 @@ public final class CodeGenerationPrompts {
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL code so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
-                        + "Use only classes, functions, methods, arguments, and code forms documented in the attached Manim syntax manual. Replace any undocumented or guessed API usage with a documented equivalent.\n"
-                        + "Keep `%s` as the exact scene class name, follow these naming rules, and also fix nearby Python/Manim mistakes.\n"
-                        + "%s"
+                        + "Keep `%s` as the exact scene class name.\n"
                         + "Return ONLY the full Python code block.",
-                storyboardBlock, sceneName, generatedCode, problemList, sceneName, SystemPrompts.MANIM_NAMING_RULES);
+                storyboardBlock, sceneName, generatedCode, problemList, sceneName);
     }
 
     public static String geoGebraValidationFixUserPrompt(String figureName,
@@ -198,10 +214,8 @@ public final class CodeGenerationPrompts {
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL command script so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
-                        + "Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n"
-                        + "Use English GeoGebra command names, preserve the figure naming intent around `%s`, and follow these naming rules:\n"
-                        + "%s"
+                        + "Use English GeoGebra command names and preserve the figure naming intent around `%s`.\n"
                         + "Return ONLY the full GeoGebra code block.",
-                storyboardBlock, figureName, geoGebraCode, problemList, figureName, SystemPrompts.GEOGEBRA_NAMING_RULES);
+                storyboardBlock, figureName, geoGebraCode, problemList, figureName);
     }
 }

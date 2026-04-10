@@ -19,7 +19,6 @@ PointIn( <Region> )               // point constrained to the interior of the re
 
 ```geogebra
 fixedPoint = Point({0, 0})
-SetFixed(fixedPoint, true)
 
 freePoint = Point({3, 1})
 
@@ -28,6 +27,10 @@ pointOnCircle = Point(circle1)
 pointOnSegmentAtParameter = Point(S, 0.25)
 pointInTriangle = PointIn(triangle)
 ```
+
+To keep a constructed point fixed after creation, apply `SetFixed(fixedPoint, true)`
+as a later scripting command rather than mixing it into an assignment-style
+construction example.
 
 ## Vector
 

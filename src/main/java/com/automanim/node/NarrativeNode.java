@@ -194,25 +194,9 @@ public class NarrativeNode extends PocketFlow.Node<KnowledgeGraph, Narrative, St
     private String buildContext(List<KnowledgeNode> orderedNodes,
                                 boolean problemMode) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Narrative context rules:\n");
-        sb.append("- Output target backend: ").append(outputTarget).append(".\n");
-        sb.append("- Treat visual specifications as primary staging guidance for object roles, relative layout, and continuity.\n");
-        sb.append("- Treat each node's step as the teaching beat to stage in order.\n");
-        sb.append("- Treat equations and definitions as optional supporting material.\n");
-        sb.append("- Use equations and definitions only when they help the main point.\n");
-        sb.append("- It is acceptable to ignore optional math details that would make scenes crowded or repetitive.\n");
-        sb.append("- Keep important screen-space content inside x in [-7, 7], y in [-4, 4].\n");
-        sb.append("- If a planned layout would overflow, split content across scenes instead of squeezing it.\n");
-        sb.append("- Follow the provided topological order when deciding what should be established before later beats.\n");
-        sb.append("- Visual design layouts are relative-only guidance; this stage must choose the final absolute coordinates for `layout_goal` and each object's `placement`.\n");
-        sb.append("- When assigning coordinates, reason over the whole storyboard so future derived objects and later scenes still fit inside the safe area.\n");
-        if (problemMode) {
-            sb.append("- Keep the story centered on solving the stated problem, not on surveying related theory.\n");
-            sb.append("- Reuse one stable diagram and add only the smallest necessary change per scene.\n");
-            sb.append("- Use the problem node to establish the givens and target before later solution moves.\n");
-            sb.append("- Merge nearby steps when they belong to the same solving move.\n");
-        }
-        sb.append("\n");
+        sb.append(problemMode
+                ? "Ordered problem-solving node context:\n"
+                : "Ordered teaching node context:\n");
 
         for (int i = 0; i < orderedNodes.size(); i++) {
             KnowledgeNode node = orderedNodes.get(i);

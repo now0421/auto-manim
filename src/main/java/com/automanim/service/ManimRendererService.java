@@ -63,13 +63,13 @@ public class ManimRendererService {
     /**
      * Render a Manim scene from code.
      *
-     * @param code complete Manim Python code
+     * @param manimCode complete Manim Python code
      * @param sceneName name of the Scene class to render
      * @param quality "low", "medium", or "high"
      * @param outputDir directory for output artifacts
      * @return render attempt result
      */
-    public RenderAttemptResult render(String code, String sceneName, String quality, Path outputDir) {
+    public RenderAttemptResult render(String manimCode, String sceneName, String quality, Path outputDir) {
         Path codeFile = null;
         Path geometryHelperFile = null;
         try {
@@ -77,9 +77,9 @@ public class ManimRendererService {
             Path geometryOutputFile = normalizedOutputDir.resolve(GEOMETRY_EXPORT_OUTPUT_FILE);
             deleteTemporaryFile(geometryOutputFile);
 
-            String sanitizedCode = JsonUtils.extractCodeBlock(code);
+            String sanitizedCode = JsonUtils.extractCodeBlock(manimCode);
             if (sanitizedCode == null || sanitizedCode.isBlank()) {
-                sanitizedCode = code;
+                sanitizedCode = manimCode;
             }
 
             String renderCode = sanitizedCode;
@@ -251,8 +251,8 @@ public class ManimRendererService {
         return normalized.endsWith(".cmd") || normalized.endsWith(".bat");
     }
 
-    private String instrumentCodeWithGeometryExport(String code, String sceneName) {
-        return code
+    private String instrumentCodeWithGeometryExport(String manimCode, String sceneName) {
+        return manimCode
                 + System.lineSeparator()
                 + System.lineSeparator()
                 + "from automanim_geometry_export import patch_scene_for_geometry_export as __automanim_patch_scene"

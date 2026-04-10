@@ -47,10 +47,10 @@ public class FixRetryState {
     /**
      * Records a fix request for routing.
      */
-    public void recordFixRequest(String code, List<String> issues) {
+    public void recordFixRequest(String generatedCode, List<String> issues) {
         requestFix = true;
         attempts++;
-        originalGeneratedCodeBeforeFix = code;
+        originalGeneratedCodeBeforeFix = generatedCode;
         originalIssueCount = issues != null ? issues.size() : 0;
         currentIssues = issues != null ? new ArrayList<>(issues) : new ArrayList<>();
     }

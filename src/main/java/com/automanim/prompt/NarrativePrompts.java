@@ -33,8 +33,11 @@ public final class NarrativePrompts {
                     + "Narrative rules:\n"
                     + "- Narrative must not be constrained by a fixed word count\n"
                     + "- Use enrichment fields only when they sharpen the explanation\n"
-                    + "- If the target is a problem, every scene must directly advance the solution\n"
+                    + "- If the target is a problem, every scene should advance understanding or the solution arc; observation, contrast, failed attempt, evidence, and key insight beats are all valid when they are learner-useful\n"
                     + "- Prefer 3 to 5 strong scenes for problem-solving unless more are truly needed\n"
+                    + "- Write narration as learner-facing beats: each sentence should correspond to something visible, highlighted, transformed, or deliberately held on screen\n"
+                    + "- Prefer one new idea per scene, and use progressive disclosure instead of dumping the final state at once\n"
+                    + "- Leave breathing room after key reveals; the storyboard should not imply nonstop motion with no time to read\n"
                     + "- Keep object ids concise and non-redundant since `kind` already carries the type. Follow only the naming rules for the active backend.\n"
                     + "- Reuse the exact same concise ids consistently in `anchor_id`, `persistent_objects`, `exiting_objects`, and `actions.targets`\n"
                     + "- When any field inside `entering_objects` refers to another object, especially `content`, refer to that object by id only. Do not restate its kind there.\n"
@@ -45,10 +48,12 @@ public final class NarrativePrompts {
                     + "- Only include `style` when it adds meaningful rendering properties; omit it for visually plain objects.\n"
                     + "- Prefer restyling an existing object (color, thickness, dash style) over creating a duplicate on the same endpoints; this keeps the construction clean and avoids overlapping objects\n"
                     + "- Each scene shows only the elements needed for its teaching goal; when a temporary comparison element (test point, alternate path) has served its purpose, include it in `exiting_objects` of the current or next scene\n"
+                    + "- Plan transitions intentionally: a scene may end with a clean break, a carry-forward anchor, or a transform bridge, but not with accidental clutter\n"
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES + "\n";
 
     private static final String GEOGEBRA_RULES =
             "GeoGebra-specific storyboard rules:\n"
+                    + "- Follow GeoGebra naming conventions.\n"
                     + "- Prefer native GeoGebra labels for named geometric objects such as points, lines, segments, rays, circles, and polygons.\n"
                     + "- If the visible text is just the object's own name or symbol, keep it as the object's native label rather than creating a separate `label` or `text` storyboard object.\n"
                     + "- Create separate `label` or `text` objects only for overlays, formulas, counters, captions, explanatory annotations, or text that is semantically different from the object's native label. Avoid redundant pairs such as `A` plus `aLabel`, `lineL` plus `labelL`, or `circleO` plus `labelO`.\n"
@@ -59,8 +64,18 @@ public final class NarrativePrompts {
 
     private static final String MANIM_RULES =
             "Manim-specific storyboard rules:\n"
+                    + SystemPrompts.MANIM_NARRATIVE_PHILOSOPHY
+                    + SystemPrompts.MANIM_VISUAL_PLANNING_RULES
+                    + SystemPrompts.MANIM_MOTION_AND_PACING_RULES
+                    + SystemPrompts.MANIM_COMPOSITION_RULES
+                    + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
+                    + SystemPrompts.MANIM_OBJECT_LIFECYCLE_RULES
                     + SystemPrompts.MANIM_NAMING_RULES
-                    + "- For moving points or markers, create a separate label object with `behavior = follows_anchor` so the label tracks the moving object.\n";
+                    + "- Every learner-visible Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; do not hide visible labels inside another object's prose description.\n"
+                    + "- If a point, marker, label, counter, or helper must visibly follow another object, create a separate object and describe the attachment with `behavior`, `anchor_id`, and `dependency_note`.\n"
+                    + "- For moving points or markers, create a separate label object with `behavior = follows_anchor` so the label tracks the moving object.\n"
+                    + "- Manim does not auto-label points. For every named `kind: point` object (e.g. A, B, P), declare a companion `kind: text` label in the same scene's `entering_objects` with `behavior = follows_anchor` and `anchor_id` pointing to the point id. Omit a label only when the point is purely structural and its identity is never referenced by the narration or other objects.\n"
+                    + "- Use `screen_overlay_plan` only for true viewport-fixed explanatory overlays, not as a vague place to hide layout conflicts.\n";
 
     private static final String OUTPUT_FORMAT =
             "Output format:\n"
@@ -74,22 +89,22 @@ public final class NarrativePrompts {
                     + "    {\n"
                     + "      \"scene_id\": \"string, stable unique scene id\",\n"
                     + "      \"title\": \"string, short production label for the scene\",\n"
-                    + "      \"goal\": \"string, what the scene must accomplish for understanding or solution progress\",\n"
-                    + "      \"narration\": \"string, concise voiceover text for this scene only\",\n"
+                    + "      \"goal\": \"string, what the learner should understand or what solving progress should be achieved by the end of the scene\",\n"
+                    + "      \"narration\": \"string, concise learner-facing voiceover text for this scene only; its sentences should align with visible beats\",\n"
                     + "      \"duration_seconds\": \"integer, approximate runtime for pacing\",\n"
                     + "      \"scene_mode\": \"string, 2d by default or 3d only when depth is essential\",\n"
                     + "      \"camera_anchor\": \"string, main camera focus region or anchor object\",\n"
                     + "      \"camera_plan\": \"string, how the camera behaves in this scene\",\n"
-                    + "      \"layout_goal\": \"string, intended screen composition and relative placement of major elements\",\n"
+                    + "      \"layout_goal\": \"string, intended screen composition and relative placement of major elements, including where the main visual focus and empty breathing room should be\",\n"
                     + "      \"safe_area_plan\": \"string, how important content stays readable and inside the safe frame\",\n"
-                    + "      \"screen_overlay_plan\": \"string, what text or formulas stay fixed relative to the viewport rather than the main geometry\",\n"
+                    + "      \"screen_overlay_plan\": \"string, what text or formulas stay fixed relative to the viewport rather than the main geometry, and where the safe overlay zone is\",\n"
                     + "      \"geometry_constraints\": [\"string, hard geometric invariants that downstream codegen and fix stages must preserve\"],\n"
                     + "      \"step_refs\": [\"string, referenced knowledge-graph step or solving beat covered by this scene\"],\n"
                     + "      \"entering_objects\": [\n"
                     + "        {\n"
                     + "          \"id\": \"string, stable visual identity for continuity and transforms; keep ids concise and non-redundant since `kind` carries the type; follow only the active backend's naming rules\",\n"
                     + "          \"kind\": \"string, object category such as text|equation|axes|point|graph|label|region|helper; do not repeat this type inside `id`\",\n"
-                    + "          \"content\": \"string, mathematical or visual content shown by the object. If this text references other storyboard objects, mention those objects by id only and do not repeat their kind, for example `angle between AP and l at P`\",\n"
+                    + "          \"content\": \"string, mathematical or visual content shown by the object. If this text references other storyboard objects, mention those objects by id only and do not repeat their kind, for example `angle between AP and l at P`. If the object must be visible to the learner, declare it explicitly rather than implying it through another object's prose.\",\n"
                     + "          \"placement\": \"string, explicit initial placement or layout intent relative to the frame or existing anchors; do not use it as the only place to encode hard geometry\",\n"
                     + "          \"style\": [\n"
                     + "            {\n"
@@ -103,7 +118,7 @@ public final class NarrativePrompts {
                     + "          \"source_node\": \"string, originating step or node when relevant\",\n"
                     + "          \"behavior\": \"string, dependency role such as static|follows_anchor|derived|fixed_overlay; this does not by itself mean fixed or movable, and `fixed_overlay` is mainly for explanatory text or UI-like overlays rather than native geometry\",\n"
                     + "          \"anchor_id\": \"string, id of the object this one should stay attached to when relevant\",\n"
-                    + "          \"dependency_note\": \"string, short note describing what source objects define this object or what it should keep following/updating with\",\n"
+                    + "          \"dependency_note\": \"string, short note describing what source objects define this object or what it should keep following/updating with; do not omit visible attachment logic\",\n"
                     + "          \"constraint_note\": \"string, hard local geometric rule for this object, such as 'reflection of B across line l', 'lies on l', or 'intersection of AB'' with l'\"\n"
                     + "        }\n"
                     + "      ],\n"
@@ -116,11 +131,11 @@ public final class NarrativePrompts {
                     + "      \"actions\": [\n"
                     + "        {\n"
                     + "          \"order\": \"integer, execution order within the scene\",\n"
-                    + "          \"type\": \"string, action category such as create|write|transform|highlight|move|fade_out|camera\",\n"
+                    + "          \"type\": \"string, action category such as create|write|transform|highlight|move|fade_out|camera; each action should correspond to one learner-visible beat or one small grouped beat\",\n"
                     + "          \"targets\": [\n"
                     + "            \"string, object id mainly affected by the action\"\n"
                     + "          ],\n"
-                    + "          \"description\": \"string, precise visual action intent and visible change\"\n"
+                    + "          \"description\": \"string, precise visual action intent and visible change, including why the learner should notice this beat\"\n"
                     + "        }\n"
                     + "      ],\n"
                     + "      \"notes_for_codegen\": [\n"
@@ -281,8 +296,8 @@ public final class NarrativePrompts {
                                            int targetSceneCount) {
         return String.format(
                 "Math problem to solve: %s\n\nOrdered solution-step graph context:\n%s\n\n"
-                        + "Write the visualization as a structured problem-solving storyboard, not as a plain written solution.\n"
-                        + "Start by establishing the problem situation, then move through the key solving beats in order.\n"
+                        + "Write the visualization as a structured teaching storyboard, not as a plain written solution.\n"
+                        + "Start by establishing the problem situation, then move through the key observation, insight, and solution beats in order.\n"
                         + "Target about %d scenes total, but merge nodes whenever that improves focus and continuity.\n"
                         + "Return storyboard JSON only.",
                 problemStatement, solvingContext, targetSceneCount);
@@ -311,14 +326,12 @@ public final class NarrativePrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return String.format(
                     "Target concept: %s\n\n"
-                            + SystemPrompts.STORYBOARD_CODEGEN_INTRO_GEOGEBRA + "\n"
                             + "Compact storyboard JSON:\n```json\n%s\n```\n\n"
                             + "Remember: Return ONLY the single GeoGebra code block. No explanation.",
                     targetConcept, storyboardJson);
         }
         return String.format(
                 "Target concept: %s\n\n"
-                        + SystemPrompts.STORYBOARD_CODEGEN_INTRO_MANIM + "\n"
                         + "Compact storyboard JSON:\n```json\n%s\n```\n\n"
                         + "Remember: Return ONLY the single Python code block. No explanation.",
                 targetConcept, storyboardJson);

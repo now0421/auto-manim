@@ -11,15 +11,21 @@ Please strictly use common, stable, and highly readable **Manim Community** patt
 ## Scene
 
 ```python
-class MyScene(Scene)
-class MyScene(ThreeDScene)
+class MyScene(Scene): ...
+class MyScene(MovingCameraScene): ...
+class MyScene(ThreeDScene): ...
 ```
 
 - Use `Scene` for ordinary 2D scenes.
+- Use `MovingCameraScene` only when camera zoom or pan is part of the teaching.
 - Use `ThreeDScene` when the scene contains `Surface`, `Dot3D`, `ThreeDAxes`, solid objects, or camera motion.
 
 ```python
 class MyScene(Scene):
+    def construct(self):
+        ...
+
+class MyScene(MovingCameraScene):
     def construct(self):
         ...
 
@@ -116,12 +122,13 @@ DecimalNumber(value, num_decimal_places=...)
 ```
 
 - Use `Text` for plain language and `MathTex` for mathematical notation.
+- Prefer monospace fonts for `Text(...)` and `MarkupText(...)` when readable text must stay stable across renders.
 - If the string contains LaTeX commands or expressions such as `A'`, `A_1`, `x^2`, or inequalities, use `MathTex`.
 - Split `MathTex` into segments when you need partial coloring or matching transforms.
 - Prefer raw strings for LaTeX, for example `r"\geq"`.
 
 ```python
-title = Text("Dot Product", font_size=48)
+title = Text("Dot Product", font_size=48, font="Menlo")
 txt = MarkupText('<span fgcolor="YELLOW">Important</span>')
 
 eq = MathTex(r"\vec{a}\cdot\vec{b}=|a||b|\cos\theta")
@@ -142,13 +149,16 @@ subtitle = Tex(r"Reflect point A across line l")
 ## Grouping
 
 ```python
+Group(*mobjects)
 VGroup(*mobjects)
 ```
 
-- Use `VGroup` when multiple objects should move, lay out, or animate together.
+- Use `Group(...)` for mixed `Mobject` collections, especially when `Text(...)` is combined with shapes.
+- Use `VGroup(...)` when all members are vectorized mobjects and should move, lay out, or animate together.
 
 ```python
-group = VGroup(title, subtitle, formula)
+group = Group(circle, Text("Label", font="Menlo"))
+formula_group = VGroup(formula1, formula2, formula3)
 ```
 
 ## Coordinate Systems and Graphs
@@ -343,11 +353,14 @@ Use only names from this whitelist when assigning Manim colors.
 obj.set_color(color)
 obj.set_fill(color, opacity=...)
 obj.set_stroke(color, width=..., opacity=...)
+obj.set_stroke(color, width=..., background=True)
 obj.set_opacity(opacity)
 obj.scale(factor)
+BackgroundRectangle(obj, fill_opacity=..., buff=...)
 ```
 
 - For `set_stroke(...)`, keep to `color`, `width`, and `opacity`.
+- Use `background=True` on `set_stroke(...)` only for readable text backstrokes over busy geometry.
 - Do not use undocumented arguments such as `dash_array=...`; use `DashedLine` for dashed geometry.
 - Keep color usage consistent and restrained.
 
@@ -355,8 +368,10 @@ obj.scale(factor)
 obj.set_color(BLUE)
 obj.set_fill(BLUE, opacity=0.6)
 obj.set_stroke(WHITE, width=2, opacity=1)
+label.set_stroke(BLACK, width=4, background=True)
 obj.set_opacity(0.5)
 obj.scale(1.2)
+card = BackgroundRectangle(label, fill_opacity=0.8, buff=0.2)
 ```
 
 ## Timing and Utility Animation
@@ -364,16 +379,21 @@ obj.scale(1.2)
 ```python
 Add(*mobjects)
 Wait(run_time=...)
+self.add_subcaption(text, duration=...)
 self.wait(duration)
 ```
 
 - Prefer `self.add(...)` and `self.wait(...)` in ordinary scenes.
+- Use `self.add_subcaption(...)` or `subcaption=...` on major animations when the scene includes subtitle-worthy narration beats.
 - Use `Add(...)` when the insertion must happen inside another animation.
 
 ```python
+self.camera.background_color = BLACK
 self.add(title, graph)
+self.add_subcaption("Introduce the graph", duration=2)
 self.wait(0.5)
 self.play(Add(label))
+self.play(Write(title), subcaption="State the key idea", subcaption_duration=2)
 self.play(Succession(
     Write(title),
     Wait(0.5),
@@ -686,6 +706,24 @@ self.move_camera(phi=..., theta=..., zoom=..., run_time=...)
 self.begin_ambient_camera_rotation(rate=...)
 self.stop_ambient_camera_rotation()
 ```
+
+## Moving 2D Camera
+
+```python
+self.camera.frame.animate.set(width=...)
+self.camera.frame.animate.move_to(target)
+self.camera.frame.save_state()
+Restore(self.camera.frame)
+```
+
+- Use these methods inside `MovingCameraScene`.
+- Prefer camera motion only when it teaches scale, detail, or comparison better than a static frame.
+
+```python
+self.camera.frame.save_state()
+self.play(self.camera.frame.animate.set(width=6).move_to(dot), run_time=2)
+self.play(Restore(self.camera.frame))
+```
 - Use these methods inside `ThreeDScene`.
 
 ```python
@@ -726,7 +764,7 @@ always(method, *args, **kwargs)
 f_always(method, *arg_generators)
 always_redraw(lambda: ...)
 always_shift(mobject, direction, rate=...)
-always_rotate(mobject, rate=..., ...)
+always_rotate(mobject, rate=...)
 turn_animation_into_updater(animation, ...)
 cycle_animation(animation, ...)
 ValueTracker(value)
@@ -752,6 +790,42 @@ self.play(x_tracker.animate.set_value(2), run_time=4)
 
 boundary = AnimatedBoundary(title, colors=[RED, GREEN, BLUE], cycle_rate=2)
 path = TracedPath(dot.get_center, stroke_color=YELLOW, stroke_width=4)
+```
+
+## Common Render Failure Guardrails
+
+- Do not animate conditionally empty redraw outputs.
+- Avoid `always_redraw(lambda: thing if cond else VMobject())` when that result will later be passed to `Create`, `FadeOut`, or `Transform`.
+- Prefer one stable mobject and control visibility/style instead of swapping to an empty placeholder.
+- Before cleanup animations, ensure targets are still valid, on-scene, and non-empty.
+
+Unsafe pattern (can crash at runtime when cleanup starts on an empty target):
+
+```python
+arrow = always_redraw(
+    lambda: Arrow(A.get_center(), B.get_center()) if flag.get_value() > 0 else VMobject()
+)
+self.play(Create(arrow))
+self.play(flag.animate.set_value(0))
+self.play(FadeOut(arrow))
+```
+
+Safe pattern (stable identity + visibility control):
+
+```python
+arrow = Arrow(A.get_center(), B.get_center())
+
+def refresh_arrow(m):
+    if flag.get_value() > 0:
+        m.become(Arrow(A.get_center(), B.get_center()).set_opacity(1.0))
+    else:
+        m.set_opacity(0.0)
+
+arrow.add_updater(refresh_arrow)
+self.add(arrow)
+self.play(flag.animate.set_value(1))
+self.play(flag.animate.set_value(0))
+arrow.clear_updaters()
 ```
 
 ## Update Animation
