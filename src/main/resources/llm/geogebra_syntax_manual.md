@@ -15,6 +15,10 @@ it keeps the stricter construction rules required by this renderer.
   existing geometry.
 - Use `Slider(...)` when motion, angle, scale, opacity, or animation state must
   stay inside an explicit numeric range.
+- Use `SetCoordSystem(-7, 7, -4, 4)` for the project's initial 2D graphics
+  view contract. This is implemented by the renderer through the GeoGebra Apps
+  API method `setCoordSystem(double xmin, double xmax, double ymin, double
+  ymax)`, which sets the Cartesian coordinate system of the graphics window.
 - Use `RigidPolygon(...)` for fixed-size shapes that must remain draggable and
   rotatable.
 - Use `Polygon(...)` for triangles, rectangles, and regular polygons; do not use
@@ -530,7 +534,28 @@ SetTooltipMode(A, 3)
 SetLayer(lineAB, 2)
 ShowGrid(1, false)
 SetFixed(A, true)
+SetCoordSystem(-7, 7, -4, 4)
 ```
+
+## Viewport
+
+`SetCoordSystem(...)` is a project-supported GeoGebra Apps API bridge command,
+not a normal GeoGebra input-bar construction command. The renderer executes it
+as `ggbApplet.setCoordSystem(xmin, xmax, ymin, ymax)`.
+
+```text
+SetCoordSystem( <xMin>, <xMax>, <yMin>, <yMax> )
+```
+
+```geogebra
+SetCoordSystem(-7, 7, -4, 4)
+```
+
+Use it to set the initial visible Cartesian coordinate window. Do not use a much
+larger visible range to make objects fit; that makes ordinary-sized coordinates
+look tiny and clustered. Instead, keep important visible geometry inside
+approximately `x[-6.5, 6.5]` and `y[-3.5, 3.5]`, and scale or spread the
+construction itself when the layout is too compressed.
 
 ## Common Complete Examples
 
@@ -678,8 +703,8 @@ renderer's strict support list; use official GeoGebra syntax for exact overloads
   `SetFilling`, `SetDecoration`, `ShowLabel`, `SetLabelMode`, `SetCaption`,
   `SetFixed`, `SetTooltipMode`, `SetTrace`, `SetLayer`, `ShowLayer`,
   `HideLayer`, `SetConditionToShowObject`, `SetVisibleInView`, `ShowAxes`,
-  `ShowGrid`, `Slider`, `StartAnimation`, `SetValue`, `CenterView`,
-  `ZoomIn`, `ZoomOut`.
+  `ShowGrid`, `SetCoordSystem`, `Slider`, `StartAnimation`, `SetValue`,
+  `CenterView`, `ZoomIn`, `ZoomOut`.
 
 ## Forbidden Syntax
 

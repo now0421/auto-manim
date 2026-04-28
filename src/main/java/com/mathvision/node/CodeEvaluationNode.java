@@ -135,7 +135,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             ctx.put(WorkflowKeys.CODE_EVALUATION_FIX_STATE, fixState);
         }
 
-        CodeFixResult previousFixResult = NodeSupport.consumeFixResult(ctx, CodeFixSource.EVALUATION_REVIEW);
+        CodeFixResult previousFixResult = NodeSupport.consumeFixResult(ctx, CodeFixSource.CODE_EVALUATION_REVIEW);
         if (previousFixResult != null) {
             fixState.addFixToolCalls(previousFixResult.getToolCalls());
             if (previousFixResult.isApplied()) {
@@ -374,7 +374,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         String sceneName = result.getSceneName() != null ? result.getSceneName() : codeResult.getSceneName();
 
         CodeFixRequest request = new CodeFixRequest();
-        request.setSource(CodeFixSource.EVALUATION_REVIEW);
+        request.setSource(CodeFixSource.CODE_EVALUATION_REVIEW);
         request.setReturnAction(WorkflowActions.RETRY_CODE_EVALUATION);
         request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(buildDetailedEvaluationFixReason(

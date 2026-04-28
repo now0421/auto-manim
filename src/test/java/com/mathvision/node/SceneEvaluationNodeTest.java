@@ -68,7 +68,7 @@ class SceneEvaluationNodeTest {
 
         CodeFixRequest request = (CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
         assertNotNull(request);
-        assertEquals(CodeFixSource.SCENE_LAYOUT_EVALUATION, request.getSource());
+        assertEquals(CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION, request.getSource());
         assertEquals(WorkflowActions.RETRY_RENDER, request.getReturnAction());
         assertNotNull(request.getSceneEvaluationJson());
         assertTrue(request.getSceneEvaluationJson().contains("\"issue_sample_count\""));

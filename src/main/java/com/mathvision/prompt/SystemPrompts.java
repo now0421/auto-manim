@@ -88,7 +88,8 @@ public final class SystemPrompts {
     public static final String STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR =
             "Storyboard field guide for this GeoGebra repair pass:\n"
                     + "- `goal` and `layout_goal`: preserve what the scene is trying to teach and how the construction should be laid out.\n"
-                    + "- GeoGebra is interactive and freely zoomable, so out-of-bounds issues are not a concern. Focus on text overlap only.\n"
+                    + "- The initial GeoGebra visible coordinate window is part of the output contract; do not rely on user zooming or panning to make the construction readable.\n"
+                    + "- Fix out-of-bounds, underfilled, clustered, or overlapping layouts by moving/scaling/recentering whole constrained groups while preserving the construction.\n"
                     + "- `geometry_constraints` and each object's `constraint_note`: treat these as hard geometric invariants.\n"
                     + "- `behavior`, `anchor_id`, and `dependency_note`: preserve dependency-safe construction order for reflected points, intersections, midpoints, and derived objects.\n"
                     + "- `persistent_objects`, `exiting_objects`, and `actions`: preserve object visibility progression instead of rewriting the construction arbitrarily.\n"
@@ -341,6 +342,16 @@ public final class SystemPrompts {
     /** GeoGebra command whitelist rules sourced from the attached syntax manual. */
     public static final String GEOGEBRA_MANUAL_ONLY_RULES = buildGeoGebraManualOnlyRules();
 
+    /** GeoGebra viewport and coordinate layout rules. */
+    public static final String GEOGEBRA_VIEWPORT_RULES =
+            "GeoGebra viewport rules:\n"
+                    + "- Treat the initial visible coordinate window as fixed at x[-7,7] and y[-4,4] unless the renderer explicitly changes it.\n"
+                    + "- The generated script should include or tolerate `SetCoordSystem(-7, 7, -4, 4)` as the initial view contract.\n"
+                    + "- Keep important learner-visible geometry, labels, and text inside x[-6.5,6.5] and y[-3.5,3.5] with margin.\n"
+                    + "- Do not solve layout by zooming out to a much larger visible range; if objects would become tiny or clustered, scale or spread the construction coordinates instead.\n"
+                    + "- Aim for the main construction to occupy roughly 45%-80% of the visible width and 35%-75% of the visible height when the math allows it.\n"
+                    + "- For large mathematical values, separate mathematical labels from visual coordinates: use readable display coordinates and labels/captions/text for the original values.\n";
+
     // ========================================================================
     // Output format constants
     // ========================================================================
@@ -419,6 +430,7 @@ public final class SystemPrompts {
                     + "- Create a separate label/text object only when the visible text is not the object's own native label, such as overlays, formulas, counters, captions, or explanatory annotations.\n"
                     + "- If the storyboard contains a redundant geometry-label pair, prefer keeping the geometry object and dropping the extra label object in the generated GeoGebra commands.\n"
                     + "- Choose readable coordinates and label placement that respect `layout_goal`, `placement`, and `safe_area_plan`.\n"
+                    + GEOGEBRA_VIEWPORT_RULES
                     + HIGH_CONTRAST_COLOR_RULES_BULLETS
                     + "- If the storyboard asks for an effect that would require an undocumented command, preserve the core geometry with documented commands only and do not invent syntax.\n";
 

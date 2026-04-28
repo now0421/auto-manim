@@ -27,12 +27,13 @@ public final class SceneEvaluationPrompts {
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_SYSTEM =
-            "You are fixing a GeoGebra command script that executed but has text overlap issues detected by geometry analysis.\n"
+            "You are fixing a GeoGebra command script that executed but has layout issues detected by geometry analysis.\n"
                     + "Preserve the teaching goal, visual intent, construction meaning, and storyboard teaching order.\n"
-                    + "Treat storyboard geometric constraints as hard requirements: if a point is defined as a reflection, midpoint, foot, or intersection, preserve that definition while fixing overlap.\n"
+                    + "Treat storyboard geometric constraints as hard requirements: if a point is defined as a reflection, midpoint, foot, or intersection, preserve that definition while fixing layout.\n"
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES
-                    + "Prefer adjusting label placement, text positioning, and coordinate spacing over removing explanatory content.\n"
-                    + "GeoGebra constructions are interactive and freely zoomable, so out-of-bounds issues are irrelevant; focus exclusively on fixing text-on-text and text-on-geometry overlaps.\n"
+                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
+                    + "Prefer adjusting label placement, text positioning, coordinate spacing, and whole-construction scale over removing explanatory content.\n"
+                    + "Initial-view readability is mandatory; fix offscreen, underfilled, clustered, text-on-text, and text-on-geometry issues without relying on user zooming.\n"
                     + "Also correct semantically wrong geometric attachments you notice, especially angle markers that sweep the wrong sector.\n"
                     + "Use English GeoGebra command names.\n"
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
@@ -41,7 +42,7 @@ public final class SceneEvaluationPrompts {
                     + "Naming rules:\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "Do not output Python, JavaScript, or explanations.\n"
-                    + "Do not break geometric constraints while fixing overlap; keep derived objects derived from their source objects.\n\n"
+                    + "Do not break geometric constraints while fixing layout; keep derived objects derived from their source objects.\n\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
 
     private SceneEvaluationPrompts() {}
@@ -106,8 +107,9 @@ public final class SceneEvaluationPrompts {
                                                      String sceneEvaluationJson,
                                                      List<String> fixHistory) {
         StringBuilder sb = new StringBuilder();
-        sb.append("The following GeoGebra command script executed, but post-render scene evaluation found text overlap issues.\n\n")
+        sb.append("The following GeoGebra command script executed, but post-render scene evaluation found layout issues.\n\n")
                 .append(SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR)
+                .append(SystemPrompts.GEOGEBRA_VIEWPORT_RULES)
                 .append("\n\nCompact storyboard JSON (source of truth):\n```json\n")
                 .append(storyboardJson != null && !storyboardJson.isBlank() ? storyboardJson : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON)
                 .append("\n```\n\n")
@@ -117,9 +119,10 @@ public final class SceneEvaluationPrompts {
                 .append("Repair process requirements:\n")
                 .append("1. First identify the affected storyboard scene(s) and the ids/constraints tied to the reported elements.\n")
                 .append("2. Fix text overlap through label repositioning, coordinate spacing, or `SetCaption`/`ShowLabel` adjustments.\n")
-                .append("3. Do not worry about elements extending outside the initial viewport; GeoGebra is interactive and users can freely zoom and pan.\n")
-                .append("4. Preserve reflections, symmetry, intersections, equal distances, and dependency chains exactly.\n\n")
-                .append("Please fix the command script so the reported text overlap issues are resolved.\n")
+                .append("3. Fix offscreen, underfilled, or clustered layouts inside the initial viewport; do not rely on user zooming or panning.\n")
+                .append("4. Preserve `SetCoordSystem(-7, 7, -4, 4)` unless the evaluation report explicitly asks for a different fixed view.\n")
+                .append("5. Preserve reflections, symmetry, intersections, equal distances, and dependency chains exactly.\n\n")
+                .append("Please fix the command script so the reported layout issues are resolved.\n")
                 .append("Preserve the intended teaching flow and construction meaning.\n")
                 .append("Preserve geometric invariants from the storyboard; do not fix overlap by breaking reflections, symmetry, intersections, or other defining constructions.\n")
                 .append("Remember: Return ONLY the single fenced `geogebra` code block. No explanation.\n");

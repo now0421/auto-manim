@@ -26,6 +26,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Creates a GeoGebra preview artifact and validates commands by replaying them
@@ -55,6 +56,36 @@ public class GeoGebraRenderService {
     private static final double DEFAULT_FRAME_X_MAX = 7.0;
     private static final double DEFAULT_FRAME_Y_MIN = -4.0;
     private static final double DEFAULT_FRAME_Y_MAX = 4.0;
+    private static final Pattern SET_COORD_SYSTEM_COMMAND = Pattern.compile(
+            "^SetCoordSystem\\s*\\(([^)]*)\\)\\s*$", Pattern.CASE_INSENSITIVE);
+    private ViewBounds activeViewBounds = ViewBounds.defaults();
+
+    private static final class ViewBounds {
+        private final double xMin;
+        private final double xMax;
+        private final double yMin;
+        private final double yMax;
+
+        private ViewBounds(double xMin, double xMax, double yMin, double yMax) {
+            this.xMin = xMin;
+            this.xMax = xMax;
+            this.yMin = yMin;
+            this.yMax = yMax;
+        }
+
+        private double xMin() { return xMin; }
+        private double xMax() { return xMax; }
+        private double yMin() { return yMin; }
+        private double yMax() { return yMax; }
+
+        static ViewBounds defaults() {
+            return new ViewBounds(
+                    DEFAULT_FRAME_X_MIN,
+                    DEFAULT_FRAME_X_MAX,
+                    DEFAULT_FRAME_Y_MIN,
+                    DEFAULT_FRAME_Y_MAX);
+        }
+    }
 
     public RenderAttemptResult render(String commandScript,
                                       String figureName,
@@ -67,6 +98,7 @@ public class GeoGebraRenderService {
             Files.createDirectories(outputDir);
             String safeFigureName = normalizeFigureName(figureName);
             List<String> commands = GeoGebraCodeUtils.extractCommands(commandScript);
+            ViewBounds viewBounds = resolveViewBounds(commands);
             List<GeoGebraCodeUtils.SceneDirective> sceneDirectives =
                     GeoGebraCodeUtils.extractSceneDirectives(commandScript);
             Path previewPath = outputDir.resolve(PREVIEW_FILE);
@@ -82,8 +114,14 @@ public class GeoGebraRenderService {
                 report.completed = true;
                 report.error = "No executable GeoGebra commands were found after stripping comments.";
             } else {
-                report = validateWithHeadlessBrowser(previewPath, safeFigureName, commands,
-                        sceneDirectives, geometryPath);
+                ViewBounds previousViewBounds = activeViewBounds;
+                activeViewBounds = viewBounds;
+                try {
+                    report = validateWithHeadlessBrowser(previewPath, safeFigureName, commands,
+                            sceneDirectives, geometryPath);
+                } finally {
+                    activeViewBounds = previousViewBounds;
+                }
             }
             if (report != null) {
                 normalizeParsedReport(
@@ -115,11 +153,60 @@ public class GeoGebraRenderService {
         }
     }
 
+    private ViewBounds resolveViewBounds(List<String> commands) {
+        ViewBounds bounds = ViewBounds.defaults();
+        if (commands == null) {
+            return bounds;
+        }
+        for (String command : commands) {
+            if (command == null) {
+                continue;
+            }
+            java.util.regex.Matcher matcher = SET_COORD_SYSTEM_COMMAND.matcher(command.trim());
+            if (!matcher.matches()) {
+                continue;
+            }
+            String[] parts = matcher.group(1).split(",");
+            if (parts.length != 4) {
+                continue;
+            }
+            try {
+                double xMin = Double.parseDouble(parts[0].trim());
+                double xMax = Double.parseDouble(parts[1].trim());
+                double yMin = Double.parseDouble(parts[2].trim());
+                double yMax = Double.parseDouble(parts[3].trim());
+                if (Double.isFinite(xMin) && Double.isFinite(xMax)
+                        && Double.isFinite(yMin) && Double.isFinite(yMax)
+                        && xMin < xMax && yMin < yMax) {
+                    bounds = new ViewBounds(xMin, xMax, yMin, yMax);
+                }
+            } catch (NumberFormatException ignored) {
+                // Keep the most recent valid viewport command, or the default.
+            }
+        }
+        return bounds;
+    }
+
     protected ValidationReport validateWithHeadlessBrowser(Path previewPath,
                                                            String figureName,
                                                            List<String> commands,
                                                            List<GeoGebraCodeUtils.SceneDirective> sceneDirectives,
                                                            Path geometryPath) {
+        return validateWithHeadlessBrowser(
+                previewPath,
+                figureName,
+                commands,
+                sceneDirectives,
+                geometryPath,
+                activeViewBounds != null ? activeViewBounds : ViewBounds.defaults());
+    }
+
+    private ValidationReport validateWithHeadlessBrowser(Path previewPath,
+                                                           String figureName,
+                                                           List<String> commands,
+                                                           List<GeoGebraCodeUtils.SceneDirective> sceneDirectives,
+                                                           Path geometryPath,
+                                                           ViewBounds viewBounds) {
         ValidationReport fallback = newValidationReport(figureName, commands);
         fallback.browserExecutable = PLAYWRIGHT_BUNDLED_CHROMIUM;
 
@@ -162,13 +249,13 @@ public class GeoGebraRenderService {
             // repainting can cause a transient state where getAllObjectNames() returns empty)
             if (geometryPath != null && parsed.completed && parsed.appletLoaded) {
                 try {
-                    String geometryJson = extractGeometry(page, figureName, sceneDirectives);
+                    String geometryJson = extractGeometry(page, figureName, sceneDirectives, viewBounds);
                     if (geometryJson != null && !geometryJson.isBlank()) {
                         // Check for extraction errors embedded in the JSON
                         if (geometryJson.contains("\"error\"")) {
                             log.warn("GeoGebra geometry extraction reported error: {}",
                                     geometryJson.length() > 300 ? geometryJson.substring(0, 300) : geometryJson);
-                            Files.writeString(geometryPath, buildFallbackElementGeometryReport(figureName, sceneDirectives), StandardCharsets.UTF_8);
+                            Files.writeString(geometryPath, buildFallbackElementGeometryReport(figureName, sceneDirectives, viewBounds), StandardCharsets.UTF_8);
                             log.info("Wrote fallback geometry report due to extraction error");
                         } else {
                             // Check if extraction actually found elements; log a warning if not
@@ -180,13 +267,13 @@ public class GeoGebraRenderService {
                             log.info("GeoGebra geometry report generated: {}", geometryPath);
                         }
                     } else {
-                        Files.writeString(geometryPath, buildFallbackElementGeometryReport(figureName, sceneDirectives), StandardCharsets.UTF_8);
+                        Files.writeString(geometryPath, buildFallbackElementGeometryReport(figureName, sceneDirectives, viewBounds), StandardCharsets.UTF_8);
                         log.warn("GeoGebra geometry extraction returned empty; wrote minimal fallback");
                     }
                 } catch (Exception e) {
                     log.warn("Failed to extract GeoGebra geometry: {}", e.getMessage());
                     try {
-                        Files.writeString(geometryPath, buildFallbackElementGeometryReport(figureName, sceneDirectives), StandardCharsets.UTF_8);
+                        Files.writeString(geometryPath, buildFallbackElementGeometryReport(figureName, sceneDirectives, viewBounds), StandardCharsets.UTF_8);
                         log.info("Wrote minimal fallback geometry report after extraction failure");
                     } catch (IOException writeError) {
                         log.warn("Failed to write fallback geometry report: {}", writeError.getMessage());
@@ -215,7 +302,9 @@ public class GeoGebraRenderService {
     }
 
     private String extractGeometry(Page page, String figureName,
-                                    List<GeoGebraCodeUtils.SceneDirective> sceneDirectives) {
+                                    List<GeoGebraCodeUtils.SceneDirective> sceneDirectives,
+                                    ViewBounds viewBounds) {
+        ViewBounds bounds = viewBounds != null ? viewBounds : ViewBounds.defaults();
         // Build a JSON array of scene directives for the browser-side script
         String scenesJson = "[]";
         if (sceneDirectives != null && !sceneDirectives.isEmpty()) {
@@ -362,10 +451,10 @@ public class GeoGebraRenderService {
                         + "   report_type: 'geogebra_element_report',"
                         + "   report_version: 1,"
                         + "   frame_bounds: {"
-                        + "     min: [" + DEFAULT_FRAME_X_MIN + ", " + DEFAULT_FRAME_Y_MIN + ", 0],"
-                        + "     max: [" + DEFAULT_FRAME_X_MAX + ", " + DEFAULT_FRAME_Y_MAX + ", 0],"
-                        + "     width: " + (DEFAULT_FRAME_X_MAX - DEFAULT_FRAME_X_MIN) + ","
-                        + "     height: " + (DEFAULT_FRAME_Y_MAX - DEFAULT_FRAME_Y_MIN)
+                        + "     min: [" + bounds.xMin() + ", " + bounds.yMin() + ", 0],"
+                        + "     max: [" + bounds.xMax() + ", " + bounds.yMax() + ", 0],"
+                        + "     width: " + (bounds.xMax() - bounds.xMin()) + ","
+                        + "     height: " + (bounds.yMax() - bounds.yMin())
                         + "   },"
                         + "   element_bounds_space: 'world',"
                         + "   sample_count: samples.length,"
@@ -378,17 +467,19 @@ public class GeoGebraRenderService {
     }
 
     private String buildFallbackElementGeometryReport(String figureName,
-                                                       List<GeoGebraCodeUtils.SceneDirective> sceneDirectives) {
+                                                       List<GeoGebraCodeUtils.SceneDirective> sceneDirectives,
+                                                       ViewBounds viewBounds) {
+        ViewBounds bounds = viewBounds != null ? viewBounds : ViewBounds.defaults();
         StringBuilder sb = new StringBuilder();
         sb.append("{\n")
                 .append("  \"scene_name\": ").append(JsonUtils.toJson(figureName)).append(",\n")
                 .append("  \"report_type\": \"geogebra_element_report\",\n")
                 .append("  \"report_version\": 1,\n")
                 .append("  \"frame_bounds\": {\n")
-                .append("    \"min\": [").append(DEFAULT_FRAME_X_MIN).append(", ").append(DEFAULT_FRAME_Y_MIN).append(", 0],\n")
-                .append("    \"max\": [").append(DEFAULT_FRAME_X_MAX).append(", ").append(DEFAULT_FRAME_Y_MAX).append(", 0],\n")
-                .append("    \"width\": ").append(DEFAULT_FRAME_X_MAX - DEFAULT_FRAME_X_MIN).append(",\n")
-                .append("    \"height\": ").append(DEFAULT_FRAME_Y_MAX - DEFAULT_FRAME_Y_MIN).append("\n")
+                .append("    \"min\": [").append(bounds.xMin()).append(", ").append(bounds.yMin()).append(", 0],\n")
+                .append("    \"max\": [").append(bounds.xMax()).append(", ").append(bounds.yMax()).append(", 0],\n")
+                .append("    \"width\": ").append(bounds.xMax() - bounds.xMin()).append(",\n")
+                .append("    \"height\": ").append(bounds.yMax() - bounds.yMin()).append("\n")
                 .append("  },\n")
                 .append("  \"element_bounds_space\": \"world\",\n");
 
@@ -944,6 +1035,19 @@ public class GeoGebraRenderService {
                         + "         if (args.length === 1) {"
                         + "           const layer = parseIntegerLiteral(args[0]);"
                         + "           if (layer !== null) { api.setLayerVisible(layer, false); return { success: true, error: null }; }"
+                        + "         }"
+                        + "         break;"
+                        + "       }"
+                        + "       case 'SetCoordSystem': {"
+                        + "         if (args.length === 4) {"
+                        + "           const xMin = parseNumberLiteral(args[0]);"
+                        + "           const xMax = parseNumberLiteral(args[1]);"
+                        + "           const yMin = parseNumberLiteral(args[2]);"
+                        + "           const yMax = parseNumberLiteral(args[3]);"
+                        + "           if (xMin !== null && xMax !== null && yMin !== null && yMax !== null && xMin < xMax && yMin < yMax) {"
+                        + "             api.setCoordSystem(xMin, xMax, yMin, yMax);"
+                        + "             return { success: true, error: null };"
+                        + "           }"
                         + "         }"
                         + "         break;"
                         + "       }"
@@ -1825,6 +1929,19 @@ public class GeoGebraRenderService {
                 + "            }\n"
                 + "            break;\n"
                 + "          }\n"
+                + "          case 'SetCoordSystem': {\n"
+                + "            if (args.length === 4) {\n"
+                + "              const xMin = parseNumberLiteral(args[0]);\n"
+                + "              const xMax = parseNumberLiteral(args[1]);\n"
+                + "              const yMin = parseNumberLiteral(args[2]);\n"
+                + "              const yMax = parseNumberLiteral(args[3]);\n"
+                + "              if (xMin !== null && xMax !== null && yMin !== null && yMax !== null && xMin < xMax && yMin < yMax) {\n"
+                + "                api.setCoordSystem(xMin, xMax, yMin, yMax);\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "            }\n"
+                + "            break;\n"
+                + "          }\n"
                 + "          case 'ShowAxes': {\n"
                 + "            if (args.length === 0) {\n"
                 + "              api.setAxesVisible(true, true);\n"
@@ -1896,7 +2013,7 @@ public class GeoGebraRenderService {
                 + "      }\n"
                 + "    }\n"
                 + "    function fitView(api) {\n"
-                + "      safeCall(() => api.showAllObjects(), null);\n"
+                + "      // Keep the coordinate system chosen by SetCoordSystem; auto-fit would make compact constructions look tiny.\n"
                 + "    }\n"
                 + "    function toggleObjectVisibility(api, objectName, visible) {\n"
                 + "      if (!objectName) {\n"

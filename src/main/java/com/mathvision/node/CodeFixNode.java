@@ -10,7 +10,6 @@ import com.mathvision.model.CodeFixTraceReport;
 import com.mathvision.model.CodeResult;
 import com.mathvision.model.WorkflowKeys;
 import com.mathvision.prompt.CodeEvaluationPrompts;
-import com.mathvision.prompt.CodeGenerationPrompts;
 import com.mathvision.prompt.RenderFixPrompts;
 import com.mathvision.prompt.SceneEvaluationPrompts;
 import com.mathvision.prompt.StoryboardJsonBuilder;
@@ -240,16 +239,11 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
     }
 
     private String selectRulesPrompt(CodeFixRequest request) {
-        if (request.getSource() == CodeFixSource.EVALUATION_REVIEW) {
+        if (request.getSource() == CodeFixSource.CODE_EVALUATION_REVIEW) {
             return CodeEvaluationPrompts.buildRevisionRulesPrompt(
                     NodeSupport.resolveOutputTarget(workflowConfig));
         }
-        if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
-            return NodeSupport.isGeoGebraTarget(workflowConfig)
-                    ? CodeGenerationPrompts.buildGeoGebraValidationFixRulesPrompt()
-                    : CodeGenerationPrompts.buildValidationFixRulesPrompt();
-        }
-        if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
+        if (request.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION) {
             return SceneEvaluationPrompts.buildLayoutFixRulesPrompt(
                     NodeSupport.resolveOutputTarget(workflowConfig));
         }
@@ -260,18 +254,13 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         String targetConcept = TextUtils.firstNonBlank(
                 request.getTargetConcept(), request.getSceneName(), "Unknown target");
         String targetDescription = TextUtils.firstNonBlank(request.getTargetDescription(), "");
-        if (request.getSource() == CodeFixSource.EVALUATION_REVIEW) {
+        if (request.getSource() == CodeFixSource.CODE_EVALUATION_REVIEW) {
             return CodeEvaluationPrompts.buildRevisionFixedContextPrompt(
                     targetConcept,
                     targetDescription,
                     NodeSupport.resolveOutputTarget(workflowConfig));
         }
-        if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
-            return NodeSupport.isGeoGebraTarget(workflowConfig)
-                    ? CodeGenerationPrompts.buildGeoGebraValidationFixFixedContextPrompt(targetConcept, targetDescription)
-                    : CodeGenerationPrompts.buildValidationFixFixedContextPrompt(targetConcept, targetDescription);
-        }
-        if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
+        if (request.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION) {
             return SceneEvaluationPrompts.buildLayoutFixFixedContextPrompt(
                     targetConcept,
                     targetDescription,
@@ -284,7 +273,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
     }
 
     private String selectCurrentRequestPrompt(CodeFixRequest request) {
-        if (request.getSource() == CodeFixSource.EVALUATION_REVIEW) {
+        if (request.getSource() == CodeFixSource.CODE_EVALUATION_REVIEW) {
             String artifactName = TextUtils.firstNonBlank(
                     request.getSceneName(),
                     request.getExpectedSceneName(),
@@ -298,24 +287,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                     NodeSupport.resolveOutputTarget(workflowConfig)
             );
         }
-        if (request.getSource() == CodeFixSource.GENERATION_VALIDATION) {
-            if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
-                return CodeGenerationPrompts.geoGebraValidationFixUserPrompt(
-                        TextUtils.firstNonBlank(
-                                request.getExpectedSceneName(), request.getSceneName(), GeoGebraCodeUtils.EXPECTED_FIGURE_NAME),
-                        request.getGeneratedCode(),
-                        splitValidationProblems(request.getErrorReason()),
-                        TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON)
-                );
-            }
-            return CodeGenerationPrompts.validationFixUserPrompt(
-                    TextUtils.firstNonBlank(request.getExpectedSceneName(), request.getSceneName(), "MainScene"),
-                    request.getGeneratedCode(),
-                    splitValidationProblems(request.getErrorReason()),
-                    TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON)
-            );
-        }
-        if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
+        if (request.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION) {
             if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
                 return SceneEvaluationPrompts.geoGebraLayoutFixUserPrompt(
                         TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
@@ -362,7 +334,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
 
     private String extractCodeFromText(String text) {
         return NodeSupport.isGeoGebraTarget(workflowConfig)
-                ? GeoGebraCodeUtils.extractCode(text)
+                ? GeoGebraCodeUtils.ensureDefaultViewCommand(GeoGebraCodeUtils.extractCode(text))
                 : ManimCodeUtils.extractCode(text);
     }
 

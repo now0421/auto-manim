@@ -57,6 +57,7 @@ public final class GeoGebraValidationSupport {
             "SetVisibleInView",
             "ShowAxes",
             "ShowGrid",
+            "SetCoordSystem",
             "SetLevelOfDetail",
             "CenterView",
             "SetValue",
@@ -87,6 +88,7 @@ public final class GeoGebraValidationSupport {
             "HideLayer",
             "SetConditionToShowObject",
             "SetVisibleInView",
+            "SetCoordSystem",
             "SetLevelOfDetail"
     );
 

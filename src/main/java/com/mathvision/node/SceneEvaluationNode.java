@@ -57,6 +57,8 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     private static final double GEOMETRIC_TOUCH_TOLERANCE = 0.12;
     private static final double GEOMETRIC_ENDPOINT_TOLERANCE = 0.18;
     private static final double LINE_TEXT_INTERSECTION_TOLERANCE = 0.03;
+    private static final double GEOGEBRA_MIN_VIEW_WIDTH_UTILIZATION = 0.25;
+    private static final double GEOGEBRA_MIN_VIEW_HEIGHT_UTILIZATION = 0.20;
     private static final int DEFAULT_MAX_FIX_ATTEMPTS = 2;
     private static final int MAX_FIX_REPORT_SAMPLES = 12;
     private static final int MAX_ISSUES_PER_SAMPLE_IN_FIX_REPORT = 6;
@@ -162,12 +164,14 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             int totalIssues = 0;
             int issueSamples = 0;
 
-            boolean skipOffscreen = input.config() != null && input.config().isGeoGebraTarget();
+            boolean geoGebraTarget = input.config() != null && input.config().isGeoGebraTarget();
+            boolean skipOffscreen = false;
 
             JsonNode samplesNode = root.path("samples");
             if (samplesNode.isArray()) {
                 for (JsonNode sampleNode : samplesNode) {
-                    SampleEvaluation sampleEvaluation = evaluateSample(sampleNode, frameMin, frameMax, skipOffscreen);
+                    SampleEvaluation sampleEvaluation = evaluateSample(
+                            sampleNode, frameMin, frameMax, skipOffscreen, geoGebraTarget);
                     sampleEvaluations.add(sampleEvaluation);
                     if (sampleEvaluation.isHasIssues()) {
                         issueSamples++;
@@ -263,7 +267,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         SceneEvaluationRetryState retryState = input.retryState();
 
         CodeFixRequest request = new CodeFixRequest();
-        request.setSource(CodeFixSource.SCENE_LAYOUT_EVALUATION);
+        request.setSource(CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION);
         request.setReturnAction(WorkflowActions.RETRY_RENDER);
         request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(retryState.pendingIssueSummary != null
@@ -300,7 +304,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     }
 
     private SampleEvaluation evaluateSample(JsonNode sampleNode, double[] frameMin, double[] frameMax,
-                                              boolean skipOffscreen) {
+                                              boolean skipOffscreen, boolean geoGebraTarget) {
         SampleEvaluation sample = new SampleEvaluation();
         sample.setSampleId(readText(sampleNode, "sample_id", ""));
         sample.setPlayIndex(sampleNode.hasNonNull("play_index") ? sampleNode.get("play_index").asInt() : null);
@@ -317,8 +321,8 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         int overlapCount = 0;
         int blockingCount = 0;
 
-        // GeoGebra is interactive and freely zoomable/pannable, so offscreen
-        // issues are irrelevant — only text overlap matters.
+        // Initial-view bounds are part of the layout contract for every target,
+        // including GeoGebra.
         if (!skipOffscreen) {
             for (ElementGeometry element : elements) {
                 OverflowMetrics overflow = frameOverflow(element, frameMin, frameMax);
@@ -342,6 +346,14 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             }
         }
 
+        if (geoGebraTarget) {
+            LayoutIssue underfilledIssue = evaluateUnderfilledGeoGebraView(elements, frameMin, frameMax, sample.getSampleRole());
+            if (underfilledIssue != null) {
+                issues.add(underfilledIssue);
+                blockingCount++;
+            }
+        }
+
         List<LayoutIssue> overlapIssues = evaluateOverlapIssues(elements, sample.getSampleRole());
         issues.addAll(overlapIssues);
         overlapCount = overlapIssues.size();
@@ -354,6 +366,67 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         sample.setIssueCount(issues.size());
         sample.setHasIssues(!issues.isEmpty());
         return sample;
+    }
+
+    private LayoutIssue evaluateUnderfilledGeoGebraView(List<ElementGeometry> elements,
+                                                        double[] frameMin,
+                                                        double[] frameMax,
+                                                        String sampleRole) {
+        if (elements == null || elements.size() < 3 || frameMin == null || frameMax == null) {
+            return null;
+        }
+
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        int boundedCount = 0;
+        for (ElementGeometry element : elements) {
+            if (element == null || !element.visible || element.min == null || element.max == null) {
+                continue;
+            }
+            minX = Math.min(minX, element.min[0]);
+            minY = Math.min(minY, element.min[1]);
+            maxX = Math.max(maxX, element.max[0]);
+            maxY = Math.max(maxY, element.max[1]);
+            boundedCount++;
+        }
+        if (boundedCount < 3 || !Double.isFinite(minX) || !Double.isFinite(maxX)
+                || !Double.isFinite(minY) || !Double.isFinite(maxY)) {
+            return null;
+        }
+
+        double frameWidth = frameMax[0] - frameMin[0];
+        double frameHeight = frameMax[1] - frameMin[1];
+        if (frameWidth <= 0 || frameHeight <= 0) {
+            return null;
+        }
+        double utilizationX = (maxX - minX) / frameWidth;
+        double utilizationY = (maxY - minY) / frameHeight;
+        if (utilizationX >= GEOGEBRA_MIN_VIEW_WIDTH_UTILIZATION
+                || utilizationY >= GEOGEBRA_MIN_VIEW_HEIGHT_UTILIZATION) {
+            return null;
+        }
+
+        LayoutIssue issue = new LayoutIssue();
+        issue.setType("underfilled_view");
+        issue.setMessage(String.format(
+                "Visible GeoGebra objects occupy only %.0f%% of view width and %.0f%% of view height",
+                utilizationX * 100.0,
+                utilizationY * 100.0));
+        issue.setSeverity("blocking");
+        issue.setReasonCode("UNDERFILLED_VIEW");
+        issue.setLikelyFalsePositive(false);
+        issue.setRecommendedAction("scale_or_spread_construction_inside_fixed_view");
+        ElementGeometry aggregate = new ElementGeometry();
+        aggregate.stableId = "ggb-visible-bounds";
+        aggregate.semanticName = "visible GeoGebra construction";
+        aggregate.className = "aggregate";
+        aggregate.visible = true;
+        aggregate.min = new double[] {minX, minY, 0};
+        aggregate.max = new double[] {maxX, maxY, 0};
+        issue.setPrimaryElement(toElementRef(aggregate, sampleRole));
+        return issue;
     }
 
     private List<ElementGeometry> readElements(JsonNode elementsNode, String sampleRole) {
@@ -1412,4 +1485,3 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         }
     }
 }
-

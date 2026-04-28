@@ -107,6 +107,7 @@ public final class CodeGenerationPrompts {
                     + "- If the storyboard implies a bounded range, encode the bound in the construction itself with a segment, ray, restricted path, or slider domain rather than leaving the object unconstrained.\n"
                     + "- Do not invent unsupported convenience syntax such as `Point(line, x, y)` or similar guessed overloads.\n"
                     + "- When initial structured placement is requested for a constrained point, choose a dependency-safe construction that starts near that location or inside the requested range; never break the constraint just to match the coordinates.\n"
+                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + "- Prefer common, stable GeoGebra Classic commands over obscure tricks.\n"
                     + "- Ignore timing-only details such as scene duration, but preserve the same teaching order and object-state progression.\n"
@@ -283,7 +284,7 @@ public final class CodeGenerationPrompts {
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Compact storyboard JSON:\n```json\n%s\n```\n\n"
                         + "Generate ONLY the GeoGebra code skeleton (setup section):\n"
-                        + "- Global coordinate and view settings if needed\n"
+                        + "- Global coordinate and view settings, including `SetCoordSystem(-7, 7, -4, 4)` unless already provided downstream\n"
                         + "- Shared base objects that persist across multiple scenes\n"
                         + "- A section comment header for each scene: %s\n\n"
                         + "Do NOT implement the scene-specific objects yet — just provide the global setup.\n"

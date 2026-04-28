@@ -287,13 +287,11 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             return;
         }
 
-        if (!isGeoGebraTarget()) {
-            for (StoryboardLayoutElement element : elements) {
-                String overflowSummary = summarizeOverflow(element.bounds);
-                if (overflowSummary != null) {
-                    issues.add(sceneLabel + ": object '" + element.objectId
-                            + "' extends outside the frame bounds (" + overflowSummary + ")");
-                }
+        for (StoryboardLayoutElement element : elements) {
+            String overflowSummary = summarizeOverflow(element.bounds);
+            if (overflowSummary != null) {
+                issues.add(sceneLabel + ": object '" + element.objectId
+                        + "' extends outside the frame bounds (" + overflowSummary + ")");
             }
         }
 
@@ -678,12 +676,6 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
 
     private boolean isBlank(String text) {
         return text == null || text.isBlank();
-    }
-
-    private boolean isGeoGebraTarget() {
-        return workflowConfig != null
-                ? workflowConfig.isGeoGebraTarget()
-                : WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equalsIgnoreCase(outputTarget);
     }
 
     private double round(double value) {

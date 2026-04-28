@@ -65,10 +65,11 @@ public final class CodeEvaluationPrompts {
                     + "- `geometry_constraints`: reflections, symmetry, collinearity, intersections, equal lengths, grids, partitions, constrained points, and derived objects use dependency-safe documented constructions.\n"
                     + "- `object_identity`: object ids/names remain stable, helpers are not mistaken for storyboard objects, and redundant duplicates on the same endpoints are avoided.\n"
                     + "- `layout_and_readability`: coordinates, labels, style, contrast, and initial view follow `layout_goal`, `safe_area_plan`, and `screen_overlay_plan` where applicable.\n"
+                    + "- `viewport_contract`: the initial visible coordinate window is treated as x[-7,7], y[-4,4]; important objects should fit this view without relying on user zooming or panning, and the construction should not be tiny or clustered inside an over-wide view.\n"
                     + "- `geogebra_syntax`: command names and syntax are documented in the attached GeoGebra manual, one executable command is used per line, and unsupported guessed overloads are not used.\n"
                     + "- `teaching_evidence`: result text or labels are supported by matching constructed geometry; no semantically wrong substitution such as drawing a border where a full grid was requested.\n"
                     + "- A later geometry-based stage will inspect rendered geometry for actual overlap/offscreen issues. Do not duplicate that stage.\n"
-                    + "- GeoGebra is interactive, so do not over-penalize pure zoomability issues. Focus on likely initial-view readability and storyboard fidelity.\n\n"
+                    + "- GeoGebra is interactive, but initial-view readability is mandatory. Focus on the default rendered view and storyboard fidelity.\n\n"
                     + REVIEW_OUTPUT_SCHEMA;
 
     private static final String REVISION_SYSTEM_MANIM =
@@ -95,6 +96,7 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
+                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
@@ -207,6 +209,7 @@ public final class CodeEvaluationPrompts {
                             + "Current GeoGebra command script:\n```geogebra\n%s\n```\n\n"
                             + "Rewrite the FULL command script to better match the storyboard, preserve dependency-safe geometry, correct scene visibility progression, and restore missing visual evidence requested by the storyboard.\n"
                             + "Preserve storyboard geometric invariants and the teaching goal.\n"
+                            + "Preserve the initial viewport contract with `SetCoordSystem(-7, 7, -4, 4)`, and fix layout by scaling/spreading/recentering the construction rather than relying on user zoom.\n"
                             + "Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n"
                             + "Return ONLY the full GeoGebra code block.",
                     sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode));

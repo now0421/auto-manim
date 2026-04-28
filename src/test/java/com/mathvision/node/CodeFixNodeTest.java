@@ -84,7 +84,7 @@ class CodeFixNodeTest {
 
     private CodeFixRequest buildRenderFailureRequest(String generatedCode) {
         CodeFixRequest request = new CodeFixRequest();
-        request.setSource(CodeFixSource.RENDER_FAILURE);
+        request.setSource(CodeFixSource.CODE_RENDER_FAILURE);
         request.setReturnAction(WorkflowActions.RETRY_RENDER);
         request.setGeneratedCode(generatedCode);
         request.setErrorReason("AttributeError: demo");

@@ -457,7 +457,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         RenderRetryState retryState = input.retryState();
 
         CodeFixRequest request = new CodeFixRequest();
-        request.setSource(CodeFixSource.RENDER_FAILURE);
+        request.setSource(CodeFixSource.CODE_RENDER_FAILURE);
         request.setReturnAction(WorkflowActions.RETRY_RENDER);
         request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(retryState.pendingFocusedError);
@@ -590,8 +590,8 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         CodeFixResult result = (CodeFixResult) ctx.get(WorkflowKeys.CODE_FIX_RESULT);
         if (result != null
                 && WorkflowActions.RETRY_RENDER.equals(result.getReturnAction())
-                && (result.getSource() == CodeFixSource.RENDER_FAILURE
-                || result.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION)) {
+                && (result.getSource() == CodeFixSource.CODE_RENDER_FAILURE
+                || result.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION)) {
             ctx.remove(WorkflowKeys.CODE_FIX_RESULT);
             return result;
         }
