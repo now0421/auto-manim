@@ -89,7 +89,12 @@ public final class GeoGebraValidationSupport {
             "SetConditionToShowObject",
             "SetVisibleInView",
             "SetCoordSystem",
-            "SetLevelOfDetail"
+            "SetLevelOfDetail",
+            "CenterView",
+            "SetValue",
+            "StartAnimation",
+            "ZoomIn",
+            "ZoomOut"
     );
 
     private static final Set<String> DOCUMENTED_TEXT_COMMANDS = orderedSet(

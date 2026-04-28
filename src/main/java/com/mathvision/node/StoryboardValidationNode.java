@@ -48,6 +48,20 @@ import java.util.concurrent.CompletionException;
 public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrative, String> {
 
     private static final Logger log = LoggerFactory.getLogger(StoryboardValidationNode.class);
+    private static final Set<String> GEOGEBRA_FOREGROUND_COLORS = Set.of(
+            "#111827", "#1F2937", "#0B3D91", "#1D4ED8", "#075985", "#0F766E",
+            "#166534", "#365314", "#7F1D1D", "#B91C1C", "#9F1239", "#831843",
+            "#581C87", "#6D28D9", "#7C2D12", "#92400E"
+    );
+    private static final Set<String> GEOGEBRA_BACKGROUND_COLORS = Set.of("WHITE", "#FFFFFF");
+    private static final Set<String> MANIM_FOREGROUND_COLORS = Set.of(
+            "WHITE", "BLUE", "GREEN", "YELLOW", "RED", "PURPLE", "PINK", "ORANGE", "TEAL", "GOLD",
+            "BLUE_A", "BLUE_B", "GREEN_A", "GREEN_B", "YELLOW_A", "YELLOW_B", "YELLOW_C",
+            "RED_A", "RED_B", "PURPLE_A", "PURPLE_B", "TEAL_A", "TEAL_B",
+            "GOLD_A", "GOLD_B", "GOLD_C", "MAROON_A", "MAROON_B", "LIGHT_PINK",
+            "PURE_RED", "PURE_GREEN", "PURE_BLUE", "PURE_YELLOW", "PURE_CYAN", "PURE_MAGENTA"
+    );
+    private static final Set<String> MANIM_BACKGROUND_COLORS = Set.of("BLACK");
     private static final double FRAME_MIN_X = -7.111111;
     private static final double FRAME_MAX_X = 7.111111;
     private static final double FRAME_MIN_Y = -4.0;
@@ -188,8 +202,118 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         }
 
         issues.addAll(validateAsciiText(storyboard));
+        issues.addAll(validateStoryboardColors(storyboard));
 
         return issues;
+    }
+
+    private List<String> validateStoryboardColors(Storyboard storyboard) {
+        List<String> issues = new ArrayList<>();
+        if (storyboard == null) {
+            return issues;
+        }
+        validateObjectColors("object_registry", storyboard.getObjectRegistry(), issues);
+        if (storyboard.getScenes() != null) {
+            for (int i = 0; i < storyboard.getScenes().size(); i++) {
+                StoryboardScene scene = storyboard.getScenes().get(i);
+                String sceneLabel = "scene " + (i + 1) + " (" + (scene != null ? scene.getSceneId() : null) + ")";
+                if (scene == null) {
+                    continue;
+                }
+                validateObjectColors(sceneLabel + " entering_objects", scene.getEnteringObjects(), issues);
+                validateObjectColors(sceneLabel + " persistent_objects", scene.getPersistentObjects(), issues);
+            }
+        }
+        return issues;
+    }
+
+    private void validateObjectColors(String context,
+                                      List<StoryboardObject> objects,
+                                      List<String> issues) {
+        if (objects == null || objects.isEmpty()) {
+            return;
+        }
+        for (StoryboardObject object : objects) {
+            if (object == null || object.getStyle() == null) {
+                continue;
+            }
+            String objectId = StoryboardPatchResolver.objectId(object);
+            for (Narrative.StoryboardStyle style : object.getStyle()) {
+                if (style == null || style.getProperties() == null) {
+                    continue;
+                }
+                validateColorProperties(context, objectId, style.getProperties(), "", issues);
+            }
+        }
+    }
+
+    private void validateColorProperties(String context,
+                                         String objectId,
+                                         Map<String, Object> properties,
+                                         String path,
+                                         List<String> issues) {
+        for (Map.Entry<String, Object> entry : properties.entrySet()) {
+            if (entry == null || entry.getKey() == null) {
+                continue;
+            }
+            String key = entry.getKey();
+            String childPath = path.isBlank() ? key : path + "." + key;
+            Object value = entry.getValue();
+            if (value instanceof Map<?, ?> nestedMap) {
+                Map<String, Object> stringKeyed = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> nestedEntry : nestedMap.entrySet()) {
+                    if (nestedEntry.getKey() != null) {
+                        stringKeyed.put(String.valueOf(nestedEntry.getKey()), nestedEntry.getValue());
+                    }
+                }
+                validateColorProperties(context, objectId, stringKeyed, childPath, issues);
+            } else if (value instanceof List<?> values) {
+                for (int i = 0; i < values.size(); i++) {
+                    validateColorValue(context, objectId, childPath + "[" + i + "]", values.get(i), issues);
+                }
+            } else {
+                validateColorValue(context, objectId, childPath, value, issues);
+            }
+        }
+    }
+
+    private void validateColorValue(String context,
+                                    String objectId,
+                                    String propertyPath,
+                                    Object rawValue,
+                                    List<String> issues) {
+        if (rawValue == null || propertyPath == null
+                || !propertyPath.toLowerCase(Locale.ROOT).contains("color")) {
+            return;
+        }
+        String color = String.valueOf(rawValue).trim();
+        if (color.isBlank()) {
+            return;
+        }
+        String normalized = color.toUpperCase(Locale.ROOT);
+        boolean backgroundProperty = propertyPath.toLowerCase(Locale.ROOT).contains("background")
+                || propertyPath.toLowerCase(Locale.ROOT).contains("backstroke");
+        boolean valid = WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equalsIgnoreCase(outputTarget)
+                ? isAllowedGeoGebraColor(normalized, backgroundProperty)
+                : isAllowedManimColor(normalized, backgroundProperty);
+        if (!valid) {
+            issues.add(context + ": object '" + objectId + "' uses unsupported color '" + color
+                    + "' at style." + propertyPath + " for output_target=" + outputTarget);
+        }
+    }
+
+    private boolean isAllowedGeoGebraColor(String color, boolean backgroundProperty) {
+        if (GEOGEBRA_FOREGROUND_COLORS.contains(color)) {
+            return true;
+        }
+        return backgroundProperty && GEOGEBRA_BACKGROUND_COLORS.contains(color);
+    }
+
+    private boolean isAllowedManimColor(String color, boolean backgroundProperty) {
+        if (MANIM_FOREGROUND_COLORS.contains(color)) {
+            return true;
+        }
+        return backgroundProperty && MANIM_BACKGROUND_COLORS.contains(color);
     }
 
     private List<String> validateAsciiText(Storyboard storyboard) {

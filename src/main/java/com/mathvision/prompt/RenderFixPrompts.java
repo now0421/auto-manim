@@ -23,6 +23,7 @@ public final class RenderFixPrompts {
                     + SystemPrompts.MANIM_NAMING_RULES
                     + "Color rules:\n"
                     + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS
+                    + SystemPrompts.MANIM_COLOR_RULES_BULLETS
                     + SystemPrompts.ANGLE_MARKER_RULES
                     + "Do not store mobjects across scene methods via `self`, do not hardcode MathTex numeric indexing, and keep layout inside x[-7,7], y[-4,4].\n\n"
                     + "Fix strategy:\n"
@@ -41,6 +42,7 @@ public final class RenderFixPrompts {
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "Color rules:\n"
                     + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS
+                    + SystemPrompts.GEOGEBRA_COLOR_RULES_BULLETS
                     + "If you must rename an identifier or introduce a new one, update the commented `SCENE_BUTTONS` script consistently so it still references the final object names.\n"
                     + "Do not output Python, JavaScript, or explanations.\n"
                     + "If a command currently returns false, correct the root cause and also proactively repair nearby dependent commands.\n"

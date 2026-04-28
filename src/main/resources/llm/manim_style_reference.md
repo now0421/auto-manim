@@ -1,13 +1,17 @@
 # Manim Style Reference
 
-Use this reference only for storyboard-level style planning. This stage does not write code; all style language must stay compatible with later Manim generation.
+Use this reference only for storyboard-level style planning. This stage does
+not write code; all style language must stay compatible with later Manim
+generation.
 
 ## Rules
 
-* Use only whitelisted Manim color constants.
+* Manim uses a black background by default.
+* Use only the project-approved Manim color constants listed below.
+* Do not use arbitrary hex colors, Manim color constants outside this reference,
+  CSS-style syntax, gradients, shadows, blur, or unsupported rendering terms.
 * Use concise, backend-friendly style properties.
 * Prefer structured properties over vague prose.
-* Avoid CSS-style syntax, hex colors, gradients, shadows, blur, and unsupported rendering terms.
 * Treat style as part of teaching, not decoration alone.
 * Assign colors to concepts, not random mobjects.
 * Keep one clear visual focus per scene.
@@ -15,11 +19,15 @@ Use this reference only for storyboard-level style planning. This stage does not
 
 ## 1. Allowed Color Constants
 
-Use only names from this whitelist in `color_scheme`, `color_palette`, object `style`, or scene notes.
+Use only names from this whitelist in `color_scheme`, `color_palette`, object
+`style`, or scene notes.
 
-Base colors:
+Background and readability treatment:
 
 * `BLACK`
+
+Foreground colors for the black Manim canvas:
+
 * `WHITE`
 * `BLUE`
 * `GREEN`
@@ -30,39 +38,25 @@ Base colors:
 * `ORANGE`
 * `TEAL`
 * `GOLD`
-* `MAROON`
-* `GRAY`
-* `GREY`
-* `DARK_BLUE`
-* `DARK_BROWN`
-* `DARK_GRAY`
-* `DARK_GREY`
-* `DARKER_GRAY`
-* `DARKER_GREY`
-* `LIGHT_BROWN`
-* `LIGHT_GRAY`
-* `LIGHT_GREY`
-* `LIGHTER_GRAY`
-* `LIGHTER_GREY`
+* `BLUE_A`
+* `BLUE_B`
+* `GREEN_A`
+* `GREEN_B`
+* `YELLOW_A`
+* `YELLOW_B`
+* `YELLOW_C`
+* `RED_A`
+* `RED_B`
+* `PURPLE_A`
+* `PURPLE_B`
+* `TEAL_A`
+* `TEAL_B`
+* `GOLD_A`
+* `GOLD_B`
+* `GOLD_C`
+* `MAROON_A`
+* `MAROON_B`
 * `LIGHT_PINK`
-* `GRAY_BROWN`
-* `GREY_BROWN`
-
-Variant families:
-
-* `BLUE_A`, `BLUE_B`, `BLUE_C`, `BLUE_D`, `BLUE_E`
-* `GREEN_A`, `GREEN_B`, `GREEN_C`, `GREEN_D`, `GREEN_E`
-* `YELLOW_A`, `YELLOW_B`, `YELLOW_C`, `YELLOW_D`, `YELLOW_E`
-* `RED_A`, `RED_B`, `RED_C`, `RED_D`, `RED_E`
-* `PURPLE_A`, `PURPLE_B`, `PURPLE_C`, `PURPLE_D`, `PURPLE_E`
-* `TEAL_A`, `TEAL_B`, `TEAL_C`, `TEAL_D`, `TEAL_E`
-* `GOLD_A`, `GOLD_B`, `GOLD_C`, `GOLD_D`, `GOLD_E`
-* `MAROON_A`, `MAROON_B`, `MAROON_C`, `MAROON_D`, `MAROON_E`
-* `GRAY_A`, `GRAY_B`, `GRAY_C`, `GRAY_D`, `GRAY_E`
-* `GREY_A`, `GREY_B`, `GREY_C`, `GREY_D`, `GREY_E`
-
-Pure colors:
-
 * `PURE_RED`
 * `PURE_GREEN`
 * `PURE_BLUE`
@@ -70,23 +64,19 @@ Pure colors:
 * `PURE_CYAN`
 * `PURE_MAGENTA`
 
-Logo colors:
-
-* `LOGO_BLACK`
-* `LOGO_WHITE`
-* `LOGO_BLUE`
-* `LOGO_GREEN`
-* `LOGO_RED`
+Do not use dark or low-contrast foreground colors such as `DARK_BLUE`,
+`DARK_GRAY`, `GRAY_E`, `BLUE_E`, `GREEN_E`, `PURPLE_E`, `MAROON_E`,
+`LOGO_BLACK`, or custom hex colors.
 
 ## 2. Safe Style Properties
 
 Use concise key-value properties that can later map to Manim styling code.
 
 ```text
-color            // overall color
-fill_color       // fill color
+color            // one allowed foreground color
+fill_color       // one allowed foreground color
 fill_opacity     // 0..1
-stroke_color     // stroke color
+stroke_color     // one allowed foreground color
 stroke_width     // numeric stroke width
 stroke_opacity   // 0..1
 opacity          // overall opacity
@@ -102,7 +92,8 @@ with later Manim code generation.
 ### Semantic Palette
 
 * `color_scheme` should map colors to roles or concepts, for example
-  "moving point = GREEN, fixed anchors = RED/BLUE, result highlight = YELLOW".
+  "moving point = GREEN_A, fixed anchors = RED_A/BLUE_A, result highlight =
+  YELLOW_B".
 * Keep the same concept in the same color across scenes.
 * Prefer a small consistent palette over many unrelated colors.
 
@@ -147,11 +138,13 @@ Do not keep every object at full opacity.
 
 When writing storyboard JSON:
 
-* `color_palette` should contain only whitelisted Manim color constants.
+* `color_palette` must contain only whitelisted Manim color constants from this
+  reference.
 * `color_scheme` should describe semantic mapping, not implementation details or
   raw code.
 * Object `style` should stay concise and implementation-friendly.
-* Prefer structured properties such as `color`, `fill_opacity`, and `stroke_width` over free-form style prose.
+* Prefer structured properties such as `color`, `fill_opacity`, and
+  `stroke_width` over free-form style prose.
 * Use `opacity`, `fill_opacity`, and `stroke_opacity` deliberately to encode
   hierarchy.
 * Use `font_size` to separate title, body, label, and caption roles.

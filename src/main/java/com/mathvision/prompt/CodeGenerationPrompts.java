@@ -51,6 +51,7 @@ public final class CodeGenerationPrompts {
                     + "- Use `ThreeDScene` only when needed and keep overlays fixed in frame when appropriate.\n"
                     + "- Keep content inside the readable safe frame and prefer stable anchors plus `arrange`/`next_to`.\n"
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES
+                    + "- " + SystemPrompts.MANIM_COLOR_RULES
                     + "- Do not place a free-floating arc by shifting/rotating it near the vertex, and do not accidentally mark a large exterior angle when the scene intends two small equal angles.\n"
                     + "Layout and camera rules:\n"
                     + "- Convert structured `placement`, `camera_anchor`, `camera_plan`, `safe_area_plan`, and `screen_overlay_plan` into concrete Manim layout and camera code.\n"
@@ -113,6 +114,7 @@ public final class CodeGenerationPrompts {
                     + "- Ignore timing-only details such as scene duration, but preserve the same teaching order and object-state progression.\n"
                     + "- Use style and visibility commands sparingly and semantically, and apply scripting commands after construction commands.\n"
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES
+                    + "- " + SystemPrompts.GEOGEBRA_COLOR_RULES
                     + "- Keep the script organized in scene order so downstream scene buttons can toggle the right visible objects.\n"
                     + "- If a requested visual effect would require a command not documented in the manual, re-express it with documented commands or omit that unsupported decoration.\n\n"
                     + "- Do not add specific GeoGebra command names from storyboard notes unless they are documented in the active syntax manual; implement unsupported effects generically with documented commands instead.\n"

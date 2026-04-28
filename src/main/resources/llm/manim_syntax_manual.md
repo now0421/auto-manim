@@ -502,11 +502,16 @@ for part in eq.submobjects:
 
 #### Project-Safe Color Constants
 
-Use only the following known-safe Manim color constants by default in this project.
+Manim uses a black background by default in this project. Use only the following
+project-approved foreground color constants unless a rule explicitly says a
+color is background-only.
 
-Base colors:
+Background and readability treatment:
 
 - `BLACK`
+
+Foreground colors:
+
 - `WHITE`
 - `BLUE`
 - `GREEN`
@@ -517,39 +522,15 @@ Base colors:
 - `ORANGE`
 - `TEAL`
 - `GOLD`
-- `MAROON`
-- `GRAY`
-- `GREY`
-- `DARK_BLUE`
-- `DARK_BROWN`
-- `DARK_GRAY`
-- `DARK_GREY`
-- `DARKER_GRAY`
-- `DARKER_GREY`
-- `LIGHT_BROWN`
-- `LIGHT_GRAY`
-- `LIGHT_GREY`
-- `LIGHTER_GRAY`
-- `LIGHTER_GREY`
 - `LIGHT_PINK`
-- `GRAY_BROWN`
-- `GREY_BROWN`
-
-Variant families:
-
-- `BLUE_A`, `BLUE_B`, `BLUE_C`, `BLUE_D`, `BLUE_E`
-- `GREEN_A`, `GREEN_B`, `GREEN_C`, `GREEN_D`, `GREEN_E`
-- `YELLOW_A`, `YELLOW_B`, `YELLOW_C`, `YELLOW_D`, `YELLOW_E`
-- `RED_A`, `RED_B`, `RED_C`, `RED_D`, `RED_E`
-- `PURPLE_A`, `PURPLE_B`, `PURPLE_C`, `PURPLE_D`, `PURPLE_E`
-- `TEAL_A`, `TEAL_B`, `TEAL_C`, `TEAL_D`, `TEAL_E`
-- `GOLD_A`, `GOLD_B`, `GOLD_C`, `GOLD_D`, `GOLD_E`
-- `MAROON_A`, `MAROON_B`, `MAROON_C`, `MAROON_D`, `MAROON_E`
-- `GRAY_A`, `GRAY_B`, `GRAY_C`, `GRAY_D`, `GRAY_E`
-- `GREY_A`, `GREY_B`, `GREY_C`, `GREY_D`, `GREY_E`
-
-Pure colors:
-
+- `BLUE_A`, `BLUE_B`
+- `GREEN_A`, `GREEN_B`
+- `YELLOW_A`, `YELLOW_B`, `YELLOW_C`
+- `RED_A`, `RED_B`
+- `PURPLE_A`, `PURPLE_B`
+- `TEAL_A`, `TEAL_B`
+- `GOLD_A`, `GOLD_B`, `GOLD_C`
+- `MAROON_A`, `MAROON_B`
 - `PURE_RED`
 - `PURE_GREEN`
 - `PURE_BLUE`
@@ -557,15 +538,8 @@ Pure colors:
 - `PURE_CYAN`
 - `PURE_MAGENTA`
 
-Logo colors:
-
-- `LOGO_BLACK`
-- `LOGO_WHITE`
-- `LOGO_BLUE`
-- `LOGO_GREEN`
-- `LOGO_RED`
-
-Use custom hex colors or `ManimColor(...)` only when the scene explicitly requires them.
+Do not use dark or low-contrast foreground colors, logo colors, custom hex
+colors, or `ManimColor(...)`.
 
 #### Fill, Stroke, Opacity, Style
 
@@ -608,15 +582,12 @@ square.set_style(
 )
 ```
 
-#### Gradients and Advanced Colors
+#### Color Helpers
 
 Syntax:
 
 ```python
-mob.set_color_by_gradient(color1, color2, ...)
 interpolate_color(color1, color2, alpha)
-ManimColor("#FF0000")
-rgb_to_color([r, g, b])
 color.lighter()
 color.darker()
 color.invert()
@@ -625,19 +596,16 @@ color.to_hex()
 color.to_rgb()
 color.to_hsv()
 color.interpolate(other, alpha)
-random_color()
-random_bright_color()
 ```
 
 Example:
 
 ```python
-text = Text("GRADIENT")
-text.set_color_by_gradient(RED, YELLOW, GREEN)
-
 mid = interpolate_color(BLUE, RED, 0.5)
-custom = ManimColor("#1a1a2e")
 ```
+
+Do not use arbitrary hex colors, `ManimColor(...)`, `rgb_to_color(...)`,
+`random_color()`, or `random_bright_color()` in generated project code.
 
 ### Coordinate Systems and Plotting
 

@@ -38,7 +38,7 @@ A = Point({0, 0})
 B = Point({4, 0})
 f(x) = x^2 - 2x + 1
 lineAB = Line(A, B)
-SetColor(lineAB, "Blue")
+SetColor(lineAB, "#1D4ED8")
 ```
 
 Use comments only outside executable command blocks. The runtime strips ordinary
@@ -468,8 +468,9 @@ Common 3D commands include `Plane`, `PerpendicularPlane`, `Sphere`, `Cylinder`,
 
 - Style commands do not create mathematical objects and should be applied after
   construction.
-- Prefer the color tokens in `geogebra_style_reference.md` or official hex
-  colors.
+- GeoGebra uses a white canvas by default. Use only the project-approved colors
+  in `geogebra_style_reference.md`; do not invent arbitrary hex colors or use
+  pale named colors.
 - Numeric RGB and opacity channels use the `0..1` scale, not `0..255`.
 - Use labels and captions sparingly; prefer labels for named points and short
   captions for lines, regions, or functions.
@@ -480,10 +481,7 @@ SetBackgroundColor( <Object>, <Red>, <Green>, <Blue> )
 SetBackgroundColor( <Object>, <"Color"> )
 SetBackgroundColor( <Red>, <Green>, <Blue> )         // active Graphics View; numeric channels use 0..1
 SetBackgroundColor( <"Color"> )                      // active Graphics View
-SetColor( <Object>, <"Color"> )
-SetColor( <Object>, <Red>, <Green>, <Blue> )         // numeric RGB uses the 0..1 scale
-SetColor( <Object>, <"#RRGGBB"> )
-SetColor( <Object>, <"#AARRGGBB"> )                  // AA + RGB
+SetColor( <Object>, <ProjectColor> )                 // use only colors from geogebra_style_reference.md
 SetDynamicColor( <Object>, <Red>, <Green>, <Blue> )
 SetDynamicColor( <Object>, <Red>, <Green>, <Blue>, <Opacity> ) // all numeric inputs use 0..1
 SetLineThickness( <Object>, <Number> )
@@ -518,8 +516,8 @@ SetLevelOfDetail( <Surface>, <Level of Detail> )     // 0 faster, 1 more accurat
 
 ```geogebra
 SetBackgroundColor("White")
-SetColor(lineAB, "Blue")
-SetColor(triangle, "#4E79A7")
+SetColor(lineAB, "#1D4ED8")
+SetColor(triangle, "#0F766E")
 SetDynamicColor(A, 1, 0, 0, 0.7)
 SetLineThickness(lineAB, 6)
 SetLineStyle(lineAB, 2)
@@ -565,9 +563,9 @@ construction itself when the layout is too compressed.
 f(x) = x^2
 g(x) = 2^x
 h(x) = e^x
-SetColor(f, "Blue")
-SetColor(g, "Red")
-SetColor(h, "Green")
+SetColor(f, "#1D4ED8")
+SetColor(g, "#B91C1C")
+SetColor(h, "#166534")
 SetLineThickness(f, 4)
 SetLineThickness(g, 4)
 SetLineThickness(h, 4)
@@ -591,9 +589,9 @@ circumcircle = Circle(A, B, C)
 centerO = Center(circumcircle)
 areaValue = Area(triangle)
 areaText = Text("area = " + areaValue, Point({0, -0.8}))
-SetColor(triangle, "#4E79A7")
+SetColor(triangle, "#0F766E")
 SetFilling(triangle, 0.18)
-SetColor(medianC, "Orange")
+SetColor(medianC, "#92400E")
 SetLineThickness(medianC, 5)
 SetPointSize(A, 5)
 SetPointSize(B, 5)
@@ -613,9 +611,9 @@ D = Point({0, 2})
 rectangle = RigidPolygon(A, B, C, D)
 angleSlider = Slider(-1.57, 1.57, 0.01, 1, 160, true, true, false, false)
 rotatedRectangle = Rotate(rectangle, angleSlider, A)
-SetColor(rectangle, "#A6CEE3")
+SetColor(rectangle, "#075985")
 SetFilling(rectangle, 0.2)
-SetColor(rotatedRectangle, "#FB9A99")
+SetColor(rotatedRectangle, "#B91C1C")
 SetFilling(rotatedRectangle, 0.25)
 ```
 
@@ -629,9 +627,9 @@ hyperbola1 = Hyperbola(F1, F2, 1.2)
 directrix = Line(Point({0, -2}), Point({1, -2}))
 focusP = Point({0, 2})
 parabola1 = Parabola(focusP, directrix)
-SetColor(ellipse1, "Blue")
-SetColor(hyperbola1, "Red")
-SetColor(parabola1, "Green")
+SetColor(ellipse1, "#1D4ED8")
+SetColor(hyperbola1, "#B91C1C")
+SetColor(parabola1, "#166534")
 SetLineThickness(ellipse1, 4)
 SetLineThickness(hyperbola1, 4)
 SetLineThickness(parabola1, 4)
@@ -647,8 +645,8 @@ boxPlot1 = BoxPlot(1, 0.5, data)
 dotPlot1 = DotPlot(data)
 meanText = Text("mean = " + meanValue, Point({10, 2}))
 medianText = Text("median = " + medianValue, Point({10, 1.5}))
-SetColor(boxPlot1, "Blue")
-SetColor(dotPlot1, "Red")
+SetColor(boxPlot1, "#1D4ED8")
+SetColor(dotPlot1, "#B91C1C")
 ```
 
 ## Extended Command Index
@@ -731,6 +729,6 @@ v = Vector(vPoint)
 triangle = Polygon(A, B, C)
 rectangle = Polygon(A, B, C, D)
 regularPentagon = Polygon(A, B, 5)
-SetColor(f, 1, 0, 0)
+SetColor(f, "#B91C1C")
 Rotate(A, pi / 4, B)
 ```

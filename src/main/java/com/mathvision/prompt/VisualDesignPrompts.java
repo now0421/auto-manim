@@ -110,10 +110,11 @@ public final class VisualDesignPrompts {
                     + SystemPrompts.VISUAL_PLANNING_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS
+                    + SystemPrompts.MANIM_COLOR_RULES_BULLETS
                     + "Manim visual-planning constraints:\n"
                     + "- " + SystemPrompts.MANIM_LAYOUT_FRAME_RULES.replace("\n", "\n- ").trim() + "\n"
                     + "- Use `scene_mode = 3d` only when depth is genuinely needed for the teaching goal.\n"
-                    + "- Prefer dark backgrounds (#1C1C1C to #2D2B55) with light content for maximum contrast and cinema feel.\n"
+                    + "- Use a black background with the project-approved bright foreground palette.\n"
                     + "- Prefer a stable world layout and meaningful transforms over repeatedly replacing the whole diagram.\n"
                     + "- Distinguish what should animate from what should stay static; motion is not mandatory.\n"
                     + "- The visual plan must be concrete enough for documented Manim constructs, with no hidden assumptions.\n"
@@ -145,6 +146,7 @@ public final class VisualDesignPrompts {
                     + SystemPrompts.VISUAL_PLANNING_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS + "\n"
+                    + SystemPrompts.GEOGEBRA_COLOR_RULES_BULLETS
                     + "Visual design principles:\n"
                     + "- Prefer direct visual reasoning over text-heavy explanation.\n"
                     + "- Keep the learner oriented around one stable construction when possible.\n"

@@ -162,6 +162,30 @@ public final class SystemPrompts {
     public static final String HIGH_CONTRAST_COLOR_RULES_BULLETS =
             "- " + HIGH_CONTRAST_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
 
+    public static final String GEOGEBRA_COLOR_RULES =
+            "GeoGebra uses a white canvas by default. Use only these project-approved foreground colors: "
+                    + "`#111827`, `#1F2937`, `#0B3D91`, `#1D4ED8`, `#075985`, `#0F766E`, "
+                    + "`#166534`, `#365314`, `#7F1D1D`, `#B91C1C`, `#9F1239`, `#831843`, "
+                    + "`#581C87`, `#6D28D9`, `#7C2D12`, `#92400E`.\n"
+                    + "Use `WHITE` or `#FFFFFF` only for the GeoGebra background, never for foreground strokes, labels, or fills.\n"
+                    + "Do not use yellow, gold, lime, cyan, light blue, light green, light orange, light yellow, light purple, pink, silver, light gray, or other pale colors on the white canvas.\n";
+
+    public static final String GEOGEBRA_COLOR_RULES_BULLETS =
+            "- " + GEOGEBRA_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
+
+    public static final String MANIM_COLOR_RULES =
+            "Manim uses a black background by default. Use only these project-approved foreground color constants: "
+                    + "`WHITE`, `BLUE`, `GREEN`, `YELLOW`, `RED`, `PURPLE`, `PINK`, `ORANGE`, "
+                    + "`TEAL`, `GOLD`, `BLUE_A`, `BLUE_B`, `GREEN_A`, `GREEN_B`, `YELLOW_A`, "
+                    + "`YELLOW_B`, `YELLOW_C`, `RED_A`, `RED_B`, `PURPLE_A`, `PURPLE_B`, "
+                    + "`TEAL_A`, `TEAL_B`, `GOLD_A`, `GOLD_B`, `GOLD_C`, `MAROON_A`, `MAROON_B`, `LIGHT_PINK`, "
+                    + "`PURE_RED`, `PURE_GREEN`, `PURE_BLUE`, `PURE_YELLOW`, `PURE_CYAN`, `PURE_MAGENTA`.\n"
+                    + "Use `BLACK` only for the Manim background or backstroke readability treatment, never as a foreground object color on the black canvas.\n"
+                    + "Do not use dark or low-contrast foreground colors such as `DARK_BLUE`, `DARK_GRAY`, `GRAY_E`, `BLUE_E`, `GREEN_E`, `PURPLE_E`, `MAROON_E`, `LOGO_BLACK`, or custom hex colors.\n";
+
+    public static final String MANIM_COLOR_RULES_BULLETS =
+            "- " + MANIM_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
+
     /** ASCII-only text rules for generated workflow artifacts. */
     public static final String ASCII_TEXT_RULES =
             "ASCII text rules:\n"
@@ -432,6 +456,7 @@ public final class SystemPrompts {
                     + "- Choose readable coordinates and label placement that respect `layout_goal`, `placement`, and `safe_area_plan`.\n"
                     + GEOGEBRA_VIEWPORT_RULES
                     + HIGH_CONTRAST_COLOR_RULES_BULLETS
+                    + GEOGEBRA_COLOR_RULES_BULLETS
                     + "- If the storyboard asks for an effect that would require an undocumented command, preserve the core geometry with documented commands only and do not invent syntax.\n";
 
     // ========================================================================
