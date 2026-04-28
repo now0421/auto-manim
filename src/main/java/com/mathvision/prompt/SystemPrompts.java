@@ -522,6 +522,7 @@ public final class SystemPrompts {
         return "Treat the attached Manim syntax manual as the authoritative whitelist.\n"
                 + "Use only classes, functions, methods, arguments, scene patterns, and code forms documented there.\n"
                 + "Never invent Manim APIs, guessed helper methods, unsupported keyword arguments, or private/internal shortcuts.\n"
+                + "Imported external libraries and aliases that appear in the code, such as `import numpy as np`, are allowed; do not flag calls like `np.array(...)` or `np.linalg.norm(...)` when the import is present.\n"
                 + "If the current code uses an undocumented or unstable API, replace it with a documented stable equivalent while preserving the scene intent.\n"
                 + "If a desired effect is not covered by the manual, simplify it with documented Manim constructs rather than guessing syntax.\n"
                 + "Documented instance methods (snake_case): `"

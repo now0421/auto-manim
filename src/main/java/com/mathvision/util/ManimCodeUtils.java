@@ -1,6 +1,7 @@
 package com.mathvision.util;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -32,9 +33,13 @@ public final class ManimCodeUtils {
             Pattern.DOTALL
     );
 
-    private static final Pattern MANIM_METHOD_CALL_PATTERN = Pattern.compile(
-            "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*\\.\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\("
+    private static final Pattern QUALIFIED_METHOD_CALL_PATTERN = Pattern.compile(
+            "\\b((?:[A-Za-z_][A-Za-z0-9_]*\\.)+)([A-Za-z_][A-Za-z0-9_]*)\\s*\\("
     );
+
+    private static final Pattern IMPORT_LINE_PATTERN = Pattern.compile("^\\s*import\\s+(.+)$");
+    private static final Pattern FROM_IMPORT_LINE_PATTERN = Pattern.compile(
+            "^\\s*from\\s+([A-Za-z_][A-Za-z0-9_\\.]*)\\s+import\\s+(.+)$");
 
     private static final Set<String> SKIPPED_RECEIVERS = Set.of(
             "self",
@@ -158,6 +163,7 @@ public final class ManimCodeUtils {
     static List<String> findAllUndocumentedManimMethodCalls(String manimCode) {
         List<String> evidences = new ArrayList<>();
         Set<String> documented = ManimValidationSupport.documentedInstanceMethodNames();
+        Set<String> importedReceivers = extractImportedReceivers(manimCode);
         String[] lines = manimCode.split("\\R");
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -169,20 +175,114 @@ public final class ManimCodeUtils {
                 continue;
             }
 
-            Matcher matcher = MANIM_METHOD_CALL_PATTERN.matcher(line);
+            Matcher matcher = QUALIFIED_METHOD_CALL_PATTERN.matcher(line);
             while (matcher.find()) {
                 String receiver = matcher.group(1);
                 String methodName = matcher.group(2);
-                if (receiver == null || SKIPPED_RECEIVERS.contains(receiver)) {
+                String receiverRoot = extractReceiverRoot(receiver);
+                if (receiverRoot == null
+                        || SKIPPED_RECEIVERS.contains(receiverRoot)
+                        || importedReceivers.contains(receiverRoot)) {
                     continue;
                 }
                 if (!documented.contains(methodName)) {
                     String fragment = trimmed.length() > 80 ? trimmed.substring(0, 80) + "..." : trimmed;
-                    evidences.add("line " + (i + 1) + ": " + receiver + "." + methodName + "() — " + fragment);
+                    evidences.add("line " + (i + 1) + ": " + receiver + "." + methodName + "() - " + fragment);
                 }
             }
         }
         return evidences;
+    }
+
+    private static Set<String> extractImportedReceivers(String manimCode) {
+        Set<String> receivers = new LinkedHashSet<>(SKIPPED_RECEIVERS);
+        if (manimCode == null || manimCode.isBlank()) {
+            return receivers;
+        }
+
+        String[] lines = manimCode.split("\\R");
+        for (String rawLine : lines) {
+            if (rawLine == null) {
+                continue;
+            }
+            String line = rawLine.trim();
+            if (line.startsWith("#")) {
+                continue;
+            }
+
+            Matcher importMatcher = IMPORT_LINE_PATTERN.matcher(line);
+            if (importMatcher.matches()) {
+                addImportedModuleAliases(receivers, importMatcher.group(1));
+                continue;
+            }
+
+            Matcher fromImportMatcher = FROM_IMPORT_LINE_PATTERN.matcher(line);
+            if (fromImportMatcher.matches()) {
+                addImportedNames(receivers, fromImportMatcher.group(2));
+            }
+        }
+        return receivers;
+    }
+
+    private static void addImportedModuleAliases(Set<String> receivers, String importClause) {
+        if (importClause == null || importClause.isBlank()) {
+            return;
+        }
+
+        for (String segment : importClause.split(",")) {
+            String alias = extractImportAlias(segment);
+            if (!alias.isBlank()) {
+                receivers.add(alias);
+            }
+        }
+    }
+
+    private static void addImportedNames(Set<String> receivers, String importClause) {
+        if (importClause == null || importClause.isBlank()) {
+            return;
+        }
+
+        for (String segment : importClause.split(",")) {
+            String alias = extractImportAlias(segment);
+            if (!alias.isBlank()) {
+                receivers.add(alias);
+            }
+        }
+    }
+
+    private static String extractImportAlias(String importToken) {
+        if (importToken == null) {
+            return "";
+        }
+        String normalized = importToken.trim();
+        if (normalized.isEmpty()) {
+            return "";
+        }
+
+        int aliasIndex = normalized.indexOf(" as ");
+        if (aliasIndex >= 0) {
+            return normalized.substring(aliasIndex + 4).trim();
+        }
+
+        int dotIndex = normalized.indexOf('.');
+        if (dotIndex >= 0) {
+            return normalized.substring(0, dotIndex).trim();
+        }
+
+        return normalized;
+    }
+
+    private static String extractReceiverRoot(String receiver) {
+        if (receiver == null || receiver.isBlank()) {
+            return null;
+        }
+
+        String normalized = receiver.trim();
+        int dotIndex = normalized.indexOf('.');
+        if (dotIndex >= 0) {
+            return normalized.substring(0, dotIndex).trim();
+        }
+        return normalized;
     }
 
     static List<String> validateTextConstructorSemantics(String manimCode) {
@@ -276,7 +376,7 @@ public final class ManimCodeUtils {
         if (token.matches(".*[\\u2200-\\u22FF\\u0391-\\u03C9].*")) {
             return true;
         }
-        return token.contains("鈥") || token.contains("'");
+        return token.contains("’") || token.contains("'");
     }
 
     private static boolean looksLikePlainSentence(String content) {

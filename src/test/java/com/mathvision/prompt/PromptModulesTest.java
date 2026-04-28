@@ -15,6 +15,7 @@ class PromptModulesTest {
         assertTrue(prompt.contains("semantically wrong placements"));
         assertTrue(prompt.contains("angle arcs"));
         assertTrue(prompt.contains("labels attached to the wrong point or segment"));
+        assertTrue(prompt.contains("np.array(...)"));
     }
 
     @Test

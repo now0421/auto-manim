@@ -160,6 +160,27 @@ class ManimCodeUtilsTest {
     }
 
     @Test
+    void validateManimRules_allowsImportedExternalModuleCalls() {
+        String code = "from manim import *\nimport numpy as np\nimport math\n\nclass MainScene(Scene):\n"
+                + "    def construct(self):\n"
+                + "        point = Dot(np.array([0, 0, 0]))\n"
+                + "        length = np.linalg.norm(point.get_center())\n"
+                + "        angle = math.atan2(1, 1)\n"
+                + "        self.wait(0.5)";
+        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        assertTrue(violations.stream().noneMatch(v -> v.contains("Static rule violation")));
+    }
+
+    @Test
+    void validateManimRules_flagsUnimportedExternalModuleCalls() {
+        String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
+                + "        point = Dot(np.array([0, 0, 0]))";
+        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        assertTrue(violations.stream().anyMatch(v -> v.contains("Static rule violation")
+                && v.contains("np.array")));
+    }
+
+    @Test
     void validateManimRules_detectsOtherUndocumentedMethods() {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        mob.apply_over_attr_arrays(func)";
