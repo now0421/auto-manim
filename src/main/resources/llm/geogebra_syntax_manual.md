@@ -694,6 +694,37 @@ Useful text commands include `Text`, `FormulaText`, `FractionText`,
 `Length`, `IndexOf`, `ReplaceAll`, `Split`, `Take`, `LetterToUnicode`,
 `UnicodeToLetter`, `TextToUnicode`, and `UnicodeToText`.
 
+### Text Card with Background Box
+
+When the storyboard specifies a `text_card` with `background_box` styling,
+GeoGebra has no single command for a bordered text card. Build it by combining
+documented objects: a `Polygon` (or `RigidPolygon`) rectangle for the
+background, `SetFilling` for the fill, `SetColor` for the border, and a `Text`
+object positioned over the rectangle. There is no `SetFontSize` command;
+control text size through the `Text(...)` command's own parameters or accept
+the default font size.
+
+```geogebra
+cardBgTL = Point({-3, 2})
+cardBgTR = Point({1, 2})
+cardBgBR = Point({1, 0.5})
+cardBgBL = Point({-3, 0.5})
+cardBg = Polygon(cardBgTL, cardBgTR, cardBgBR, cardBgBL)
+SetFilling(cardBg, 0.85)
+SetColor(cardBg, "#1F2937")
+SetLineThickness(cardBg, 2)
+cardLabel = Text("AP + PB = ...", Midpoint(cardBgTL, cardBgBR))
+SetColor(cardLabel, "#FFFFFF")
+SetFixed(cardBgTL, true)
+SetFixed(cardBgTR, true)
+SetFixed(cardBgBR, true)
+SetFixed(cardBgBL, true)
+```
+
+Do not invent commands such as `SetFontSize`, `BackgroundBox`, `Card`, or
+`SetBorder`. Use only the documented `Polygon` + `SetFilling` + `SetColor` +
+`Text` combination shown above.
+
 ## 3D Commands
 
 Use 3D commands only when the requested output needs a spatial figure. A 2D
@@ -1021,6 +1052,8 @@ blue thick segment AB
 Polygons#sym:Polygons
 SetColor(f, 255, 0, 0)
 Rotate(A, 45deg, B)
+SetFontSize(label, 18)
+BackgroundBox(label)
 ```
 
 Use these replacements:
@@ -1035,3 +1068,7 @@ regularPentagon = Polygon(A, B, 5)
 SetColor(f, "#B91C1C")
 Rotate(A, pi / 4, B)
 ```
+
+For `SetFontSize` and `BackgroundBox` there is no single-command replacement;
+use the Text Card with Background Box pattern (Polygon + SetFilling + SetColor
++ Text) described in the Text section above.

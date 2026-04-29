@@ -584,6 +584,7 @@ public final class SystemPrompts {
                 + "Never invent aliases, tool names, guessed overloads, shorthand assignments, or undocumented commands.\n"
                 + "If the current script contains an undocumented command, replace it with a documented equivalent or remove the unsupported decoration while preserving the construction.\n"
                 + "If a requested effect is not covered by the manual, re-express it with documented commands or omit that effect rather than guessing syntax.\n"
+                + "When replacing an undocumented command that provides a visual effect (such as font sizing, background boxes, or card styling), you must re-express that effect using a combination of documented commands that achieves equivalent visual results; never remove the effect entirely without providing a documented replacement.\n"
                 + "Documented construction commands: `"
                 + String.join("`, `", GeoGebraValidationSupport.documentedConstructionCommandNames())
                 + "`.\n"

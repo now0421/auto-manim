@@ -194,6 +194,65 @@ class CodeEvaluationNodeTest {
         assertTrue(request.getStoryboardJson().contains("\"layout_goal\""));
     }
 
+    @Test
+    void evaluationFixReasonExtractsCleanSummariesWithoutDuplication() {
+        String issue = "Static rule violation: undocumented GeoGebra command "
+                + "(line 1: SetFontSize() - SetFontSize(label, 18))";
+
+        CodeResult codeResult = new CodeResult(
+                "SetFontSize(label, 18)",
+                "GeoGebraFigure",
+                "geogebra",
+                "Demo concept",
+                "Test code evaluation");
+
+        CodeEvaluationResult.StaticAnalysis analysis = new CodeEvaluationResult.StaticAnalysis();
+        analysis.setFindings(List.of(new CodeEvaluationResult.StaticFinding(
+                "geogebra_syntax",
+                "fail",
+                issue,
+                issue)));
+
+        CodeEvaluationResult.ReviewSnapshot review = new CodeEvaluationResult.ReviewSnapshot();
+        review.setRuleChecks(List.of(new CodeEvaluationResult.RuleCheck(
+                "geogebra_syntax", issue, "fail", issue)));
+        review.setBlockingIssues(List.of(issue));
+
+        CodeEvaluationResult result = new CodeEvaluationResult();
+        result.setApprovedForRender(false);
+        result.setSceneName("GeoGebraFigure");
+        result.setGateReason(issue);
+        result.setFinalStaticAnalysis(analysis);
+        result.setFinalReview(review);
+
+        CodeEvaluationNode.EvaluationFixState fixState = new CodeEvaluationNode.EvaluationFixState();
+        fixState.setRequestFix(true);
+        CodeEvaluationNode.CodeEvaluationInput input = new CodeEvaluationNode.CodeEvaluationInput(
+                codeResult,
+                buildNarrative(),
+                createWorkflowConfig(),
+                null,
+                null,
+                fixState);
+
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        String action = new CodeEvaluationNode().post(ctx, input, result);
+
+        assertEquals(WorkflowActions.FIX_CODE, action);
+        com.mathvision.model.CodeFixRequest request =
+                (com.mathvision.model.CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
+        assertNotNull(request);
+        String errorReason = request.getErrorReason();
+        // No [evidence:] tags — LLM sees the full JSON already
+        assertFalse(errorReason.contains("[evidence:"));
+        // No "Gate summary:" prefix — same data is extracted from structured objects
+        assertFalse(errorReason.contains("Gate summary:"));
+        // The same issue text appears only once across findings + ruleChecks + blockingIssues
+        assertEquals(errorReason.indexOf(issue), errorReason.lastIndexOf(issue));
+        // The error reason contains the issue summary
+        assertTrue(errorReason.contains(issue));
+    }
+
     private static Map<String, Object> buildContext(AiClient aiClient, String code) {
         return buildContext(aiClient, code, buildNarrative());
     }

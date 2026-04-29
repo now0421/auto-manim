@@ -377,8 +377,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         request.setSource(CodeFixSource.CODE_EVALUATION_REVIEW);
         request.setReturnAction(WorkflowActions.RETRY_CODE_EVALUATION);
         request.setGeneratedCode(codeResult.getGeneratedCode());
-        request.setErrorReason(buildDetailedEvaluationFixReason(
-                codeResult.getGeneratedCode(),
+        request.setErrorReason(buildEvaluationFixReason(
                 result.getFinalStaticAnalysis(),
                 result.getFinalReview(),
                 result.getGateReason()));
@@ -394,122 +393,53 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         return request;
     }
 
-    private String buildDetailedEvaluationFixReason(String generatedCode,
-                                                    StaticAnalysis analysis,
-                                                    ReviewSnapshot review,
-                                                    String gateReason) {
+    /**
+     * Build a concise error reason from the same data sources as staticAnalysisJson
+     * and reviewJson, so the LLM sees consistent information without duplication.
+     * Only extracts summaries/requirements — evidence and code snippets are already
+     * available to the LLM in the full JSON payloads.
+     */
+    private String buildEvaluationFixReason(StaticAnalysis analysis,
+                                            ReviewSnapshot review,
+                                            String gateReason) {
         List<String> reasons = new ArrayList<>();
-        if (gateReason != null && !gateReason.isBlank()) {
-            reasons.add("Gate summary: " + gateReason.trim());
-        }
 
+        // 1. Fail/warn finding summaries (same objects serialized as staticAnalysisJson)
         if (analysis != null && analysis.getFindings() != null) {
             for (StaticFinding finding : analysis.getFindings()) {
-                if (!"fail".equalsIgnoreCase(finding.getSeverity())
-                        && !"warn".equalsIgnoreCase(finding.getSeverity())) {
-                    continue;
+                if ("fail".equalsIgnoreCase(finding.getSeverity())
+                        || "warn".equalsIgnoreCase(finding.getSeverity())) {
+                    addReason(reasons, finding.getSummary());
                 }
-
-                StringBuilder item = new StringBuilder();
-                item.append(finding.getSummary());
-                if (finding.getEvidence() != null && !finding.getEvidence().isBlank()) {
-                    item.append(" [evidence: ").append(finding.getEvidence().trim()).append("]");
-                }
-
-                List<String> snippets = extractRelevantCodeEvidence(generatedCode, finding.getRuleId());
-                if (!snippets.isEmpty()) {
-                    item.append(" [code: ").append(String.join(" | ", snippets)).append("]");
-                }
-                reasons.add(item.toString());
             }
         }
 
-        if (review != null && review.getBlockingIssues() != null) {
+        // 2. Failed rule check requirements + blocking issues (same objects serialized as reviewJson)
+        if (review != null) {
             if (review.getRuleChecks() != null) {
                 for (RuleCheck check : review.getRuleChecks()) {
-                    if (!isFailedRuleCheck(check)) {
-                        continue;
+                    if (isFailedRuleCheck(check)) {
+                        String summary = check.getRequirement();
+                        if (summary == null || summary.isBlank()) {
+                            summary = check.getRuleId();
+                        }
+                        addReason(reasons, summary);
                     }
-                    StringBuilder item = new StringBuilder("Failed rule");
-                    if (check.getRuleId() != null && !check.getRuleId().isBlank()) {
-                        item.append(" `").append(check.getRuleId().trim()).append("`");
-                    }
-                    if (check.getRequirement() != null && !check.getRequirement().isBlank()) {
-                        item.append(": ").append(check.getRequirement().trim());
-                    }
-                    if (check.getEvidence() != null && !check.getEvidence().isBlank()) {
-                        item.append(" [evidence: ").append(check.getEvidence().trim()).append("]");
-                    }
-                    reasons.add(item.toString());
                 }
             }
-            for (String issue : review.getBlockingIssues()) {
-                if (issue == null || issue.isBlank()) {
-                    continue;
+            if (review.getBlockingIssues() != null) {
+                for (String issue : review.getBlockingIssues()) {
+                    addReason(reasons, issue);
                 }
-                reasons.add("Review blocking issue: " + issue.trim());
             }
+        }
+
+        // 3. Fallback to gateReason when no structured reasons were found
+        if (reasons.isEmpty() && gateReason != null && !gateReason.isBlank()) {
+            reasons.add(gateReason.trim());
         }
 
         return String.join("\n", reasons);
-    }
-
-    private List<String> extractRelevantCodeEvidence(String generatedCode, String ruleId) {
-        List<String> snippets = new ArrayList<>();
-        if (generatedCode == null || generatedCode.isBlank() || ruleId == null || ruleId.isBlank()) {
-            return snippets;
-        }
-
-        List<Pattern> patterns = patternsForRule(ruleId);
-        if (patterns.isEmpty()) {
-            return snippets;
-        }
-
-        String[] lines = generatedCode.split("\\R");
-        for (int i = 0; i < lines.length && snippets.size() < 3; i++) {
-            String line = lines[i];
-            for (Pattern pattern : patterns) {
-                if (pattern.matcher(line).find()) {
-                    String snippet = line.trim();
-                    if (snippet.length() > 140) {
-                        snippet = snippet.substring(0, 140) + "...";
-                    }
-                    snippets.add("line " + (i + 1) + ": " + snippet);
-                    break;
-                }
-            }
-        }
-
-        return snippets;
-    }
-
-    private List<Pattern> patternsForRule(String ruleId) {
-        List<Pattern> patterns = new ArrayList<>();
-        switch (ruleId) {
-            case "weak_transform_continuity":
-                patterns.add(FADE_IN_PATTERN);
-                patterns.add(FADE_OUT_PATTERN);
-                patterns.add(TRANSFORM_PATTERN);
-                patterns.add(ANIMATE_PATTERN);
-                break;
-            case "three_d_scene_required":
-            case "three_d_camera_plan_missing":
-            case "three_d_camera_motion_missing":
-                patterns.add(THREE_D_OBJECT_PATTERN);
-                patterns.add(CAMERA_ORIENTATION_PATTERN);
-                patterns.add(CAMERA_MOTION_PATTERN);
-                break;
-            case "three_d_overlay_missing":
-            case "three_d_overlay_unfixed":
-                patterns.add(TEXT_PATTERN);
-                patterns.add(MATH_TEX_PATTERN);
-                patterns.add(FIXED_IN_FRAME_PATTERN);
-                patterns.add(FIXED_ORIENTATION_PATTERN);
-                break;
-            default:
-                break;
-        }
-        return patterns;
     }
 
     private boolean passesGate(ReviewSnapshot review, StaticAnalysis analysis) {
