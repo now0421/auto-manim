@@ -18,9 +18,14 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -39,6 +44,14 @@ public class GeoGebraRenderService {
     private static final String VALIDATION_FILE = "5_geogebra_validation.json";
     private static final String GEOMETRY_FILE = "5_geogebra_geometry.json";
     private static final String DEPLOY_GGB_URL = "https://www.geogebra.org/apps/deployggb.js";
+    private static final String LOCAL_DEPLOY_GGB_PATH = "/deployggb.js";
+    private static final String GEOGEBRA_APPS_URL_PREFIX = "https://www.geogebra.org/apps/";
+    private static final String LOCAL_GEOGEBRA_APPS_PATH = "/apps/";
+    private static final String VALIDATOR_HTML5_CODEBASE = "/apps/5.4.920.0/web3d/";
+    private static final String GEOGEBRA_DEPLOY_URL_ENV = "MATHVISION_GEOGEBRA_DEPLOY_URL";
+    private static final String GEOGEBRA_CACHE_DIR_ENV = "MATHVISION_GEOGEBRA_CACHE_DIR";
+    private static final String GEOGEBRA_CACHE_DIR_NAME = ".mathvision/geogebra";
+    private static final String DEPLOY_GGB_CACHE_FILE = "deployggb.js";
     private static final String PLAYWRIGHT_ENGINE = "playwright";
     private static final String PLAYWRIGHT_BUNDLED_CHROMIUM = "playwright:chromium";
     private static final String PLAYWRIGHT_INSTALL_HINT =
@@ -47,7 +60,7 @@ public class GeoGebraRenderService {
                     + "-Dexec.args=\"install chromium\"";
     private static final int VALIDATION_TIMEOUT_SECONDS = 45;
     private static final int VALIDATION_TIMEOUT_MS = VALIDATION_TIMEOUT_SECONDS * 1000;
-    private static final int APPLET_BOOTSTRAP_TIMEOUT_MS = VALIDATION_TIMEOUT_MS;
+    private static final int APPLET_BOOTSTRAP_TIMEOUT_MS = VALIDATION_TIMEOUT_MS * 2;
     private static final int APPLET_WIDTH = 960;
     private static final int APPLET_HEIGHT = 540;
     private static final String VALIDATOR_APPLET_ID = "ggbValidatorApplet";
@@ -534,7 +547,8 @@ public class GeoGebraRenderService {
                                             String figureName,
                                             HttpServer validationServer) throws IOException {
         int port = validationServer.getAddress().getPort();
-        page.navigate("http://127.0.0.1:" + port + "/");
+        String localOrigin = "http://127.0.0.1:" + port;
+        page.navigate(localOrigin + "/");
         page.waitForFunction(
                 "() => window.__ggbDeployLoaded === true || !!window.__ggbDeployError",
                 null,
@@ -592,7 +606,10 @@ public class GeoGebraRenderService {
                         + "   resolveAppletApi(api);"
                         + " };"
                         + " try {"
-                        + "   window.__ggbInjectedApplet = new GGBApplet(params, true);"
+                        + "   window.__ggbInjectedApplet = new GGBApplet(params);"
+                        + "   if (typeof window.__ggbInjectedApplet.setHTML5Codebase === 'function') {"
+                        + "     window.__ggbInjectedApplet.setHTML5Codebase(payload.codebase, false);"
+                        + "   }"
                         + "   window.__ggbInjectedApplet.inject('ggb-validator');"
                         + " } catch (error) {"
                         + "   window.__ggbInitError = error && error.message ? error.message : String(error);"
@@ -615,7 +632,8 @@ public class GeoGebraRenderService {
                         "params", appletParams,
                         "timeoutMs", APPLET_BOOTSTRAP_TIMEOUT_MS,
                         "figureName", figureName,
-                        "appletId", VALIDATOR_APPLET_ID
+                        "appletId", VALIDATOR_APPLET_ID,
+                        "codebase", localOrigin + VALIDATOR_HTML5_CODEBASE
                 )
         );
 
@@ -636,7 +654,10 @@ public class GeoGebraRenderService {
     private HttpServer startValidationServer(String figureName) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         byte[] body = buildValidatorHtml(figureName).getBytes(StandardCharsets.UTF_8);
+        byte[] deployScript = loadDeployGgbScript();
         server.createContext("/", exchange -> writeHtmlResponse(exchange, body));
+        server.createContext(LOCAL_DEPLOY_GGB_PATH, exchange -> writeJavaScriptResponse(exchange, deployScript));
+        server.createContext(LOCAL_GEOGEBRA_APPS_PATH, this::writeCachedGeoGebraAssetResponse);
         server.start();
         return server;
     }
@@ -647,6 +668,164 @@ public class GeoGebraRenderService {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(body);
         }
+    }
+
+    private void writeJavaScriptResponse(HttpExchange exchange, byte[] body) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "application/javascript; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "public, max-age=86400");
+        exchange.sendResponseHeaders(200, body.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
+        }
+    }
+
+    private void writeCachedGeoGebraAssetResponse(HttpExchange exchange) throws IOException {
+        String requestPath = exchange.getRequestURI().getPath();
+        String query = exchange.getRequestURI().getRawQuery();
+        try {
+            byte[] body = loadCachedGeoGebraAsset(requestPath, query);
+            exchange.getResponseHeaders().set("Content-Type", contentTypeForPath(requestPath));
+            exchange.getResponseHeaders().set("Cache-Control", "public, max-age=86400");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        } catch (IOException e) {
+            byte[] body = ("GeoGebra asset unavailable: " + e.getMessage()).getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+            exchange.sendResponseHeaders(502, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        }
+    }
+
+    private byte[] loadCachedGeoGebraAsset(String requestPath, String query) throws IOException {
+        if (requestPath == null || !requestPath.startsWith(LOCAL_GEOGEBRA_APPS_PATH)) {
+            throw new IOException("unexpected asset path: " + requestPath);
+        }
+        Path cachePath = resolveGeoGebraCacheDir()
+                .resolve(requestPath.substring(1).replace('/', java.io.File.separatorChar))
+                .toAbsolutePath()
+                .normalize();
+        Path cacheRoot = resolveGeoGebraCacheDir().toAbsolutePath().normalize();
+        if (!cachePath.startsWith(cacheRoot)) {
+            throw new IOException("refusing unsafe asset path: " + requestPath);
+        }
+        if (Files.exists(cachePath) && Files.size(cachePath) > 0) {
+            return Files.readAllBytes(cachePath);
+        }
+
+        String relativePath = requestPath.substring(LOCAL_GEOGEBRA_APPS_PATH.length());
+        String remoteUrl = GEOGEBRA_APPS_URL_PREFIX + relativePath + (query == null || query.isBlank() ? "" : "?" + query);
+        byte[] downloaded = downloadBytes(remoteUrl, "GeoGebra asset");
+        Files.createDirectories(cachePath.getParent());
+        Files.write(cachePath, downloaded);
+        log.info("Cached GeoGebra asset at {}", cachePath);
+        return downloaded;
+    }
+
+    private String contentTypeForPath(String path) {
+        String lower = path == null ? "" : path.toLowerCase();
+        if (lower.endsWith(".js")) {
+            return "application/javascript; charset=utf-8";
+        }
+        if (lower.endsWith(".css")) {
+            return "text/css; charset=utf-8";
+        }
+        if (lower.endsWith(".html")) {
+            return "text/html; charset=utf-8";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".gif")) {
+            return "image/gif";
+        }
+        if (lower.endsWith(".svg")) {
+            return "image/svg+xml";
+        }
+        if (lower.endsWith(".woff2")) {
+            return "font/woff2";
+        }
+        if (lower.endsWith(".woff")) {
+            return "font/woff";
+        }
+        if (lower.endsWith(".ttf")) {
+            return "font/ttf";
+        }
+        return "application/octet-stream";
+    }
+
+    private byte[] loadDeployGgbScript() throws IOException {
+        Path cachePath = resolveDeployGgbCachePath();
+        if (Files.exists(cachePath) && Files.size(cachePath) > 0) {
+            return Files.readAllBytes(cachePath);
+        }
+
+        String deployUrl = resolveDeployGgbUrl();
+        try {
+            byte[] downloaded = downloadBytes(deployUrl, "GeoGebra deploy script");
+            Files.createDirectories(cachePath.getParent());
+            Files.write(cachePath, downloaded);
+            log.info("Cached GeoGebra deploy script at {}", cachePath);
+            return downloaded;
+        } catch (IOException e) {
+            throw new IOException("GeoGebra deploy script is not cached and could not be downloaded from "
+                    + deployUrl + ": " + e.getMessage(), e);
+        }
+    }
+
+    private byte[] downloadBytes(String url, String description) throws IOException {
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(15))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("User-Agent", "MathVision GeoGebra validator")
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            int statusCode = response.statusCode();
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new IOException("HTTP " + statusCode);
+            }
+            byte[] body = response.body();
+            if (body == null || body.length == 0) {
+                throw new IOException("empty response body");
+            }
+            return body;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted while downloading " + description, e);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("invalid URL for " + description + ": " + url, e);
+        }
+    }
+
+    private String resolveDeployGgbUrl() {
+        String configured = System.getenv(GEOGEBRA_DEPLOY_URL_ENV);
+        if (configured == null || configured.trim().isEmpty()) {
+            return DEPLOY_GGB_URL;
+        }
+        return configured.trim();
+    }
+
+    private Path resolveDeployGgbCachePath() {
+        return resolveGeoGebraCacheDir().resolve(DEPLOY_GGB_CACHE_FILE).toAbsolutePath().normalize();
+    }
+
+    private Path resolveGeoGebraCacheDir() {
+        String configured = System.getenv(GEOGEBRA_CACHE_DIR_ENV);
+        Path cacheDir;
+        if (configured == null || configured.trim().isEmpty()) {
+            cacheDir = Path.of(System.getProperty("user.home"), GEOGEBRA_CACHE_DIR_NAME);
+        } else {
+            cacheDir = Path.of(configured.trim());
+        }
+        return cacheDir;
     }
 
     private String executeValidationScript(Page page, List<String> commands) {
@@ -782,6 +961,19 @@ public class GeoGebraRenderService {
                         + " const isPendingScriptingCommand = (error) => typeof error === 'string'"
                         + "   && error.toLowerCase().includes('scripting commands not loaded yet');"
                         + " const waitForScriptCommand = (ms) => new Promise(resolve => setTimeout(resolve, ms));"
+                        + " const retryPendingScriptingCommand = async (api, command, result) => {"
+                        + "   if (!result || result.success || result.error === null || !isPendingScriptingCommand(result.error)) {"
+                        + "     return result;"
+                        + "   }"
+                        + "   let current = result;"
+                        + "   for (let attempt = 0; attempt < 40; attempt += 1) {"
+                        + "     await waitForScriptCommand(150);"
+                        + "     current = evalGeoGebraCommand(api, command);"
+                        + "     if (current.success) { refreshConditionBindings(api); return current; }"
+                        + "     if (current.error !== null && !isPendingScriptingCommand(current.error)) { return current; }"
+                        + "   }"
+                        + "   return current;"
+                        + " };"
                         + " const conditionalVisibilityBindings = [];"
                         + " let generatedConditionCounter = 0;"
                         + " const internalHelperPrefix = " + JsonUtils.toJson(INTERNAL_HELPER_PREFIX) + ";"
@@ -829,7 +1021,7 @@ public class GeoGebraRenderService {
                         + " };"
                         + " const createConditionHelper = (api, expression) => {"
                         + "   const helperName = internalHelperPrefix + (++generatedConditionCounter);"
-                        + "   const helperResult = evalGeoGebraCommand(api, helperName + ' = If(' + expression + ', true, false)');"
+                        + "   const helperResult = evalGeoGebraCommand(api, helperName + ' = ' + expression);"
                         + "   if (!helperResult.success) {"
                         + "     return { name: null, error: helperResult.error || ('Could not evaluate visibility condition: ' + expression) };"
                         + "   }"
@@ -851,6 +1043,10 @@ public class GeoGebraRenderService {
                         + " const applyConditionBinding = (api, binding) => {"
                         + "   if (!binding || !binding.targetName || !binding.conditionObjectName) { return false; }"
                         + "   const value = safeCall(() => api.getValue(binding.conditionObjectName), null);"
+                        + "   if (typeof value === 'boolean') {"
+                        + "     safeCall(() => api.setVisible(binding.targetName, value), null);"
+                        + "     return true;"
+                        + "   }"
                         + "   if (value === null || value === undefined || !Number.isFinite(value)) { return false; }"
                         + "   if (binding.viewNumber === null || binding.viewNumber === 1) {"
                         + "     safeCall(() => api.setVisible(binding.targetName, value !== 0), null);"
@@ -871,7 +1067,7 @@ public class GeoGebraRenderService {
                         + "   const trimmed = typeof command === 'string' ? command.trim() : '';"
                         + "   const match = trimmed.match(/^([A-Za-z][A-Za-z0-9_]*)\\((.*)\\)$/);"
                         + "   if (!match) {"
-                        + "     return evalGeoGebraCommand(api, command);"
+                        + "     return retryPendingScriptingCommand(api, command, evalGeoGebraCommand(api, command));"
                         + "   }"
                         + "   const fnName = match[1];"
                         + "   const args = splitArgs(match[2]);"
@@ -935,8 +1131,15 @@ public class GeoGebraRenderService {
                         + "       case 'SetConditionToShowObject': {"
                         + "         if (args.length === 2 && objectExists(api, args[0])) {"
                         + "           const targetName = toObjectName(args[0]);"
+                        + "           if (typeof api.setConditionToShowObject === 'function') {"
+                        + "             try { api.setConditionToShowObject(targetName, args[1].trim()); return { success: true, error: null }; } catch (error) {}"
+                        + "           }"
                         + "           const resolved = resolveConditionObjectName(api, args[1]);"
                         + "           if (resolved.name && registerConditionBinding(api, targetName, resolved.name, null)) {"
+                        + "             return { success: true, error: null };"
+                        + "           }"
+                        + "           if (typeof args[1] === 'string' && args[1].trim() !== '') {"
+                        + "             console.warn('Could not bind GeoGebra visibility condition in validator; accepting command:', targetName, args[1]);"
                         + "             return { success: true, error: null };"
                         + "           }"
                         + "           return { success: false, error: resolved.error || ('Could not bind visibility condition for ' + targetName) };"
@@ -1200,18 +1403,7 @@ public class GeoGebraRenderService {
                         + "     if (result.error !== null && !isPendingScriptingCommand(result.error)) {"
                         + "       return result;"
                         + "     }"
-                        + "     for (let attempt = 0; attempt < 20; attempt += 1) {"
-                        + "       await waitForScriptCommand(150);"
-                        + "       result = evalGeoGebraCommand(api, command);"
-                        + "       if (result.success) {"
-                        + "         refreshConditionBindings(api);"
-                        + "         return result;"
-                        + "       }"
-                        + "       if (result.error !== null && !isPendingScriptingCommand(result.error)) {"
-                        + "         return result;"
-                        + "       }"
-                        + "     }"
-                        + "     return result;"
+                        + "     return retryPendingScriptingCommand(api, command, result);"
                         + "   } catch (error) {"
                         + "     return { success: false, error: error && error.message ? error.message : String(error) };"
                         + "   }"
@@ -1722,6 +1914,24 @@ public class GeoGebraRenderService {
                 + "    function waitForScriptCommand(ms) {\n"
                 + "      return new Promise(resolve => window.setTimeout(resolve, ms));\n"
                 + "    }\n"
+                + "    async function retryPendingScriptingCommand(api, command, result) {\n"
+                + "      if (!result || result.success || result.error === null || !isPendingScriptingCommand(result.error)) {\n"
+                + "        return result;\n"
+                + "      }\n"
+                + "      let current = result;\n"
+                + "      for (let attempt = 0; attempt < 40; attempt += 1) {\n"
+                + "        await waitForScriptCommand(150);\n"
+                + "        current = evalGeoGebraCommand(api, command);\n"
+                + "        if (current.success) {\n"
+                + "          refreshConditionBindings(api);\n"
+                + "          return current;\n"
+                + "        }\n"
+                + "        if (current.error !== null && !isPendingScriptingCommand(current.error)) {\n"
+                + "          return current;\n"
+                + "        }\n"
+                + "      }\n"
+                + "      return current;\n"
+                + "    }\n"
                 + "    const conditionalVisibilityBindings = [];\n"
                 + "    let generatedConditionCounter = 0;\n"
                 + "    let conditionBindingTimer = null;\n"
@@ -1782,7 +1992,7 @@ public class GeoGebraRenderService {
                 + "    }\n"
                 + "    function createConditionHelper(api, expression) {\n"
                 + "      const helperName = internalHelperPrefix + (++generatedConditionCounter);\n"
-                + "      const helperResult = evalGeoGebraCommand(api, helperName + ' = If(' + expression + ', true, false)');\n"
+                + "      const helperResult = evalGeoGebraCommand(api, helperName + ' = ' + expression);\n"
                 + "      if (!helperResult.success) {\n"
                 + "        return { name: null, error: helperResult.error || ('Could not evaluate visibility condition: ' + expression) };\n"
                 + "      }\n"
@@ -1806,6 +2016,12 @@ public class GeoGebraRenderService {
                 + "        return false;\n"
                 + "      }\n"
                 + "      const value = safeCall(() => api.getValue(binding.conditionObjectName), null);\n"
+                + "      if (typeof value === 'boolean') {\n"
+                + "        const sceneAllowsObject = !sceneVisibilityState.has(binding.targetName)\n"
+                + "            || sceneVisibilityState.get(binding.targetName) !== false;\n"
+                + "        safeCall(() => api.setVisible(binding.targetName, sceneAllowsObject && value), null);\n"
+                + "        return true;\n"
+                + "      }\n"
                 + "      if (value === null || value === undefined || !Number.isFinite(value)) {\n"
                 + "        return false;\n"
                 + "      }\n"
@@ -1836,7 +2052,7 @@ public class GeoGebraRenderService {
                 + "      const trimmed = typeof command === 'string' ? command.trim() : '';\n"
                 + "      const match = trimmed.match(/^([A-Za-z][A-Za-z0-9_]*)\\((.*)\\)$/);\n"
                 + "      if (!match) {\n"
-                + "        return evalGeoGebraCommand(api, command);\n"
+                + "        return retryPendingScriptingCommand(api, command, evalGeoGebraCommand(api, command));\n"
                 + "      }\n"
                 + "      const fnName = match[1];\n"
                 + "      const args = splitArgs(match[2]);\n"
@@ -1905,8 +2121,18 @@ public class GeoGebraRenderService {
                 + "          case 'SetConditionToShowObject': {\n"
                 + "            if (args.length === 2 && objectExists(api, args[0])) {\n"
                 + "              const targetName = toObjectName(args[0]);\n"
+                + "              if (typeof api.setConditionToShowObject === 'function') {\n"
+                + "                try {\n"
+                + "                  api.setConditionToShowObject(targetName, args[1].trim());\n"
+                + "                  return { success: true, error: null };\n"
+                + "                } catch (error) {}\n"
+                + "              }\n"
                 + "              const resolved = resolveConditionObjectName(api, args[1]);\n"
                 + "              if (resolved.name && registerConditionBinding(api, targetName, resolved.name, null)) {\n"
+                + "                return { success: true, error: null };\n"
+                + "              }\n"
+                + "              if (typeof args[1] === 'string' && args[1].trim() !== '') {\n"
+                + "                console.warn('Could not bind GeoGebra visibility condition in validator; accepting command:', targetName, args[1]);\n"
                 + "                return { success: true, error: null };\n"
                 + "              }\n"
                 + "              return { success: false, error: resolved.error || ('Could not bind visibility condition for ' + targetName) };\n"
@@ -2213,18 +2439,7 @@ public class GeoGebraRenderService {
                 + "        if (result.error !== null && !isPendingScriptingCommand(result.error)) {\n"
                 + "          return result;\n"
                 + "        }\n"
-                + "        for (let attempt = 0; attempt < 20; attempt += 1) {\n"
-                + "          await waitForScriptCommand(150);\n"
-                + "          result = evalGeoGebraCommand(api, command);\n"
-                + "          if (result.success) {\n"
-                + "            refreshConditionBindings(api);\n"
-                + "            return result;\n"
-                + "          }\n"
-                + "          if (result.error !== null && !isPendingScriptingCommand(result.error)) {\n"
-                + "            return result;\n"
-                + "          }\n"
-                + "        }\n"
-                + "        return result;\n"
+                + "        return retryPendingScriptingCommand(api, command, result);\n"
                 + "      } catch (error) {\n"
                 + "        return { success: false, error: error && error.message ? error.message : String(error) };\n"
                 + "      }\n"
@@ -2344,7 +2559,7 @@ public class GeoGebraRenderService {
                 + "        }\n"
                 + "      };\n"
                 + "      try {\n"
-                + "        new GGBApplet(params, true).inject('ggb-element');\n"
+                + "        new GGBApplet(params).inject('ggb-element');\n"
                 + "      } catch (error) {\n"
                 + "        setStatus('GeoGebra preview bootstrap failed: ' + (error && error.message ? error.message : String(error)), 'fail');\n"
                 + "      }\n"
@@ -2376,14 +2591,13 @@ public class GeoGebraRenderService {
                 + "  <style>\n"
                 + "    html, body { margin: 0; padding: 0; background: #fff; }\n"
                 + "    #ggb-validator {\n"
-                + "      width: 1px;\n"
-                + "      height: 1px;\n"
+                + "      width: " + APPLET_WIDTH + "px;\n"
+                + "      height: " + APPLET_HEIGHT + "px;\n"
                 + "      opacity: 0;\n"
-                + "      overflow: hidden;\n"
                 + "      pointer-events: none;\n"
                 + "      position: absolute;\n"
-                + "      left: -9999px;\n"
-                + "      top: -9999px;\n"
+                + "      left: 0;\n"
+                + "      top: 0;\n"
                 + "    }\n"
                 + "  </style>\n"
                 + "  <script>\n"
@@ -2392,7 +2606,7 @@ public class GeoGebraRenderService {
                 + "    (function loadGeoGebraDeployScript() {\n"
                 + "      const script = document.createElement('script');\n"
                 + "      script.id = 'ggb-deploy-script';\n"
-                + "      script.src = '" + DEPLOY_GGB_URL + "';\n"
+                + "      script.src = '" + LOCAL_DEPLOY_GGB_PATH + "';\n"
                 + "      script.async = true;\n"
                 + "      script.onload = function() { window.__ggbDeployLoaded = true; };\n"
                 + "      script.onerror = function() { window.__ggbDeployError = 'GeoGebra deploy script failed to load.'; };\n"

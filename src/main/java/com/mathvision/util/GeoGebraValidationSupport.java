@@ -171,9 +171,12 @@ public final class GeoGebraValidationSupport {
     );
 
     private static final Set<String> DOCUMENTED_3D_COMMANDS = orderedSet(
+            "Axes",
             "Sphere",
             "Cylinder",
+            "InfiniteCylinder",
             "Cone",
+            "InfiniteCone",
             "Prism",
             "Pyramid",
             "Cube",
@@ -186,8 +189,18 @@ public final class GeoGebraValidationSupport {
             "Top",
             "Bottom",
             "Ends",
+            "Side",
             "Volume",
-            "Height"
+            "Height",
+            "Radius",
+            "Circumference",
+            "CircularArc",
+            "CircularSector",
+            "CircumcircularArc",
+            "CircumcircularSector",
+            "InteriorAngles",
+            "IntersectConic",
+            "PlaneBisector"
     );
 
     private static final Set<String> DOCUMENTED_PROBABILITY_COMMANDS = orderedSet(
@@ -312,6 +325,12 @@ public final class GeoGebraValidationSupport {
             "RootList"
     );
 
+    private static final Set<String> DOCUMENTED_TRANSFORMATION_COMMANDS = orderedSet(
+            "Stretch",
+            "Shear",
+            "ApplyMatrix"
+    );
+
     private static final Set<String> DOCUMENTED_COMMANDS;
 
     static {
@@ -327,6 +346,7 @@ public final class GeoGebraValidationSupport {
         commands.addAll(DOCUMENTED_STATISTICS_COMMANDS);
         commands.addAll(DOCUMENTED_CHART_COMMANDS);
         commands.addAll(DOCUMENTED_LIST_COMMANDS);
+        commands.addAll(DOCUMENTED_TRANSFORMATION_COMMANDS);
         DOCUMENTED_COMMANDS = Collections.unmodifiableSet(commands);
     }
 
@@ -386,6 +406,10 @@ public final class GeoGebraValidationSupport {
 
     public static Set<String> documentedListCommandNames() {
         return DOCUMENTED_LIST_COMMANDS;
+    }
+
+    public static Set<String> documentedTransformationCommandNames() {
+        return DOCUMENTED_TRANSFORMATION_COMMANDS;
     }
 
     public static boolean isDocumentedCommandName(String commandName) {

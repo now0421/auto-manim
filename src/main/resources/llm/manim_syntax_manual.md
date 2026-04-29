@@ -9,6 +9,8 @@ This manual targets **Manim Community Edition (CE)**.
 
 ## Code Organization
 
+Syntax:
+
 ```python
 class MyScene(Scene):
     def construct(self):
@@ -56,6 +58,8 @@ class MyScene(Scene):
 Use this section as the minimal scene-level context before reading the core syntax blocks.
 
 ### Scene Classes
+
+Syntax:
 
 ```python
 class MyScene(Scene): ...
@@ -128,6 +132,8 @@ class Intro(Scene):
 
 ### Multiple Scenes in One File
 
+Syntax:
+
 ```python
 class Scene1(Scene):
     def construct(self):
@@ -150,6 +156,8 @@ Syntax:
 
 ```python
 Dot(point=..., radius=..., color=...)
+AnnotationDot(point=..., radius=..., color=...)
+LabeledDot(label, point=..., radius=..., color=...)
 Circle(radius=..., color=..., fill_opacity=...)
 Ellipse(width=..., height=...)
 Square(side_length=...)
@@ -158,14 +166,21 @@ RoundedRectangle(width=..., height=..., corner_radius=...)
 Triangle()
 RegularPolygon(n=...)
 Polygon(*points)
+Polygram(*vertex_groups)
+LabeledPolygram(label, *vertex_groups)
 Star(n=..., outer_radius=..., inner_radius=..., density=...)
 RegularPolygram(n=..., radius=...)
 Arc(radius=..., start_angle=..., angle=...)
 ArcBetweenPoints(start, end, angle=...)
+ArcPolygon(*vertices, angle=...)
+ArcPolygonFromArcs(*arcs)
+CubicBezier(anchor1, handle1, handle2, anchor2)
+TangentialArc(radius=..., alpha=..., d_alpha=...)
 Sector(radius=..., start_angle=..., angle=...)
 Annulus(inner_radius=..., outer_radius=...)
 AnnularSector(inner_radius=..., outer_radius=..., start_angle=..., angle=...)
 Cutout(base_shape, *holes)
+ConvexHull(*points)
 Dot3D(point=..., color=...)
 ```
 
@@ -302,6 +317,8 @@ Syntax:
 ```python
 SurroundingRectangle(mobject, color=..., buff=..., corner_radius=..., stroke_width=...)
 BackgroundRectangle(mobject, fill_opacity=..., buff=..., color=...)
+FullScreenRectangle(**kwargs)
+ScreenRectangle(height=...)
 ```
 
 Example:
@@ -321,13 +338,23 @@ MarkupText(markup, font_size=...)
 Tex(*tex_strings, tex_template=...)
 MathTex(*tex_strings, substrings_to_isolate=..., tex_to_color_map=..., tex_environment=...)
 DecimalNumber(value, num_decimal_places=..., include_sign=...)
+Integer(number=..., **kwargs)
 Variable(value, label, num_decimal_places=...)
+Title(*text_parts, include_underline=True)
+Paragraph(*lines, alignment=..., line_spacing=...)
 BulletedList(*items, font_size=...)
 Code(code_file=..., language=..., tab_width=..., font_size=...)
 Table(data, row_labels=..., col_labels=...)
+DecimalTable(table, element_to_mobject_config=...)
+IntegerTable(table, element_to_mobject_config=...)
+MathTable(table, element_to_mobject_config=...)
+MobjectTable(table, element_to_mobject_config=...)
+Matrix(values, left_bracket=..., right_bracket=...)
 IntegerMatrix(values, left_bracket=..., right_bracket=...)
 DecimalMatrix(values, element_to_mobject_config=...)
 MobjectMatrix(values)
+ArcBrace(arc, direction=...)
+BraceText(mobject, text, direction=...)
 SVGMobject(file_name, height=..., width=...)
 ImageMobject(filename_or_array, scale_to_resolution=...)
 mobject.set_color_by_tex(substring, color)
@@ -634,9 +661,12 @@ Syntax:
 Axes(x_range=..., y_range=..., x_length=..., y_length=..., axis_config=...)
 NumberPlane()
 NumberLine(x_range=..., length=..., include_numbers=True)
+UnitInterval(**kwargs)
 ComplexPlane().add_coordinates()
 PolarPlane(radius_max=...).add_coordinates()
 ThreeDAxes(x_range=..., y_range=..., z_range=...)
+FunctionGraph(function, x_range=..., color=...)
+ImplicitFunction(func, x_range=..., y_range=...)
 axes.get_x_axis_label(label)
 axes.get_y_axis_label(label)
 axes3d.get_x_axis_label(label)
@@ -742,6 +772,7 @@ Syntax:
 
 ```python
 BarChart(values, bar_names=..., y_range=..., bar_colors=...)
+SampleSpace()
 chart.change_bar_values(values, update_colors=True)
 chart.get_bar_labels(font_size=...)
 
@@ -1197,6 +1228,12 @@ Cylinder(radius=..., height=...)
 Cone(base_radius=..., height=...)
 Torus(major_radius=..., minor_radius=...)
 Tetrahedron()
+Dodecahedron()
+Icosahedron()
+Octahedron()
+Polyhedron(vertex_coords=..., faces_list=...)
+ConvexHull3D(*points)
+ThreeDVMobject()
 Arrow3D(start=..., end=..., color=...)
 Line3D(start=..., end=..., color=...)
 Dot3D(point=..., color=...)
@@ -1427,6 +1464,23 @@ manim render --help
 
 #### `manim.cfg`
 
+Syntax:
+
+```ini
+[CLI]
+quality = ...
+preview = ...
+frame_rate = ...
+format = ...
+media_dir = ...
+
+[renderer]
+background_color = ...
+
+[tex]
+tex_template_file = ...
+```
+
 Example:
 
 ```ini
@@ -1445,6 +1499,8 @@ tex_template_file = custom_template.tex
 ```
 
 Programmatic config:
+
+Syntax:
 
 ```python
 config.pixel_width = 1920

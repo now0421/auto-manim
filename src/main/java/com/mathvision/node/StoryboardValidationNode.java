@@ -400,7 +400,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             String key = entry.getKey();
             String childPath = path.isBlank() ? key : path + "." + key;
             Object value = entry.getValue();
-            if (value instanceof Map<?, ?> nestedMap) {
+            if (value instanceof Map<?, ?>) {
+                Map<?, ?> nestedMap = (Map<?, ?>) value;
                 Map<String, Object> stringKeyed = new LinkedHashMap<>();
                 for (Map.Entry<?, ?> nestedEntry : nestedMap.entrySet()) {
                     if (nestedEntry.getKey() != null) {
@@ -408,7 +409,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                     }
                 }
                 validateColorProperties(context, objectId, stringKeyed, childPath, issues);
-            } else if (value instanceof List<?> values) {
+            } else if (value instanceof List<?>) {
+                List<?> values = (List<?>) value;
                 for (int i = 0; i < values.size(); i++) {
                     validateColorValue(context, objectId, childPath + "[" + i + "]", values.get(i), issues);
                 }

@@ -212,6 +212,30 @@ Prefer named functions. Use plain assignments for ordinary functions and use
 commands when a restricted domain, sampled curve, tangent, or derived object is
 needed.
 
+```text
+Function( <Function>, <Start x-Value>, <End x-Value> )
+Curve( <Expression>, <Expression>, <Parameter Variable>, <Start>, <End> )
+Derivative( <Function> )
+Derivative( <Function>, <Number> )
+Integral( <Function>, <Start x-Value>, <End x-Value> )
+IntegralBetween( <Function>, <Function>, <Start x-Value>, <End x-Value> )
+Limit( <Function>, <Value> )
+LimitAbove( <Function>, <Value> )
+LimitBelow( <Function>, <Value> )
+Root( <Function> )
+Root( <Function>, <Start x-Value> )
+Roots( <Function> )
+Extremum( <Function> )
+InflectionPoint( <Polynomial> )
+Tangent( <Point>, <Function> )
+TaylorPolynomial( <Function>, <x-Value>, <Order Number> )
+Spline( <List of Points> )
+ImplicitCurve( <Equation> )
+SlopeField( <f(x, y)> )
+If( <Condition>, <Then> )
+If( <Condition>, <Then>, <Else> )
+```
+
 ```geogebra
 quadratic(x) = x^2 - 4
 sineWave(x) = sin(x)
@@ -245,6 +269,20 @@ taylorNearZero = TaylorPolynomial(sin(x), 0, 5)
 Build helper objects explicitly and name them. This makes later style, labels,
 visibility, and scene directives stable.
 
+```text
+Midpoint( <Point>, <Point> )
+Polyline( <Point>, ..., <Point> )
+PerpendicularLine( <Point>, <Line> )
+PerpendicularBisector( <Segment> )
+AngleBisector( <Point>, <Point>, <Point> )
+Incircle( <Point>, <Point>, <Point> )
+Locus( <Point Creating Locus Line>, <Point> )
+LocusEquation( <Locus> )
+TriangleCenter( <Point>, <Point>, <Point>, <Number> )
+IntersectPath( <Object>, <Object> )
+Perimeter( <Polygon> )
+```
+
 ```geogebra
 A = Point({0, 0})
 B = Point({4, 0})
@@ -257,7 +295,7 @@ midAB = Midpoint(A, B)
 medianC = Segment(C, midAB)
 circumcircle = Circle(A, B, C)
 centerO = Center(circumcircle)
-altitudeC = Line(C, Line(A, B))
+altitudeC = PerpendicularLine(C, Line(A, B))
 ```
 
 For perpendicular, parallel, angle-bisector, and tangent constructions, use
@@ -277,6 +315,25 @@ tangentToCircle = Tangent(A, circumcircle)
 Use `Circle(...)` for circles, then use conic-specific commands when the task
 really needs ellipses, parabolas, hyperbolas, foci, directrices, axes, or
 eccentricity.
+
+```text
+Conic( <Point>, <Point>, <Point>, <Point>, <Point> )
+Ellipse( <Focus>, <Focus>, <SemiMajorAxis Length> )
+Hyperbola( <Focus>, <Focus>, <SemiMajorAxis Length> )
+Parabola( <Focus>, <Directrix> )
+Focus( <Conic> )
+Directrix( <Parabola> )
+Eccentricity( <Conic> )
+MajorAxis( <Conic> )
+MinorAxis( <Conic> )
+SemiMajorAxisLength( <Conic> )
+SemiMinorAxisLength( <Conic> )
+Vertex( <Conic> )
+Polar( <Point>, <Conic> )
+Sector( <Conic>, <Point>, <Point> )
+Semicircle( <Point>, <Point> )
+OsculatingCircle( <Point>, <Function> )
+```
 
 ```geogebra
 F1 = Point({-2, 0})
@@ -323,6 +380,13 @@ dilatedTriangle = Dilate(triangle, 1.5, A)
 Additional transformation commands include `Stretch`, `Shear`, and
 `ApplyMatrix`. Use them only when the mathematical transformation is clear.
 
+```text
+Stretch( <Object>, <Vector> )
+Stretch( <Object>, <Line>, <Ratio> )
+Shear( <Object>, <Line>, <Ratio> )
+ApplyMatrix( <Matrix>, <Object> )
+```
+
 ## Dependency
 
 ```text
@@ -364,6 +428,38 @@ CAS commands are useful for symbolic annotations, but geometric drawings should
 not depend on ambiguous symbolic results unless they are named and then used
 explicitly.
 
+```text
+Solve( <Equation> )
+Solve( <List of Equations>, <List of Variables> )
+Solutions( <Equation> )
+NSolve( <Equation> )
+NSolve( <List of Equations>, <List of Variables> )
+NSolutions( <Equation> )
+CSolve( <Equation> )
+CSolutions( <Equation> )
+Factor( <Polynomial> )
+Expand( <Expression> )
+Simplify( <Expression> )
+Substitute( <Expression>, <Substitution List> )
+Eliminate( <List of Polynomials>, <List of Variables> )
+Numeric( <Expression> )
+CompleteSquare( <Quadratic Function> )
+Polynomial( <Function> )
+Coefficients( <Polynomial> )
+Degree( <Polynomial> )
+Numerator( <Function> )
+Denominator( <Function> )
+LeftSide( <Equation> )
+RightSide( <Equation> )
+GCD( <Number>, <Number> )
+LCM( <Number>, <Number> )
+Mod( <Dividend Number>, <Divisor Number> )
+IsPrime( <Number> )
+PrimeFactors( <Number> )
+Rationalize( <Number> )
+PartialFractions( <Function> )
+```
+
 ```geogebra
 expanded = Expand((x + 1)^3)
 factored = Factor(x^2 - 1)
@@ -380,9 +476,73 @@ Common CAS and algebra commands include `Solve`, `Solutions`, `NSolve`,
 `Coefficients`, `Degree`, `Numerator`, `Denominator`, `LeftSide`, `RightSide`,
 `GCD`, `LCM`, `Mod`, `IsPrime`, `PrimeFactors`, and `Rationalize`.
 
+## Probability and Randomness
+
+Use probability commands for distribution curves, probability values, inverse
+quantiles, and small randomized examples. Keep random values named so the scene
+can be inspected after rendering.
+
+```text
+Normal( <Mean>, <Standard Deviation>, <Variable Value> )
+Normal( <Mean>, <Standard Deviation>, x, <Boolean Cumulative> )
+BinomialDist( <Number of Trials>, <Probability of Success> )
+BinomialDist( <Number of Trials>, <Probability of Success>, <Variable Value>, <Boolean Cumulative> )
+Poisson( <Mean> )
+Poisson( <Mean>, <Variable Value>, <Boolean Cumulative> )
+Uniform( <Lower Bound>, <Upper Bound>, x, <Boolean Cumulative> )
+RandomBetween( <Minimum Integer>, <Maximum Integer> )
+RandomNormal( <Mean>, <Standard Deviation> )
+RandomUniform( <Minimum>, <Maximum> )
+RandomBinomial( <Number of Trials>, <Probability> )
+RandomPoisson( <Mean> )
+InverseNormal( <Mean>, <Standard Deviation>, <Probability> )
+InverseBinomial( <Number of Trials>, <Probability of Success>, <Probability> )
+TDistribution( <Degrees of Freedom>, x, <Boolean Cumulative> )
+ChiSquared( <Degrees of Freedom>, x, <Boolean Cumulative> )
+FDistribution( <Numerator Degrees of Freedom>, <Denominator Degrees of Freedom>, x, <Boolean Cumulative> )
+```
+
+```geogebra
+normalDensity = Normal(0, 1, x, false)
+normalCumulative = Normal(0, 1, 1.96, true)
+binomialDistribution = BinomialDist(10, 0.5)
+randomSample = RandomBetween(1, 6)
+criticalValue = InverseNormal(0, 1, 0.975)
+```
+
 ## Statistics
 
 Lists use braces. Name important datasets and computed values separately.
+
+```text
+Mean( <List of Raw Data> )
+Median( <List of Raw Data> )
+Mode( <List of Numbers> )
+SD( <List of Raw Data> )
+SampleSD( <List of Raw Data> )
+Variance( <List of Raw Data> )
+SampleVariance( <List of Raw Data> )
+Quartile1( <List of Raw Data> )
+Quartile3( <List of Raw Data> )
+Percentile( <List of Raw Data>, <Percent> )
+MAD( <List of Raw Data> )
+CorrelationCoefficient( <List of Points> )
+Covariance( <List of Points> )
+Spearman( <List of Points> )
+Fit( <List of Points>, <List of Functions> )
+FitLine( <List of Points> )
+FitLineX( <List of Points> )
+FitPoly( <List of Points>, <Degree of Polynomial> )
+FitExp( <List of Points> )
+FitLog( <List of Points> )
+FitPow( <List of Points> )
+FitSin( <List of Points> )
+RSquare( <List of Points>, <Function> )
+SumSquaredErrors( <List of Points>, <Function> )
+TTest( <List of Sample Data>, <Hypothesized Mean> )
+ZMeanTest( <List of Sample Data>, <Standard Deviation>, <Hypothesized Mean> )
+ChiSquaredTest( <Matrix> )
+```
 
 ```geogebra
 data = {12, 15, 18, 22, 25, 28, 30}
@@ -416,6 +576,23 @@ Useful statistics commands include `Mean`, `Median`, `Mode`, `SD`,
 GeoGebra charts are appropriate for simple mathematical visuals. For rich
 business charts, prefer the project's ECharts path instead of GeoGebra.
 
+```text
+BarChart( <List of Data> )
+BoxPlot( <yOffset>, <yScale>, <List of Raw Data> )
+DotPlot( <List of Raw Data> )
+FrequencyPolygon( <List of Class Boundaries>, <List of Heights> )
+FrequencyTable( <List of Raw Data> )
+Histogram( <List of Class Boundaries>, <List of Heights> )
+HistogramRight( <List of Class Boundaries>, <List of Heights> )
+LineGraph( <List of x-coordinates>, <List of y-coordinates> )
+NormalQuantilePlot( <List of Raw Data> )
+PieChart( <List of Frequencies> )
+ResidualPlot( <List of Points>, <Function> )
+StemPlot( <List> )
+StepGraph( <List of Points> )
+StickGraph( <List of Points> )
+```
+
 ```geogebra
 barData = {10, 20, 15, 25}
 barChart1 = BarChart(barData)
@@ -434,6 +611,33 @@ Common chart commands include `BarChart`, `BoxPlot`, `DotPlot`,
 ## Lists
 
 Use lists for repeated geometry, generated samples, datasets, and tables.
+
+```text
+Sequence( <Expression>, <Variable>, <Start Value>, <End Value> )
+Element( <List>, <Position> )
+First( <List>, <Number of Elements> )
+Last( <List>, <Number of Elements> )
+Take( <List>, <Start Position>, <End Position> )
+Append( <List>, <Object> )
+Insert( <Object>, <List>, <Position> )
+Remove( <List>, <Object> )
+RemoveUndefined( <List> )
+Reverse( <List> )
+Sort( <List> )
+Shuffle( <List> )
+Unique( <List> )
+Join( <List>, <List> )
+Flatten( <List> )
+KeepIf( <Condition>, <List> )
+CountIf( <Condition>, <List> )
+Zip( <Expression>, <Variable 1>, <List 1>, <Variable 2>, <List 2> )
+Sample( <List>, <Size> )
+RandomElement( <List> )
+Union( <List>, <List> )
+Intersection( <List>, <List> )
+PointList( <List> )
+RootList( <List> )
+```
 
 ```geogebra
 numbers = {1, 2, 3, 4, 5}
@@ -457,6 +661,25 @@ Useful list commands include `Sequence`, `Element`, `First`, `Last`, `Take`,
 Prefer native labels for ordinary named geometric objects. Use `Text(...)` only
 for explanatory annotations, formulas, or tables.
 
+```text
+Text( <Object> )
+Text( <Object>, <Point> )
+FormulaText( <Object> )
+FractionText( <Number> )
+ScientificText( <Number> )
+SurdText( <Number> )
+TableText( <List>, <List>, ... )
+VerticalText( <Text> )
+RotateText( <Text>, <Angle> )
+IndexOf( <Text>, <Text> )
+ReplaceAll( <Text>, <Text to Match>, <Text to Replace> )
+Split( <Text>, <List of Texts to Split On> )
+LetterToUnicode( <Letter> )
+UnicodeToLetter( <Integer> )
+TextToUnicode( <Text> )
+UnicodeToText( <List of Integers> )
+```
+
 ```geogebra
 labelA = Text("A", A)
 areaLabel = Text("area = " + Area(triangle), Point({0.5, -0.5}))
@@ -475,6 +698,41 @@ Useful text commands include `Text`, `FormulaText`, `FractionText`,
 
 Use 3D commands only when the requested output needs a spatial figure. A 2D
 construction is usually more reliable for ordinary geometry diagrams.
+
+```text
+Axes( )
+Plane( <Point>, <Point>, <Point> )
+PerpendicularPlane( <Point>, <Line> )
+PlaneBisector( <Segment> )
+Sphere( <Point>, <Radius Number> )
+Cylinder( <Circle>, <Height> )
+InfiniteCylinder( <Line>, <Radius> )
+Cone( <Circle>, <Height> )
+InfiniteCone( <Point>, <Vector>, <Angle> )
+Prism( <Polygon>, <Point> )
+Pyramid( <Polygon>, <Point> )
+Cube( <Point>, <Point> )
+Tetrahedron( <Point>, <Point> )
+Octahedron( <Point>, <Point> )
+Dodecahedron( <Point>, <Point> )
+Icosahedron( <Point>, <Point> )
+Surface( <Expression>, <Expression>, <Expression>, <Parameter Variable 1>, <Start Value>, <End Value>, <Parameter Variable 2>, <Start Value>, <End Value> )
+Net( <Polyhedron>, <Number> )
+Top( <Quadric> )
+Bottom( <Quadric> )
+Ends( <Quadric> )
+Side( <Quadric> )
+Volume( <Solid> )
+Height( <Solid> )
+Radius( <Quadric> )
+Circumference( <Conic> )
+CircularArc( <Point>, <Point>, <Point> )
+CircularSector( <Point>, <Point>, <Point> )
+CircumcircularArc( <Point>, <Point>, <Point> )
+CircumcircularSector( <Point>, <Point>, <Point> )
+InteriorAngles( <Polygon> )
+IntersectConic( <Plane>, <Quadric> )
+```
 
 ```geogebra
 A3 = Point({0, 0, 0})
@@ -542,6 +800,14 @@ ShowGrid( )                                          // active view
 ShowGrid( <Boolean> )
 ShowGrid( <View>, <Boolean> )                        // view 1, 2, or 3
 SetLevelOfDetail( <Surface>, <Level of Detail> )     // 0 faster, 1 more accurate
+CenterView( <Point> )
+SetValue( <Boolean>, <Boolean> )
+SetValue( <Object>, <Object> )
+StartAnimation( )
+StartAnimation( <Boolean> )
+StartAnimation( <Slider>, <Boolean> )
+ZoomIn( <Scale Factor> )
+ZoomOut( <Scale Factor> )
 ```
 
 ```geogebra
@@ -563,6 +829,9 @@ SetLayer(lineAB, 2)
 ShowGrid(1, false)
 SetFixed(A, true)
 SetCoordSystem(-7, 7, -4, 4)
+CenterView(A)
+SetValue(position, 2)
+StartAnimation(position, true)
 ```
 
 ## Viewport
@@ -686,7 +955,11 @@ renderer's strict support list; use official GeoGebra syntax for exact overloads
 
 - 3D: `Plane`, `PerpendicularPlane`, `Sphere`, `Cylinder`, `Cone`, `Prism`,
   `Pyramid`, `Cube`, `Tetrahedron`, `Octahedron`, `Dodecahedron`,
-  `Icosahedron`, `Surface`, `Net`, `Volume`, `Height`.
+  `Icosahedron`, `Surface`, `Net`, `Top`, `Bottom`, `Ends`, `Side`,
+  `Volume`, `Height`, `Radius`, `Axes`, `CircularArc`, `CircularSector`,
+  `CircumcircularArc`, `CircumcircularSector`, `Circumference`,
+  `InfiniteCone`, `InfiniteCylinder`, `InteriorAngles`, `IntersectConic`,
+  `PlaneBisector`.
 - Algebra and CAS: `Solve`, `Solutions`, `NSolve`, `NSolutions`, `CSolve`,
   `CSolutions`, `Factor`, `Expand`, `Simplify`, `Substitute`, `Eliminate`,
   `Numeric`, `CompleteSquare`, `Polynomial`, `Coefficients`, `Degree`,

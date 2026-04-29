@@ -28,6 +28,7 @@ public class ManimRendererService {
     private static final Logger log = LoggerFactory.getLogger(ManimRendererService.class);
     private static final long RENDER_TIMEOUT_MINUTES = 10;
     private static final String MANIM_EXECUTABLE_ENV = "MATHVISION_MANIM_EXECUTABLE";
+    private static final String MANIM_PYTHON_ENV = "MATHVISION_MANIM_PYTHON";
     private static final String GENERATED_SCENE_FILE = "scene_render.py";
     private static final String GEOMETRY_EXPORT_HELPER_FILE = "mathvision_geometry_export.py";
     private static final String GEOMETRY_EXPORT_OUTPUT_FILE = "5_mobject_geometry.json";
@@ -221,6 +222,14 @@ public class ManimRendererService {
         if (configuredExecutable != null) {
             return wrapWindowsScriptIfNeeded(configuredExecutable);
         }
+        String configuredPython = resolveConfiguredManimPython();
+        if (configuredPython != null) {
+            List<String> cmd = new ArrayList<>();
+            cmd.add(configuredPython);
+            cmd.add("-m");
+            cmd.add("manim");
+            return cmd;
+        }
         if (isWindows()) {
             List<String> cmd = new ArrayList<>();
             cmd.add("cmd.exe");
@@ -232,7 +241,14 @@ public class ManimRendererService {
     }
 
     protected String resolveConfiguredManimExecutable() {
-        String configured = System.getenv(MANIM_EXECUTABLE_ENV);
+        return normalizeEnvironmentPath(System.getenv(MANIM_EXECUTABLE_ENV));
+    }
+
+    protected String resolveConfiguredManimPython() {
+        return normalizeEnvironmentPath(System.getenv(MANIM_PYTHON_ENV));
+    }
+
+    private String normalizeEnvironmentPath(String configured) {
         if (configured == null) {
             return null;
         }
