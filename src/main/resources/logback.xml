@@ -8,6 +8,7 @@
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>mathvision.log</file>
+        <append>false</append>
         <encoder>
             <charset>UTF-8</charset>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] %logger{36} - %msg%n</pattern>
