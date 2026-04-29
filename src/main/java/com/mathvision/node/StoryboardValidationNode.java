@@ -203,8 +203,149 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
 
         issues.addAll(validateAsciiText(storyboard));
         issues.addAll(validateStoryboardColors(storyboard));
+        issues.addAll(validateGeometricMarkerDefinitions(storyboard));
 
         return issues;
+    }
+
+    private List<String> validateGeometricMarkerDefinitions(Storyboard storyboard) {
+        List<String> issues = new ArrayList<>();
+        if (storyboard == null || storyboard.getObjectRegistry() == null) {
+            return issues;
+        }
+        for (StoryboardObject object : storyboard.getObjectRegistry()) {
+            if (!isAngleOrArcMarker(object)) {
+                continue;
+            }
+            String objectId = StoryboardPatchResolver.objectId(object);
+            String dependency = normalizeForSemanticCheck(object.getDependencyNote());
+            String constraint = normalizeForSemanticCheck(object.getConstraintNote());
+
+            if (!mentionsAngleVertex(object, dependency)) {
+                issues.add("object_registry: angle/arc marker '" + objectId
+                        + "' must define its measured vertex or anchor in dependency_note");
+            }
+            if (!mentionsTwoAngleBoundaries(dependency)) {
+                issues.add("object_registry: angle/arc marker '" + objectId
+                        + "' must define both boundary rays, segments, lines, normals, tangents, or source objects in dependency_note");
+            }
+            if (isArcMarker(object) && !mentionsOrderedArcSweep(dependency, constraint)) {
+                issues.add("object_registry: arc marker '" + objectId
+                        + "' must define the ordered arc sweep, including where the arc starts and where it ends");
+            }
+            if (!mentionsAngleSector(constraint)) {
+                issues.add("object_registry: angle/arc marker '" + objectId
+                        + "' must define the intended displayed sector in constraint_note (for example smaller/interior, directed, exterior, or side of a reference line/normal)");
+            }
+            if (usesLayoutOnlyQuadrant(constraint)) {
+                issues.add("object_registry: angle/arc marker '" + objectId
+                        + "' uses layout-only quadrant wording; define the measured sector geometrically before label-clearance or visibility notes");
+            }
+        }
+        return issues;
+    }
+
+    private boolean isAngleOrArcMarker(StoryboardObject object) {
+        if (object == null) {
+            return false;
+        }
+        String combined = normalizeForSemanticCheck(String.join(" ",
+                safe(object.getId()),
+                safe(object.getKind()),
+                safe(object.getContent()),
+                safe(object.getDependencyNote()),
+                safe(object.getConstraintNote())));
+        boolean markerKind = containsAny(combined, " arc ", " angle ", " anglemarker ", " angle_marker ");
+        boolean angleMeaning = containsAny(combined, "theta", " angle ", " perpendicular", " normal", " tangent");
+        return markerKind && angleMeaning;
+    }
+
+    private boolean isArcMarker(StoryboardObject object) {
+        if (object == null) {
+            return false;
+        }
+        String combined = normalizeForSemanticCheck(String.join(" ",
+                safe(object.getId()),
+                safe(object.getKind()),
+                safe(object.getContent())));
+        return containsAny(combined, " arc ");
+    }
+
+    private boolean mentionsAngleVertex(StoryboardObject object, String dependency) {
+        if (containsAny(dependency, "vertex", " at ", "center", "shared point", "anchor")) {
+            return true;
+        }
+        String anchorId = normalizeForSemanticCheck(object != null ? object.getAnchorId() : null);
+        return !anchorId.isBlank() && containsToken(dependency, anchorId);
+    }
+
+    private boolean mentionsTwoAngleBoundaries(String dependency) {
+        if (dependency.isBlank()) {
+            return false;
+        }
+        if (containsAny(dependency, " between ") && containsAny(dependency, " and ", " vs ", " versus ")) {
+            return true;
+        }
+        int boundaryTerms = 0;
+        for (String term : List.of("ray", "segment", "line", "normal", "perpendicular", "tangent", "vector")) {
+            if (containsAny(dependency, term)) {
+                boundaryTerms++;
+            }
+        }
+        return boundaryTerms >= 2;
+    }
+
+    private boolean mentionsOrderedArcSweep(String dependency, String constraint) {
+        String combined = normalizeForSemanticCheck(dependency + " " + constraint);
+        boolean hasStart = containsAny(combined, " from ", " start ", " starts ", " starting ", " first ");
+        boolean hasEnd = containsAny(combined, " to ", " end ", " ends ", " ending ", " second ");
+        return hasStart && hasEnd;
+    }
+
+    private boolean mentionsAngleSector(String constraint) {
+        return containsAny(constraint,
+                "smaller", "small ", "minor", "interior", "inside", "sector", "wedge",
+                "directed", "exterior", "reflex", "clockwise", "counterclockwise",
+                "same side", "opposite side", "left side", "right side", "above", "below",
+                "toward", "away from", "side of");
+    }
+
+    private boolean usesLayoutOnlyQuadrant(String constraint) {
+        if (!containsAny(constraint, "quadrant")) {
+            return false;
+        }
+        boolean layoutOnly = containsAny(constraint, "view", "clear", "label", "visible", "readable", "layout");
+        return layoutOnly && !mentionsAngleSector(constraint);
+    }
+
+    private String normalizeForSemanticCheck(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        return " " + text.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_*']+", " ").trim() + " ";
+    }
+
+    private boolean containsAny(String haystack, String... needles) {
+        if (haystack == null || haystack.isBlank()) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (needle != null && !needle.isBlank() && haystack.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsToken(String haystack, String token) {
+        if (haystack == null || token == null || token.isBlank()) {
+            return false;
+        }
+        return haystack.contains(" " + token.trim() + " ");
+    }
+
+    private String safe(String text) {
+        return text == null ? "" : text;
     }
 
     private List<String> validateStoryboardColors(Storyboard storyboard) {

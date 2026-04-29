@@ -114,6 +114,17 @@ public final class SystemPrompts {
                     + "- Treat geometric relationships such as symmetry, reflection, equal length, equal angle, collinearity, intersection, perpendicularity, and shared-center motion as hard constraints, not optional style notes.\n"
                     + "- If a layout risks overflow, prefer planning a smaller or recentered whole construction rather than placing mathematically linked points independently near the edges.\n";
 
+    /** Storyboard authoring rules for geometric markers whose visual side/sector matters. */
+    public static final String GEOMETRIC_MARKER_AUTHORING_RULES =
+            "Geometric marker authoring rules:\n"
+                    + "- For angle markers, arcs, right-angle marks, braces, ticks, and similar derived annotations, the storyboard must define the geometry they measure, not just their visual placement.\n"
+                    + "- For any angle or arc that represents an angle, `dependency_note` must name the vertex/anchor plus the ordered start boundary and end boundary: start ray/segment/line/normal/tangent/source object and end ray/segment/line/normal/tangent/source object.\n"
+                    + "- For any visual arc drawn from one point/ray to another, say explicitly where the arc starts and where it ends, for example `arc at P from ray P->A to normal ray P->N` or `arc from point U to point V on circle c`.\n"
+                    + "- `constraint_note` must say whether the displayed sector is the smaller/interior angle, a reflex/exterior angle, a directed angle, clockwise/counterclockwise sweep, or a specific side of a reference line or normal.\n"
+                    + "- Label clearance and visibility are layout constraints only; never replace sector geometry with vague wording such as `quadrant chosen to stay in view` unless the measured sector is also defined.\n"
+                    + "- If an angle is measured against a normal or perpendicular, state which normal ray or side is used when the side matters for the teaching point.\n"
+                    + "- If equal angles are shown, define both angle markers symmetrically from their source rays so downstream code can preserve equality without guessing a quadrant.\n";
+
     // ========================================================================
     // Visual design rules (shared across output targets)
     // ========================================================================

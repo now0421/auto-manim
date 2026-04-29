@@ -28,6 +28,7 @@ public final class NarrativePrompts {
                     .replace("How to interpret the storyboard fields:\n", "Field responsibilities: ").trim() + "\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_EXTENDED.trim() + "\n"
                     + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES
+                    + SystemPrompts.GEOMETRIC_MARKER_AUTHORING_RULES
                     + "3D rules:\n"
                     + "- Use `scene_mode = 3d` only when depth is genuinely needed\n"
                     + "- Include explicit `camera_plan`\n"

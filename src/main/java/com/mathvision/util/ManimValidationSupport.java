@@ -78,6 +78,7 @@ public final class ManimValidationSupport {
             "get_width",
             "get_length",
             "get_angle",
+            "get_lines",
             "get_text",
             // Graph / chart methods
             "get_graph_label",

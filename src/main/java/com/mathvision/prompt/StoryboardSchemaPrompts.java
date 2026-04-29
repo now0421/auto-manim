@@ -140,8 +140,8 @@ public final class StoryboardSchemaPrompts {
                     + "      \"source_node\": \"string, originating step or node when relevant\",\n"
                     + "      \"behavior\": \"string, dependency role such as static|follows_anchor|derived|fixed_overlay\",\n"
                     + "      \"anchor_id\": \"string, id of the object this one should stay attached to when relevant\",\n"
-                    + "      \"dependency_note\": \"string, short note describing what source objects define this object\",\n"
-                    + "      \"constraint_note\": \"string, hard local geometric rule for this object\"\n"
+                    + "      \"dependency_note\": \"string, short note describing what source objects define this object; for angle/arc markers include the vertex plus ordered start and end boundary rays/source objects\",\n"
+                    + "      \"constraint_note\": \"string, hard local geometric rule for this object; for angle/arc markers include the intended sector or sweep such as smaller/interior, directed, clockwise/counterclockwise, exterior, or side of a reference line/normal\"\n"
                     + "    }";
 
     // ── Example data ───────────────────────────────────────────────────

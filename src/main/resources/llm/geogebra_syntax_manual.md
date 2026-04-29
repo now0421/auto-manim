@@ -123,6 +123,36 @@ rayAB = Ray(A, B)
 rayWithDirection = Ray(A, vectorAB)
 ```
 
+## Angle
+
+Use `Angle(...)` when the construction needs a numeric angle value or a visible
+angle marker. Prefer the form that best preserves the intended vertex and
+direction.
+
+```text
+Angle( <Line>, <Line> )                 // smaller angle between two lines
+Angle( <Point>, <Point>, <Point> )      // angle with the middle point as vertex
+Angle( <Vector>, <Vector> )             // directed angle from the first vector to the second
+```
+
+```geogebra
+PA = Line(P, A)
+PB = Line(P, B)
+angleLines = Angle(PA, PB)
+angleAPB = Angle(A, P, B)
+directedAPB = Angle(Vector(P, A), Vector(P, B))
+```
+
+Notes:
+
+- `Angle(PA, PB)` returns the smaller angle between the two line objects.
+- `Angle(A, P, B)` measures angle APB with `P` as the vertex.
+- `Angle(Vector(P, A), Vector(P, B))` is the directed angle from ray `P->A` to
+  ray `P->B`; use this form when clockwise/counterclockwise order matters.
+- For storyboard angle arcs, specify the ordered sweep explicitly, for example
+  "arc from ray P->A to ray P->B at vertex P". Do not rely on label placement or
+  a vague quadrant note to define the measured sector.
+
 ## Circle
 
 ```text

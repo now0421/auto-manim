@@ -61,7 +61,8 @@ public final class VisualDesignPrompts {
                         .replace("\n- ", "\n- ")
                         .replace("How to interpret the storyboard fields:\n", "Field responsibilities: ").trim() + "\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_EXTENDED.trim() + "\n"
-                    + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES;
+                    + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES
+                    + SystemPrompts.GEOMETRIC_MARKER_AUTHORING_RULES;
 
     private static final String SCENE_TEACHING_RULES =
             "Scene teaching rules:\n"

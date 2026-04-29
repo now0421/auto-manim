@@ -240,11 +240,14 @@ LabeledLine(label, start=..., end=...)
 Brace(mobject, direction)
 BraceBetweenPoints(point_a, point_b, direction=...)
 BraceLabel(mobject, label, direction)
-Angle(line1, line2, radius=..., quadrant=..., other_angle=False)
+Angle(line1, line2, radius=..., quadrant=..., other_angle=False, dot=False, dot_radius=..., dot_distance=..., dot_color=..., elbow=False)
 RightAngle(line1, line2, length=...)
 Underline(mobject, color=...)
 Cross(mobject, color=...)
 Elbow(width=..., angle=...)
+angle.get_value(degrees=True)
+angle.get_value(degrees=False)
+angle.get_lines()
 line.get_start()
 line.get_end()
 line.get_length()
@@ -258,12 +261,20 @@ Parameters:
 - `Arrow(..., buff=...)`: gap from tip/body to target endpoints.
 - `DashedLine(..., dash_length=..., dashed_ratio=...)`: dash size and dash-to-gap ratio.
 - `Angle(..., quadrant=..., other_angle=False)`: disambiguates which sector to draw.
+- `Angle(..., dot=True, dot_radius=..., dot_distance=..., dot_color=...)`: optionally shows a dot near the angle marker.
+- `Angle(..., elbow=True)`: displays a right-angle elbow style when appropriate.
+- `RightAngle(..., length=...)`: right-angle marker with fixed leg length.
+- `Elbow(width=..., angle=...)`: standalone right-angle marker rotated by `angle` radians.
 - `TangentLine(..., alpha=...)`: `alpha` is path proportion in `[0, 1]`.
 
 Usage notes:
 
 - `Angle(...)` and `RightAngle(...)` should use the real rays that share the same vertex.
-- When the sector is ambiguous, set `quadrant=...`.
+- To create an angle from three points, build the two rays explicitly: `Angle(Line(P, A), Line(P, B), ...)` marks angle APB with `P` as the vertex.
+- When the sector is ambiguous, set `quadrant=...` and/or `other_angle=...` to match the mathematical sector specified by the storyboard.
+- Do not choose `quadrant` only because it looks less cluttered. The angle marker must lie in the sector bounded by the intended rays, normal, tangent, or helper line.
+- For equal-angle or reflection-law diagrams, define both markers from the same reference normal and their true incoming/outgoing rays; do not reuse one fixed quadrant for both sides unless that is explicitly the same measured sector.
+- If an angle marker represents an arc sweep, the storyboard should say the ordered sweep, for example "arc from ray P->A to ray P->B at vertex P"; implement that order with the corresponding `Line(P, A)` and `Line(P, B)` arguments plus `quadrant`/`other_angle` only as needed.
 - For moving geometry, rebuild angle markers with `always_redraw(lambda: ...)`.
 
 Example:
@@ -273,6 +284,12 @@ line1 = Line(ORIGIN, RIGHT * 2)
 line2 = Line(ORIGIN, UP * 2 + RIGHT)
 angle = Angle(line1, line2, radius=0.4, quadrant=(1, 1), color=YELLOW)
 right_angle = RightAngle(line1, Line(ORIGIN, UP * 2), length=0.25, color=WHITE)
+P = ORIGIN
+A = LEFT + UP
+B = RIGHT + UP
+angle_apb = Angle(Line(P, A), Line(P, B), radius=0.4, dot=True, dot_radius=0.05, color=BLUE)
+degrees_value = angle_apb.get_value(degrees=True)
+angle_lines = angle_apb.get_lines()
 arrow = LabeledArrow(Text("force", font_size=18), start=LEFT, end=RIGHT, color=RED)
 brace = BraceBetweenPoints(LEFT * 2, RIGHT * 2, direction=DOWN)
 brace_label = brace.get_text("width", font_size=20)
