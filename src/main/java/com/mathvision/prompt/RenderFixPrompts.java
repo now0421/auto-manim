@@ -26,12 +26,12 @@ public final class RenderFixPrompts {
                     + "Color rules:\n"
                     + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS
                     + SystemPrompts.MANIM_COLOR_RULES_BULLETS
-                    + SystemPrompts.ANGLE_MARKER_RULES
+                    + SystemPrompts.MANIM_ANGLE_MARKER_RULES
                     + "Do not store mobjects across scene methods via `self`, do not hardcode MathTex numeric indexing, and keep layout inside x[-7,7], y[-4,4].\n\n"
                     + "Fix strategy:\n"
                     + "Use root-cause-first repair: identify the first causal traceback error, fix it, then sweep structurally similar code paths in the same file.\n"
                     + "Fix the reported root cause systematically, and also correct nearby Python/Manim runtime mistakes.\n\n"
-                    + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
+                    + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_SYSTEM =
             "You are a GeoGebra Classic debugging expert.\n"
@@ -76,11 +76,11 @@ public final class RenderFixPrompts {
         ));
     }
 
-    public static String userPrompt(String generatedCode, String error) {
-        return userPrompt(generatedCode, error, null, Collections.emptyList(), null, null);
+    public static String manimUserPrompt(String generatedCode, String error) {
+        return manimUserPrompt(generatedCode, error, null, Collections.emptyList(), null, null);
     }
 
-    public static String userPrompt(String generatedCode,
+    public static String manimUserPrompt(String generatedCode,
                                     String error,
                                     String storyboardJson,
                                     List<String> fixHistory,

@@ -29,9 +29,9 @@ public final class SystemPrompts {
     //   OBJECT_SEMANTICS — object identity, kind, content, dependency, style
     //   SCENE_STRUCTURE  — scene metadata, object lifecycle, actions
     //   SCENE_LAYOUT     — spatial layout, constraints, camera, and intent
-    //   FULL             — all three combined (for code generation/evaluation)
+    //   MANIM            — all three combined (for Manim code generation/evaluation)
     //   GEOGEBRA         — GeoGebra-specific field interpretations
-    //   REPAIR           — field semantics for repair passes
+    //   MANIM_REPAIR     — Manim field semantics for repair passes
     //   GEOGEBRA_REPAIR  — GeoGebra-specific repair interpretations
     // ========================================================================
 
@@ -73,8 +73,8 @@ public final class SystemPrompts {
                     + "- `screen_overlay_plan`: text or formulas that stay fixed in screen space.\n"
                     + "- `camera_anchor`, `camera_plan`: camera focus and behavior.\n";
 
-    /** Full storyboard field guide combining all sections. */
-    public static final String STORYBOARD_FIELD_GUIDE_FULL =
+    /** Full Manim storyboard field guide combining all sections. */
+    public static final String STORYBOARD_FIELD_GUIDE_MANIM =
             "How to interpret the storyboard fields:\n"
                     + STORYBOARD_FIELD_GUIDE_OBJECT_SEMANTICS.replace("How to interpret the storyboard fields:\n", "")
                     + STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE
@@ -97,8 +97,8 @@ public final class SystemPrompts {
                     + "- For constrained motion, prefer explicit documented GeoGebra constructions such as `Point(path)`, `PointIn(region)`, `Intersect(...)`, `Reflect(...)`, `Midpoint(...)`, or slider-driven parameterizations with declared bounds.\n"
                     + "- When a point should remain on a line, segment, circle, or similar object, the generated command should visibly encode that incidence relation.\n";
 
-    /** Field guide for scene evaluation/repair pass. */
-    public static final String STORYBOARD_FIELD_GUIDE_REPAIR =
+    /** Field guide for Manim scene evaluation/repair pass. */
+    public static final String STORYBOARD_FIELD_GUIDE_MANIM_REPAIR =
             "Storyboard field guide for this repair pass:\n"
                     + "- `goal` and `layout_goal`: preserve what the scene is trying to teach and how the frame should be composed.\n"
                     + "- `safe_area_plan` and `screen_overlay_plan`: use these first when fixing overlap and offscreen issues.\n"
@@ -122,11 +122,22 @@ public final class SystemPrompts {
                     + "- `persistent_objects`, `exiting_objects`, and `actions`: preserve object visibility progression instead of rewriting the construction arbitrarily.\n"
                     + "- If a reported object is a reflection, midpoint, foot, or intersection, keep it defined from its source objects via GeoGebra dependency commands.\n";
 
+    /** Shared element-selection model for stages that consume a validated storyboard. */
+    public static final String STORYBOARD_ELEMENT_SELECTION_RULES =
+            "Storyboard element selection rules:\n"
+                    + "- Treat storyboard objects as candidate teaching elements, not a mandatory one-for-one rendering checklist.\n"
+                    + "- Create or keep elements that carry core teaching reasoning, hard geometry, dependency relationships, conclusion evidence, or the current narration focus.\n"
+                    + "- Omit, merge, dim, or replace elements that are decorative, redundant, clutter-causing, naturally expressed by existing objects, or not helpful for the current teaching beat.\n"
+                    + "- Omitting an object must not break the semantics of `geometry_constraints`, `constraint_note`, `dependency_note`, `behavior`, `anchor_id`, or `actions.targets`.\n"
+                    + "- If an omitted object is referenced by an action target, preserve that action's teaching intent through an equivalent existing object, style change, label, caption, or dependency-safe construction.\n"
+                    + "- If adding a small helper object improves clarity, backend correctness, or replaces an omitted object, keep it semantically consistent and name it clearly.\n";
+
     /** Shared authority model for stages that consume a validated storyboard. */
     public static final String STORYBOARD_AUTHORITY_RULES =
             "Storyboard authority rules:\n"
-                    + "- Treat the validated storyboard as the semantic authority for teaching goal, object identity, scene order, continuity, geometry meaning, dependency relationships, and layout intent.\n"
+                    + "- Treat the validated storyboard as the semantic authority for teaching goal, key object identity, scene order, continuity, geometry meaning, dependency relationships, and layout intent.\n"
                     + "- Treat `geometry_constraints`, `constraint_note`, `behavior`, `anchor_id`, and `dependency_note` as hard semantic requirements.\n"
+                    + STORYBOARD_ELEMENT_SELECTION_RULES
                     + "- Do not treat backend-specific notes, unsupported API names, undocumented commands, or purely decorative effects as hard requirements when they conflict with the active backend manual or runtime correctness.\n"
                     + "- When a requested effect is unsupported, preserve the same teaching intent with documented backend features; omit only non-essential decoration that cannot be implemented safely.\n"
                     + "- If storyboard placement conflicts with safe-area requirements, rendered evidence, or geometric correctness, preserve the semantic construction and repair the layout instead of blindly copying the bad placement.\n";
@@ -135,7 +146,8 @@ public final class SystemPrompts {
     public static final String STORYBOARD_REPAIR_AUTHORITY_RULES =
             "Use the storyboard JSON as semantic repair context, not as an instruction to preserve broken implementation details.\n"
                     + STORYBOARD_AUTHORITY_RULES
-                    + "For repair, prefer the smallest code/layout change that restores backend correctness while preserving the storyboard's teaching meaning and hard geometry.\n";
+                    + "For repair, prefer the smallest code/layout change that restores backend correctness while preserving the storyboard's teaching meaning and hard geometry.\n"
+                    + "Do not re-add non-essential storyboard elements merely to match the storyboard. When fixing overlap, offscreen, or clutter, prefer removing, merging, dimming, or simplifying non-essential elements before moving essential teaching evidence.\n";
 
     // ========================================================================
     // Geometry constraint rules
@@ -350,7 +362,7 @@ public final class SystemPrompts {
                     + "- Never call `VMobject.set_points()`; use `set_points_as_corners()` or `set_points_smoothly()` instead. Raw `set_points` bypasses bezier alignment and causes crashes during animation.\n";
 
     /** Angle marker best practices for Manim. */
-    public static final String ANGLE_MARKER_RULES =
+    public static final String MANIM_ANGLE_MARKER_RULES =
             "For angle markers, prefer `Angle(...)` built from two lines/rays sharing the true vertex instead of hand-written `Arc(start_angle=..., angle=...)` formulas.\n"
                     + "When an angle is measured against a normal, helper line, or moving segment, construct both rays from the shared point inside `always_redraw(...)`.\n"
                     + "If the intended angle sector could be ambiguous, explicitly set `quadrant=...`; if the storyboard intends the interior/smaller angle, explicitly keep `other_angle=False`.\n";
@@ -365,7 +377,11 @@ public final class SystemPrompts {
 
     /** Rules for minimizing auxiliary/helper objects in storyboard authoring (Visual Design, Storyboard Validation). */
     public static final String MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES =
-            "Minimize auxiliary helper objects:\n"
+            "Minimize redundant storyboard objects:\n"
+                    + "- Add a new storyboard object only when it is teaching-essential, improves clarity, or carries a distinct geometric/dependency role.\n"
+                    + "- Prefer reusing, restyling, moving, dimming, or relabeling an existing object over creating a new object with the same meaning.\n"
+                    + "- Avoid redundant labels, duplicate text cards, repeated formula copies, duplicate highlights, and decorative objects that do not advance the current teaching beat.\n"
+                    + "- Keep `new_objects` and `object_registry` lean: do not register objects that can be expressed as style changes, action descriptions, native labels, or references to existing ids.\n"
                     + "- When a derived object (angle marker, midpoint, intersection, reflection, etc.) can be fully defined by referencing existing objects, do so directly rather than introducing separate helper/scaffold objects.\n"
                     + "- For angle markers, define them by referencing the boundary lines, segments, or rays directly in `dependency_note` (e.g. \"angle at P between ray P->A and line l\") rather than creating helper point objects on existing lines just to use a three-point form.\n"
                     + "- Avoid creating helper points, helper lines, or other scaffolding objects whose sole purpose is to serve as an intermediate input to another object when a direct dependency reference is possible.\n"
@@ -468,8 +484,8 @@ public final class SystemPrompts {
     public static final String JSON_ONLY_OUTPUT =
             "Return JSON only.";
 
-    /** Python code block output format. */
-    public static final String PYTHON_CODE_OUTPUT_FORMAT =
+    /** Manim code block output format. */
+    public static final String MANIM_CODE_OUTPUT_FORMAT =
             "Output format:\n"
                     + "Return exactly one fenced Python code block containing the full corrected file.\n\n"
                     + "Example output:\n"
@@ -504,7 +520,7 @@ public final class SystemPrompts {
             "Use the following compact storyboard JSON as the semantic authority for staging, object identity, continuity, and scene execution.\n"
                     + STORYBOARD_AUTHORITY_RULES
                     + "- Treat every object id as a stable visual identity.\n"
-                    + "- Treat the storyboard as a complete learner-visible visual specification; do not invent unstated objects or implied labels.\n"
+                    + "- Treat storyboard objects as candidate visual elements; create only the elements that are necessary or helpful for the teaching beat.\n"
                     + "- If an id persists, keep or transform the same mobject instead of redrawing it.\n"
                     + "- When `content`, `dependency_note`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
                     + "- If a scene uses `scene_mode = 3d`, use `ThreeDScene`, follow `camera_plan`, and judge layout in projected screen space.\n"

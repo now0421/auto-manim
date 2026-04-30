@@ -12,7 +12,7 @@ public final class SceneEvaluationPrompts {
                     + "Preserve the teaching goal, visual intent, scene class name, and continuity.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + "Treat storyboard geometric constraints as hard requirements: if a point is defined as a reflection, midpoint, foot, or intersection, preserve that definition while fixing layout.\n"
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_REPAIR
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
@@ -36,7 +36,7 @@ public final class SceneEvaluationPrompts {
                     + "Audit the entire file for similar layout issues, not just the reported elements. The reported issues indicate structural patterns that may appear elsewhere.\n"
                     + "Also proactively check for common Python and Manim runtime mistakes.\n\n"
                     + "Maintain a clean final-frame impression: leave breathing room, avoid overlay-on-geometry collisions, and remove temporary annotations once they have taught their point.\n\n"
-                    + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
+                    + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_SYSTEM =
             "You are fixing a GeoGebra command script that executed but has layout issues detected by geometry analysis.\n"
@@ -90,7 +90,7 @@ public final class SceneEvaluationPrompts {
         ));
     }
 
-    public static String layoutFixUserPrompt(String storyboardJson,
+    public static String manimLayoutFixUserPrompt(String storyboardJson,
                                              String generatedCode,
                                              String issueSummary,
                                              String sceneEvaluationJson,

@@ -34,9 +34,9 @@ public final class CodeEvaluationPrompts {
                     + "Your primary job is rule-compliance inspection before render.\n"
                     + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete storyboard/code evidence.\n\n"
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
-                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL.replace("\n", "\n- ").trim() + "\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM.replace("\n", "\n- ").trim() + "\n"
                     + "Mandatory Manim rule checklist:\n"
-                    + "- `storyboard_execution`: learner-visible objects, scene/action order, entering/persistent/exiting lifecycle, and teaching goal are implemented from the storyboard, not merely mentioned in comments or captions.\n"
+                    + "- `storyboard_execution`: key teaching evidence, necessary geometry, dependency relationships, scene/action intent, essential lifecycle, and teaching goal are implemented from the storyboard, not merely mentioned in comments or captions.\n"
                     + "- `geometry_constraints`: reflection, symmetry, collinearity, intersections, equal lengths, constrained motion, dependency notes, and derived objects remain dependency-driven rather than freely moved.\n"
                     + "- `layout_and_hierarchy`: important content follows `layout_goal` and `safe_area_plan`, maintains one clear focus, uses opacity hierarchy, preserves empty overlay space, and avoids code-evident persistent crowding.\n"
                     + "- `continuity_and_identity`: existing storyboard ids/actions reuse the same mobjects where continuity matters, prefer transforms/restyles over redraws, and clean temporary annotations when their beat is done.\n"
@@ -62,7 +62,7 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA.replace("\n", "\n- ").trim() + "\n"
                     + "Mandatory GeoGebra rule checklist:\n"
-                    + "- `storyboard_execution`: required learner-visible objects are actually constructed, not merely described by text, comments, or captions.\n"
+                    + "- `storyboard_execution`: teaching-essential objects and constructions are present or equivalently represented, not merely described by text, comments, or captions.\n"
                     + "- `visibility_progression`: scene-level visibility and highlight progression matches `entering_objects`, `persistent_objects`, `exiting_objects`, and `actions`.\n"
                     + "- `geometry_constraints`: reflections, symmetry, collinearity, intersections, equal lengths, grids, partitions, constrained points, and derived objects use dependency-safe documented constructions.\n"
                     + "- `object_identity`: object ids/names remain stable, helpers are not mistaken for storyboard objects, and redundant duplicates on the same endpoints are avoided.\n"
@@ -82,23 +82,23 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full code so it is visually safer before render.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
-                    + SystemPrompts.ANGLE_MARKER_RULES
+                    + SystemPrompts.MANIM_ANGLE_MARKER_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
+                    + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String REVISION_SYSTEM_GEOGEBRA =
             "You are a GeoGebra command revision specialist.\n"
                     + "You will receive storyboard JSON, static visual findings, a structured review, and the current command script.\n"
                     + "Rewrite the full command script so it better aligns with the storyboard before render.\n"
                     + "Preserve dependency-safe geometry, object identities, scene visibility progression, and teaching intent.\n"
-                    + "Fix storyboard misalignments such as missing constructions, incorrect scene visibility, incorrect substitutions for requested geometry, and captions unsupported by the actual construction.\n"
+                    + "Fix storyboard misalignments such as missing essential constructions or semantic evidence, incorrect scene visibility, incorrect substitutions for requested geometry, and captions unsupported by the actual construction.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"

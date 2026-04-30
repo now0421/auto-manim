@@ -297,7 +297,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                         request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
                 );
             }
-            return SceneEvaluationPrompts.layoutFixUserPrompt(
+            return SceneEvaluationPrompts.manimLayoutFixUserPrompt(
                     TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
                     request.getGeneratedCode(),
                     TextUtils.firstNonBlank(request.getErrorReason(), "Unknown scene evaluation issue"),
@@ -312,7 +312,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                 TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
                 request.getFixHistory() != null ? request.getFixHistory() : Collections.emptyList()
         )
-                : RenderFixPrompts.userPrompt(
+                : RenderFixPrompts.manimUserPrompt(
                 request.getGeneratedCode(),
                 TextUtils.firstNonBlank(request.getErrorReason(), "Unknown render failure"),
                 TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),

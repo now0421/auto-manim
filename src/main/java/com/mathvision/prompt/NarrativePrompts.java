@@ -28,7 +28,7 @@ public final class NarrativePrompts {
                     .replace("How to interpret the storyboard fields:\n", "Field responsibilities: ").trim() + "\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE.trim() + "\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT.trim() + "\n"
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_REPAIR
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES
                     + SystemPrompts.GEOMETRIC_MARKER_AUTHORING_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
@@ -42,6 +42,8 @@ public final class NarrativePrompts {
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES + "\n"
                     + "Storyboard style cleanup rules:\n"
                     + "- Treat the visual design pass as a strong draft, not an immutable contract; this stage may repair layout, style, continuity, and backend practicality before the storyboard becomes the validated downstream authority.\n"
+                    + "- Remove or merge redundant storyboard objects introduced by the visual design pass when they do not carry distinct teaching, geometry, dependency, or continuity meaning.\n"
+                    + "- Prefer one reusable object plus actions/style changes over multiple near-duplicate labels, formula cards, highlights, helper objects, or repeated construction elements.\n"
                     + "- Preserve intentional scene-level placement, style, color, and visual hierarchy from the visual design pass unless they cause global consistency, overlap, or readability problems.\n"
                     + "- Once a color is assigned to a concept, it keeps that meaning across the entire storyboard. Record color-to-concept assignments in `global_visual_rules`.\n"
                     + "- Prefer structured `style` arrays over vague prose. Each style entry should describe one visual layer or role, such as text, background, border, glow, or emphasis.\n"

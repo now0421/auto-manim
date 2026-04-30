@@ -219,7 +219,7 @@ class PromptModulesTest {
 
     @Test
     void renderFixUserPromptStartsWithErrorTypeBeforeCodeContext() {
-        String prompt = RenderFixPrompts.userPrompt(
+        String prompt = RenderFixPrompts.manimUserPrompt(
                 "from manim import *\n\nclass Demo(Scene):\n    pass",
                 "Traceback (most recent call last):\nValueError: invalid point data",
                 "{\"scenes\":[]}",

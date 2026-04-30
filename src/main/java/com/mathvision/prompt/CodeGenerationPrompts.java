@@ -14,12 +14,12 @@ public final class CodeGenerationPrompts {
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory rules:\n"
                     + "- Use `from manim import *`.\n"
-                    + "- Do not invent learner-visible objects that are not declared in the storyboard.\n"
+                    + "- Do not invent extra learner-visible objects unless they are necessary for clarity, backend implementation, or an equivalent replacement for an omitted storyboard object.\n"
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
                     + "- Treat storyboard `geometry_constraints` and object `constraint_note` fields as hard mathematical invariants.\n"
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL + "\n"
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + "Additional code generation rules:\n"
-                    + "- `entering_objects[].content` tells you what must be shown.\n"
+                    + "- `entering_objects[].content` describes candidate visible content; implement only the objects that are necessary or helpful for the teaching beat.\n"
                     + "- When `content`, `dependency_note`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
                     + "- If a storyboard object uses `behavior = follows_anchor`, `derived`, or an equivalent dependency note, implement that relationship continuously with the appropriate Manim mechanism.\n\n"
                     + "Continuity and object-management rules:\n"
@@ -33,7 +33,7 @@ public final class CodeGenerationPrompts {
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + "- Implement the visual plan with documented Manim constructs and no hidden assumptions.\n"
                     + "- " + SystemPrompts.MANIM_TEXT_CONSTRUCTOR_MAPPING
-                    + "- " + SystemPrompts.ANGLE_MARKER_RULES
+                    + "- " + SystemPrompts.MANIM_ANGLE_MARKER_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.NARRATIVE_PHILOSOPHY
                     + SystemPrompts.VISUAL_PLANNING_RULES
@@ -65,7 +65,7 @@ public final class CodeGenerationPrompts {
                     + "- Use descriptive ASCII variable names derived from storyboard ids or roles.\n"
                     + "- Ensure the generated code clearly reflects the storyboard scene order and action order.\n"
                     + "- Use subtitle-ready beats for major reveals when narration alignment matters.\n\n"
-                    + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT.replace("corrected", "runnable");
+                    + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT.replace("corrected", "runnable");
 
     private static final String MANIM_VALIDATION_FIX_SYSTEM =
             "You are a Manim code correction specialist.\n"
@@ -77,7 +77,7 @@ public final class CodeGenerationPrompts {
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
+                    + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_VALIDATION_FIX_SYSTEM =
             "You are a GeoGebra Classic command correction specialist.\n"
@@ -158,12 +158,12 @@ public final class CodeGenerationPrompts {
         ));
     }
 
-    public static String buildValidationFixRulesPrompt() {
+    public static String buildManimValidationFixRulesPrompt() {
         return SystemPrompts.buildRulesSection(
                 SystemPrompts.ensureManimSyntaxManual(MANIM_VALIDATION_FIX_SYSTEM));
     }
 
-    public static String buildValidationFixFixedContextPrompt(String targetConcept, String targetDescription) {
+    public static String buildManimValidationFixFixedContextPrompt(String targetConcept, String targetDescription) {
         return SystemPrompts.buildFixedContextSection(SystemPrompts.buildWorkflowPrefix(
                 "Stage 2 / Code Fix",
                 "Repair generated code after validation findings",
@@ -188,13 +188,13 @@ public final class CodeGenerationPrompts {
         ));
     }
 
-    public static String validationFixUserPrompt(String sceneName,
+    public static String manimValidationFixUserPrompt(String sceneName,
                                                  String generatedCode,
                                                  List<String> violations) {
-        return validationFixUserPrompt(sceneName, generatedCode, violations, null);
+        return manimValidationFixUserPrompt(sceneName, generatedCode, violations, null);
     }
 
-    public static String validationFixUserPrompt(String sceneName,
+    public static String manimValidationFixUserPrompt(String sceneName,
                                                  String generatedCode,
                                                  List<String> violations,
                                                  String storyboardJson) {
@@ -249,7 +249,7 @@ public final class CodeGenerationPrompts {
      * Builds the user prompt for generating the code skeleton
      * (imports, class, construct() that calls scene methods, shared helpers).
      */
-    public static String skeletonUserPrompt(String storyboardJson,
+    public static String manimSkeletonUserPrompt(String storyboardJson,
                                             java.util.List<String> sceneMethodNames) {
         String methodList = String.join(", ", sceneMethodNames);
         return SystemPrompts.buildCurrentRequestSection(String.format(
@@ -279,7 +279,7 @@ public final class CodeGenerationPrompts {
                         + "Generate the COMPLETE method body for `def %s(self):`.\n"
                         + "- Include the full `def %s(self):` signature and all code inside.\n"
                         + "- Use variables and objects established in earlier scene methods via `self` if needed.\n"
-                        + "- Follow the storyboard actions, entering/persistent/exiting objects exactly.\n"
+                        + "- Follow the storyboard's semantic intent; select and create useful objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
                         + "- Respect storyboard text semantics strictly: `math_text` means `MathTex(...)`, `plain_text` means `Text(...)`, and avoid `Tex(...)` unless the scene explicitly needs non-math LaTeX text.\n"
                         + "- Return the method code via the write_scene_code tool.",
                 methodName, sceneIndex + 1, totalScenes,
@@ -316,7 +316,7 @@ public final class CodeGenerationPrompts {
                         + "Scene specification:\n```json\n%s\n```\n\n"
                         + "Generate the COMPLETE GeoGebra command block for this scene:\n"
                         + "- Start with a comment line: # %s\n"
-                        + "- Create all entering objects for this scene\n"
+                        + "- Create necessary entering objects for this scene; merge or omit non-essential helpers, duplicate labels, and decorative elements when they do not improve teaching clarity\n"
                         + "- Apply styles and visibility settings\n"
                         + "- Reference shared objects from the skeleton by their established names\n"
                         + "- Return the scene code via the write_scene_code tool.",

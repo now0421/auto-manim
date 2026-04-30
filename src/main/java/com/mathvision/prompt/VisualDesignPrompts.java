@@ -18,6 +18,7 @@ public final class VisualDesignPrompts {
                     + "Return a JSON object with two top-level keys: `scene` and `new_objects`.\n"
                     + "`scene.entering_objects` and `scene.persistent_objects` are scene-level patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_note, or constraint_note here — those belong in `new_objects`.\n"
                     + "`new_objects` entries represent the canonical registry definition of each object introduced in this scene. They carry identity, content, dependency, and behavior but not scene-specific placement or style.\n"
+                    + "Only add `new_objects` that are teaching-essential, clarify the current beat, or carry distinct geometry/dependency semantics. Reuse existing registry ids instead of creating duplicate labels, repeated formulas, redundant highlights, or decorative helper objects.\n"
                     + "{\n"
                     + "  \"scene\": {\n"
                     + StoryboardSchemaPrompts.SCENE_FIELDS_SCHEMA
@@ -72,6 +73,7 @@ public final class VisualDesignPrompts {
                     + "- Plan scene transitions intentionally: choose clean break (fade all, pause), carry-forward (keep one anchor, fade rest), or transform bridge for each scene boundary. Record the chosen style in `notes_for_codegen` when the intent is non-obvious.\n"
                     + "- When the current step merges multiple prerequisite branches, treat the scene as a convergence beat: inherit existing object names, color meanings, and continuity anchors instead of restarting the story.\n"
                     + "- For merge scenes, combine upstream conclusions into one coherent scene and do not replay each branch as if it were brand new.\n"
+                    + "- Keep the storyboard lean: introduce the fewest objects needed for the teaching beat, and prefer actions, style changes, or narration over new objects when they communicate the same idea.\n"
                     + "- When a temporary element has served its purpose, include it in `exiting_objects` of the current or next scene.\n"
                     + "- Use enrichment fields only when they sharpen the explanation.\n"
                     + "- Narrative must not be constrained by a fixed word count.\n"
@@ -104,10 +106,10 @@ public final class VisualDesignPrompts {
                     + SCENE_AUTHORING_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
                     + "Manim object and label rules:\n"
-                    + "- Every learner-visible Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; do not hide visible labels inside another object's prose description.\n"
+                    + "- Every planned teaching-essential Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; avoid adding temporary decoration, redundant labels, or unhelpful helper objects to the storyboard.\n"
                     + "- If a point, marker, label, counter, or helper must visibly follow another object, create a separate object and describe the attachment with `behavior`, `anchor_id`, and `dependency_note`.\n"
                     + "- For moving points or markers, create a separate label object with `behavior = follows_anchor` so the label tracks the moving object.\n"
-                    + "- Manim does not auto-label any object. For every object (points, lines, angles, arcs, etc.) whose name or value must appear on screen, explicitly declare a companion `kind: text` label in the same scene's `entering_objects`; attach it with `behavior = follows_anchor` and `anchor_id` pointing to the parent object's id. Never assume a label will appear automatically.\n"
+                    + "- Manim does not auto-label objects. When an object's name or value helps the learner understand the current beat, explicitly declare a companion `kind: text` label in the same scene's `entering_objects`; attach it with `behavior = follows_anchor` and `anchor_id` pointing to the parent object's id. Omit labels that are redundant or do not improve understanding.\n"
                     + "- Use `screen_overlay_plan` only for true viewport-fixed explanatory overlays, not as a vague place to hide layout conflicts.\n"
                     + SCENE_STYLE_LAYOUT_RULES
                     + SystemPrompts.VISUAL_PLANNING_RULES

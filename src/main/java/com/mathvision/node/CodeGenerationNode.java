@@ -242,7 +242,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                 ? toRegistryBlock(formatRegistrySummary(enrichedRegistry, 0)) : "";
         String skeletonPrompt = (isGeoGebra
                 ? CodeGenerationPrompts.geoGebraSkeletonUserPrompt(storyboardJson, sceneNames)
-                : CodeGenerationPrompts.skeletonUserPrompt(storyboardJson, sceneNames))
+                : CodeGenerationPrompts.manimSkeletonUserPrompt(storyboardJson, sceneNames))
                 + skeletonRegistryBlock;
         AiRequestUtils.ExtractedTextResult skeletonResult = AiRequestUtils.requestExtractedTextResultAsync(
                 aiClient, log, "skeleton", conversationContext,
@@ -272,7 +272,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                     ? toRegistryBlock(formatRegistrySummary(enrichedRegistry, i)) : "";
             String scenePrompt = (isGeoGebra
                     ? CodeGenerationPrompts.geoGebraSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size())
-                    : CodeGenerationPrompts.sceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size()))
+                    : CodeGenerationPrompts.manimSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size()))
                     + sceneRegistryBlock;
             AiRequestUtils.ExtractedTextResult sceneResult = AiRequestUtils.requestExtractedTextResultAsync(
                     aiClient, log, sceneName, conversationContext,
