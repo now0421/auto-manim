@@ -267,7 +267,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         SceneEvaluationRetryState retryState = input.retryState();
 
         CodeFixRequest request = new CodeFixRequest();
-        request.setSource(CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION);
+        request.setSource(CodeFixSource.SCENE_LAYOUT_EVALUATION);
         request.setReturnAction(WorkflowActions.RETRY_RENDER);
         request.setGeneratedCode(codeResult.getGeneratedCode());
         request.setErrorReason(retryState.pendingIssueSummary != null

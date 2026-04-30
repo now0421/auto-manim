@@ -239,11 +239,11 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
     }
 
     private String selectRulesPrompt(CodeFixRequest request) {
-        if (request.getSource() == CodeFixSource.CODE_EVALUATION_REVIEW) {
+        if (request.getSource() == CodeFixSource.CODE_EVALUATION) {
             return CodeEvaluationPrompts.buildRevisionRulesPrompt(
                     NodeSupport.resolveOutputTarget(workflowConfig));
         }
-        if (request.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION) {
+        if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
             return SceneEvaluationPrompts.buildLayoutFixRulesPrompt(
                     NodeSupport.resolveOutputTarget(workflowConfig));
         }
@@ -254,13 +254,13 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
         String targetConcept = TextUtils.firstNonBlank(
                 request.getTargetConcept(), request.getSceneName(), "Unknown target");
         String targetDescription = TextUtils.firstNonBlank(request.getTargetDescription(), "");
-        if (request.getSource() == CodeFixSource.CODE_EVALUATION_REVIEW) {
+        if (request.getSource() == CodeFixSource.CODE_EVALUATION) {
             return CodeEvaluationPrompts.buildRevisionFixedContextPrompt(
                     targetConcept,
                     targetDescription,
                     NodeSupport.resolveOutputTarget(workflowConfig));
         }
-        if (request.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION) {
+        if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
             return SceneEvaluationPrompts.buildLayoutFixFixedContextPrompt(
                     targetConcept,
                     targetDescription,
@@ -273,7 +273,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
     }
 
     private String selectCurrentRequestPrompt(CodeFixRequest request) {
-        if (request.getSource() == CodeFixSource.CODE_EVALUATION_REVIEW) {
+        if (request.getSource() == CodeFixSource.CODE_EVALUATION) {
             String artifactName = TextUtils.firstNonBlank(
                     request.getSceneName(),
                     request.getExpectedSceneName(),
@@ -287,7 +287,7 @@ public class CodeFixNode extends PocketFlow.Node<CodeFixRequest, CodeFixResult, 
                     NodeSupport.resolveOutputTarget(workflowConfig)
             );
         }
-        if (request.getSource() == CodeFixSource.CODE_SCENE_LAYOUT_EVALUATION) {
+        if (request.getSource() == CodeFixSource.SCENE_LAYOUT_EVALUATION) {
             if (NodeSupport.isGeoGebraTarget(workflowConfig)) {
                 return SceneEvaluationPrompts.geoGebraLayoutFixUserPrompt(
                         TextUtils.defaultIfBlank(request.getStoryboardJson(), StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON),
