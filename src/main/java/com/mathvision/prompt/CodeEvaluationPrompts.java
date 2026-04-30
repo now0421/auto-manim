@@ -33,7 +33,7 @@ public final class CodeEvaluationPrompts {
                     + "Your job is NOT to debug runtime errors.\n"
                     + "Your primary job is rule-compliance inspection before render.\n"
                     + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete storyboard/code evidence.\n\n"
-                    + "The storyboard JSON is the source of truth.\n"
+                    + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL.replace("\n", "\n- ").trim() + "\n"
                     + "Mandatory Manim rule checklist:\n"
                     + "- `storyboard_execution`: learner-visible objects, scene/action order, entering/persistent/exiting lifecycle, and teaching goal are implemented from the storyboard, not merely mentioned in comments or captions.\n"
@@ -44,7 +44,9 @@ public final class CodeEvaluationPrompts {
                     + "- `text_readability`: `Text(...)`/`MarkupText(...)` use monospace fonts, on-screen text uses `font_size >= 18`, `.to_edge()` uses `buff >= 0.5`, long text width is constrained, and light cards have dark text.\n"
                     + "- `manim_code_hygiene`: code uses documented Manim APIs, shared color constants, `self.camera.background_color = BG`, no hardcoded hex colors inside scene methods, stable animation targets, and no unsafe empty `always_redraw` animation targets.\n"
                     + "- Imported external libraries and aliases used by the code, such as `import numpy as np`, are allowed; do not flag calls like `np.array(...)` or `np.linalg.norm(...)` when the import is present.\n"
+                    + "- `supported_equivalence`: backend-supported substitutions are acceptable when they preserve storyboard teaching intent and hard geometry; fail only when the substitution loses required semantic evidence or invents unsupported APIs.\n"
                     + "- `angle_and_attachment`: angle markers use true shared vertices/rays with explicit quadrant/other_angle when needed, and labels attached to moving objects use an updater or `always_redraw(...)`.\n"
+                    + "- `minimize_helpers`: auxiliary helper mobjects (proxy points on existing lines, duplicate line/ray objects created solely for angle measurement) are replaced with direct Manim constructs when available (e.g. `Angle(line1, line2)` instead of hand-crafted arcs or helper points).\n"
                     + "- `three_d_readability`: 3D storyboard scenes use `ThreeDScene`, apply explicit camera plan/orientation, and keep explanatory overlays fixed in frame or fixed orientation when camera motion would make them rotate away.\n"
                     + "- Specifically fail semantically wrong placements such as angle arcs on the wrong side, labels attached to the wrong point or segment, braces spanning the wrong expression, or highlights pointing at the wrong target.\n"
                     + "- For 3D scenes, check projected readability, camera clarity, and fixed-in-frame overlays.\n"
@@ -57,7 +59,7 @@ public final class CodeEvaluationPrompts {
                     + "Your job is NOT to debug runtime errors unless they directly affect storyboard fidelity.\n"
                     + "Your primary job is rule-compliance inspection for a GeoGebra teaching construction before render.\n"
                     + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete storyboard/code evidence.\n\n"
-                    + "The storyboard JSON is the source of truth.\n"
+                    + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA.replace("\n", "\n- ").trim() + "\n"
                     + "Mandatory GeoGebra rule checklist:\n"
                     + "- `storyboard_execution`: required learner-visible objects are actually constructed, not merely described by text, comments, or captions.\n"
@@ -67,6 +69,8 @@ public final class CodeEvaluationPrompts {
                     + "- `layout_and_readability`: coordinates, labels, style, contrast, and initial view follow `layout_goal`, `safe_area_plan`, and `screen_overlay_plan` where applicable.\n"
                     + "- `viewport_contract`: the initial visible coordinate window is treated as x[-7,7], y[-4,4]; important objects should fit this view without relying on user zooming or panning, and the construction should not be tiny or clustered inside an over-wide view.\n"
                     + "- `geogebra_syntax`: command names and syntax are documented in the attached GeoGebra manual, one executable command is used per line, and unsupported guessed overloads are not used.\n"
+                    + "- `supported_equivalence`: documented GeoGebra substitutions are acceptable when they preserve storyboard teaching intent and hard geometry; fail only when the substitution loses required semantic evidence or uses unsupported commands.\n"
+                    + "- `minimize_helpers`: auxiliary helper objects (points on existing lines created solely for `Angle(Point, Point, Point)`, duplicate lines, or proxy scaffolding) are replaced with direct syntax when available (e.g. `Angle(Line, Line)`, referencing existing named objects directly).\n"
                     + "- `teaching_evidence`: result text or labels are supported by matching constructed geometry; no semantically wrong substitution such as drawing a border where a full grid was requested.\n"
                     + "- A later geometry-based stage will inspect rendered geometry for actual overlap/offscreen issues. Do not duplicate that stage.\n"
                     + "- GeoGebra is interactive, but initial-view readability is mandatory. Focus on the default rendered view and storyboard fidelity.\n\n"
@@ -77,6 +81,7 @@ public final class CodeEvaluationPrompts {
                     + "You will receive storyboard JSON, static visual findings, a structured review, and the current code.\n"
                     + "Rewrite the full code so it is visually safer before render.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_FULL
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
@@ -85,6 +90,7 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
                     + SystemPrompts.ANGLE_MARKER_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
     private static final String REVISION_SYSTEM_GEOGEBRA =
@@ -93,11 +99,13 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full command script so it better aligns with the storyboard before render.\n"
                     + "Preserve dependency-safe geometry, object identities, scene visibility progression, and teaching intent.\n"
                     + "Fix storyboard misalignments such as missing constructions, incorrect scene visibility, incorrect substitutions for requested geometry, and captions unsupported by the actual construction.\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
                     + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
 
@@ -139,7 +147,7 @@ public final class CodeEvaluationPrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return SystemPrompts.buildCurrentRequestSection(String.format(
                     "Figure name: %s\n\n"
-                            + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                            + "Compact storyboard JSON (semantic authority):\n```json\n%s\n```\n\n"
                             + "Static visual analysis:\n```json\n%s\n```\n\n"
                             + "GeoGebra command script to review:\n```geogebra\n%s\n```\n\n"
                             + "Check every mandatory GeoGebra rule before render.\n"
@@ -149,7 +157,7 @@ public final class CodeEvaluationPrompts {
         }
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Scene class name: %s\n\n"
-                        + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (semantic authority):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Manim code to review:\n```python\n%s\n```\n\n"
                         + "Check every mandatory Manim rule before render.\n"
@@ -203,7 +211,7 @@ public final class CodeEvaluationPrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return SystemPrompts.buildCurrentRequestSection(String.format(
                     "Figure name: %s\n\n"
-                            + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                            + "Compact storyboard JSON (semantic authority):\n```json\n%s\n```\n\n"
                             + "Static visual analysis:\n```json\n%s\n```\n\n"
                             + "Structured code review:\n```json\n%s\n```\n\n"
                             + "Current GeoGebra command script:\n```geogebra\n%s\n```\n\n"
@@ -216,7 +224,7 @@ public final class CodeEvaluationPrompts {
         }
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Scene class name: %s\n\n"
-                        + "Compact storyboard JSON (source of truth):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (semantic authority):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Structured code review:\n```json\n%s\n```\n\n"
                         + "Current Manim code:\n```python\n%s\n```\n\n"

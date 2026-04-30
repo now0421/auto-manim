@@ -23,12 +23,15 @@ public final class NarrativePrompts {
                     .replace("usually keep each step to", "keep simultaneous main visual elements around")
                     .replace(".\n", "\n- ").trim() + "\n"
                     + "- Place formulas near edges, not over the main geometry\n"
-                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_CORE
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_OBJECT_SEMANTICS
                     .replace("\n- ", "\n- ")
                     .replace("How to interpret the storyboard fields:\n", "Field responsibilities: ").trim() + "\n"
-                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_EXTENDED.trim() + "\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE.trim() + "\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT.trim() + "\n"
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES
                     + SystemPrompts.GEOMETRIC_MARKER_AUTHORING_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
                     + "3D rules:\n"
                     + "- Use `scene_mode = 3d` only when depth is genuinely needed\n"
                     + "- Include explicit `camera_plan`\n"
@@ -38,6 +41,7 @@ public final class NarrativePrompts {
                     + "- Plan per-scene variation: vary the dominant visual focus, spatial layout pattern, and visual density across scenes. Avoid identical composition for consecutive scenes\n"
                     + "- " + SystemPrompts.HIGH_CONTRAST_COLOR_RULES + "\n"
                     + "Storyboard style cleanup rules:\n"
+                    + "- Treat the visual design pass as a strong draft, not an immutable contract; this stage may repair layout, style, continuity, and backend practicality before the storyboard becomes the validated downstream authority.\n"
                     + "- Preserve intentional scene-level placement, style, color, and visual hierarchy from the visual design pass unless they cause global consistency, overlap, or readability problems.\n"
                     + "- Once a color is assigned to a concept, it keeps that meaning across the entire storyboard. Record color-to-concept assignments in `global_visual_rules`.\n"
                     + "- Prefer structured `style` arrays over vague prose. Each style entry should describe one visual layer or role, such as text, background, border, glow, or emphasis.\n"
@@ -49,7 +53,8 @@ public final class NarrativePrompts {
     private static final String GEOGEBRA_RULES =
             "GeoGebra-specific storyboard validation rules:\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
-                    + "- Use style changes (color, line thickness, dash style) on existing objects rather than creating visual duplicates on the same endpoints. GeoGebra objects persist globally, so every redundant object adds permanent clutter.\n";
+                    + "- Use style changes (color, line thickness, dash style) on existing objects rather than creating visual duplicates on the same endpoints. GeoGebra objects persist globally, so every redundant object adds permanent clutter.\n"
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES;
 
     private static final String MANIM_RULES =
             "Manim-specific storyboard validation rules:\n"

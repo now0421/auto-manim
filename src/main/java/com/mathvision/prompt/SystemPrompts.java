@@ -23,47 +23,69 @@ public final class SystemPrompts {
 
     // ========================================================================
     // Storyboard field guides
+    //
+    // Organized by semantic scope so each pipeline stage includes only the
+    // guides it needs:
+    //   OBJECT_SEMANTICS — object identity, kind, content, dependency, style
+    //   SCENE_STRUCTURE  — scene metadata, object lifecycle, actions
+    //   SCENE_LAYOUT     — spatial layout, constraints, camera, and intent
+    //   FULL             — all three combined (for code generation/evaluation)
+    //   GEOGEBRA         — GeoGebra-specific field interpretations
+    //   REPAIR           — field semantics for repair passes
+    //   GEOGEBRA_REPAIR  — GeoGebra-specific repair interpretations
     // ========================================================================
 
-    /** Core fields for code generation and evaluation stages. */
-    public static final String STORYBOARD_FIELD_GUIDE_CORE =
+    /** Object-level fields: identity, kind, content, dependency, style, and placement. */
+    public static final String STORYBOARD_FIELD_GUIDE_OBJECT_SEMANTICS =
             "How to interpret the storyboard fields:\n"
+                    + "- `id`: unique object identifier used across scenes, registry, and actions.\n"
+                    + "- `kind`: geometric or visual type — point, line, segment, ray, circle, polygon, arc, angle_marker, text, etc. Determines the construction or rendering primitive.\n"
+                    + "- `content`: mathematical description or display text (e.g. \"A(0, 3)\" or \"x² + y² = r²\"). For `text` objects this is the visible string; for geometry objects it is a label or coordinate hint.\n"
                     + "- `behavior`: dependency semantics — `static` means independently defined, `derived` means defined from other geometry, `follows_anchor` means attached to `anchor_id`, `fixed_overlay` means screen-space overlay.\n"
                     + "- `constraint_note`: object-level hard geometry that must be preserved.\n"
                     + "- `dependency_note`: attachment or update logic describing what source objects define this object.\n"
-                    + "- `geometry_constraints`: scene-level invariants such as reflections, symmetry, collinearity, intersections, equal lengths.\n"
-                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition.\n"
-                    + "- `anchor_id`: id of the object this one should stay attached to.\n";
+                    + "- `anchor_id`: id of the object this one should stay attached to.\n"
+                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint — at render time the object will be recomputed from its source objects via the relationship in `dependency_note` and `constraint_note`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
+                    + "- `style`: array of visual layer entries (color, opacity, thickness, dash, background, etc.) that describe how the object should look. Each entry targets one visual layer or role. Omit for visually plain objects.\n"
+                    + "- `source_node`: knowledge-graph node id that produced this object; informational only.\n";
 
-    /** Extended fields for object lifecycle and actions. */
-    public static final String STORYBOARD_FIELD_GUIDE_EXTENDED =
-            "- `entering_objects`: scene patches for newly entering objects; raw storyboard entries should contain `id` plus optional `placement`/`style` only.\n"
+    /** Scene-structure fields: scene metadata, object lifecycle, and actions. */
+    public static final String STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE =
+            "- `scene_id`: unique identifier for the scene; used for cross-referencing and code organization.\n"
+                    + "- `title`, `narration`: teaching purpose; help choose clear animation structure and pacing.\n"
+                    + "- `step_refs`: solution-step references; tie the scene to reasoning steps.\n"
+                    + "- `duration_seconds`: intended scene duration in seconds; guide pacing and animation timing.\n"
+                    + "- `scene_mode`: `2d` (default) or `3d`; determines scene class and camera setup.\n"
+                    + "- `entering_objects`: scene patches for newly entering objects; raw storyboard entries should contain `id` plus optional `placement`/`style` only.\n"
                     + "- `persistent_objects`: scene patches for carried objects; raw storyboard entries should contain `id` plus optional changed `placement`/`style` only.\n"
                     + "- `exiting_objects`: id-only entries for objects that should explicitly leave the scene.\n"
                     + "- `actions`: the main execution plan; respect their order, targets, and visible intent.\n"
-                    + "- `object_registry`: canonical global object definitions; keep stable identity, content, dependency, and behavior here, not scene-specific placement.\n"
+                    + "- `object_registry`: canonical global object definitions; keep stable identity, kind, content, dependency, and behavior here, not scene-specific placement.\n"
                     + "- `notes_for_codegen`: implementation hints; follow unless they conflict with correctness.\n"
-                    + "- `step_refs`, `title`, `narration`: teaching purpose; help choose clear animation structure.\n"
                     + "- `continuity_plan`, `global_visual_rules`: global constraints that shape the whole file.\n";
 
-    /** Layout and camera fields. */
-    public static final String STORYBOARD_FIELD_GUIDE_LAYOUT =
-            "- `layout_goal`: intended screen composition and relative placement of major elements.\n"
+    /** Scene-layout fields: spatial composition, geometric constraints, camera, and intent. */
+    public static final String STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT =
+            "- `goal`: what the scene must accomplish for understanding or solution progress.\n"
+                    + "- `layout_goal`: intended screen composition and relative placement of major elements.\n"
+                    + "- `geometry_constraints`: scene-level invariants such as reflections, symmetry, collinearity, intersections, equal lengths.\n"
                     + "- `safe_area_plan`: how important content stays readable and inside the safe frame.\n"
                     + "- `screen_overlay_plan`: text or formulas that stay fixed in screen space.\n"
-                    + "- `camera_anchor`, `camera_plan`: camera focus and behavior.\n"
-                    + "- `goal`: what the scene must accomplish for understanding or solution progress.\n";
+                    + "- `camera_anchor`, `camera_plan`: camera focus and behavior.\n";
 
     /** Full storyboard field guide combining all sections. */
     public static final String STORYBOARD_FIELD_GUIDE_FULL =
             "How to interpret the storyboard fields:\n"
-                    + STORYBOARD_FIELD_GUIDE_CORE.replace("How to interpret the storyboard fields:\n", "")
-                    + STORYBOARD_FIELD_GUIDE_EXTENDED
-                    + STORYBOARD_FIELD_GUIDE_LAYOUT;
+                    + STORYBOARD_FIELD_GUIDE_OBJECT_SEMANTICS.replace("How to interpret the storyboard fields:\n", "")
+                    + STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE
+                    + STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT;
 
     /** Field guide for GeoGebra code generation. */
     public static final String STORYBOARD_FIELD_GUIDE_GEOGEBRA =
             "How to interpret the storyboard fields:\n"
+                    + "- `kind`: determines the GeoGebra construction primitive (point → named coordinate or path-point, line → Line/Segment/Ray, circle → Circle, text → Text or native label, etc.).\n"
+                    + "- `content`: display text or coordinate hint; for text objects this is the visible string, for geometry it is a label or math expression.\n"
+                    + "- `style`: visual properties array (color, thickness, dash, opacity, etc.) to apply via SetColor, SetLineThickness, SetLineStyle, etc.\n"
                     + "- `entering_objects`: scene patches for newly entering objects; use `id` plus optional `placement`/`style` changes.\n"
                     + "- `persistent_objects`: scene patches for carried objects; use `id` plus optional changed `placement`/`style`.\n"
                     + "- `exiting_objects`: id-only entries that may be translated into hidden helper objects or omitted if persistent visibility would cause clutter.\n"
@@ -71,6 +93,7 @@ public final class SystemPrompts {
                     + "- `placement`, `layout_goal`, `safe_area_plan`, `screen_overlay_plan`: guide readable coordinates, allowed ranges, label placement, and visibility choices.\n"
                     + "- `behavior = follows_anchor` or `derived`: object should be defined from its source geometry so it updates automatically.\n"
                     + "- `behavior = static`: independently defined object; can still be fixed, draggable, or moved later depending on `actions`, `geometry_constraints`, `constraint_note`, and `notes_for_codegen`.\n"
+                    + "- `dependency_note`, `constraint_note`, `anchor_id`: describe dependency relationships and geometric invariants that must be preserved in the construction.\n"
                     + "- For constrained motion, prefer explicit documented GeoGebra constructions such as `Point(path)`, `PointIn(region)`, `Intersect(...)`, `Reflect(...)`, `Midpoint(...)`, or slider-driven parameterizations with declared bounds.\n"
                     + "- When a point should remain on a line, segment, circle, or similar object, the generated command should visibly encode that incidence relation.\n";
 
@@ -81,6 +104,8 @@ public final class SystemPrompts {
                     + "- `safe_area_plan` and `screen_overlay_plan`: use these first when fixing overlap and offscreen issues.\n"
                     + "- `geometry_constraints` and each object's `constraint_note`: treat these as hard geometric invariants.\n"
                     + "- `behavior`, `anchor_id`, and `dependency_note`: preserve attachment logic for derived lines, reflected points, moving labels, and overlays.\n"
+                    + "- `kind` and `content`: preserve the geometric or textual identity of each object when repositioning.\n"
+                    + "- `style`: preserve visual hierarchy and emphasis when adjusting layout.\n"
                     + "- `persistent_objects`, `exiting_objects`, and `actions`: preserve continuity and scene flow instead of redrawing the construction arbitrarily.\n"
                     + "- If a reported object is a reflection, midpoint, foot, or intersection, recompute it from its source construction instead of moving it freely.\n";
 
@@ -92,8 +117,25 @@ public final class SystemPrompts {
                     + "- Fix out-of-bounds, underfilled, clustered, or overlapping layouts by moving/scaling/recentering whole constrained groups while preserving the construction.\n"
                     + "- `geometry_constraints` and each object's `constraint_note`: treat these as hard geometric invariants.\n"
                     + "- `behavior`, `anchor_id`, and `dependency_note`: preserve dependency-safe construction order for reflected points, intersections, midpoints, and derived objects.\n"
+                    + "- `kind` and `content`: preserve the geometric or textual identity of each object when repositioning.\n"
+                    + "- `style`: preserve visual properties (color, thickness, dash) when adjusting layout.\n"
                     + "- `persistent_objects`, `exiting_objects`, and `actions`: preserve object visibility progression instead of rewriting the construction arbitrarily.\n"
                     + "- If a reported object is a reflection, midpoint, foot, or intersection, keep it defined from its source objects via GeoGebra dependency commands.\n";
+
+    /** Shared authority model for stages that consume a validated storyboard. */
+    public static final String STORYBOARD_AUTHORITY_RULES =
+            "Storyboard authority rules:\n"
+                    + "- Treat the validated storyboard as the semantic authority for teaching goal, object identity, scene order, continuity, geometry meaning, dependency relationships, and layout intent.\n"
+                    + "- Treat `geometry_constraints`, `constraint_note`, `behavior`, `anchor_id`, and `dependency_note` as hard semantic requirements.\n"
+                    + "- Do not treat backend-specific notes, unsupported API names, undocumented commands, or purely decorative effects as hard requirements when they conflict with the active backend manual or runtime correctness.\n"
+                    + "- When a requested effect is unsupported, preserve the same teaching intent with documented backend features; omit only non-essential decoration that cannot be implemented safely.\n"
+                    + "- If storyboard placement conflicts with safe-area requirements, rendered evidence, or geometric correctness, preserve the semantic construction and repair the layout instead of blindly copying the bad placement.\n";
+
+    /** Shared authority model for code repair stages. */
+    public static final String STORYBOARD_REPAIR_AUTHORITY_RULES =
+            "Use the storyboard JSON as semantic repair context, not as an instruction to preserve broken implementation details.\n"
+                    + STORYBOARD_AUTHORITY_RULES
+                    + "For repair, prefer the smallest code/layout change that restores backend correctness while preserving the storyboard's teaching meaning and hard geometry.\n";
 
     // ========================================================================
     // Geometry constraint rules
@@ -162,7 +204,8 @@ public final class SystemPrompts {
                     + "- Keep visual weight balanced across the frame instead of clustering everything on one side.\n"
                     + "- Preserve intentional empty space and a safe overlay zone; do not solve layout problems by piling overlays or opaque objects over the active geometry.\n"
                     + "- If the view becomes crowded, split the content, dim the old context, or remove temporary annotations instead of squeezing everything tighter.\n"
-                    + "- When correcting out-of-bounds elements, reposition them with adequate clearance from every frame edge (minimum 0.5 units on all sides); never fix a boundary violation by placing objects flush against the edge.\n";
+                    + "- When correcting out-of-bounds elements, reposition them with adequate clearance from every frame edge (minimum 0.5 units on all sides); never fix a boundary violation by placing objects flush against the edge.\n"
+                    + "- When a derived object (reflection, projection, intersection, etc.) extends outside the frame, do NOT change its placement directly — it is computed from its source objects at render time. Instead, trace the dependency chain in object_registry (dependency_note, constraint_note) to identify the upstream source object(s) and adjust their coordinates so the derived result lands inside the frame. For example, if a reflected point B' is offscreen because it mirrors B across line l, move B closer to l or shift l itself; never override B' with an arbitrary coordinate that contradicts its geometric definition.\n";
 
     /** High-contrast color rules to avoid pale-on-pale combinations. */
     public static final String HIGH_CONTRAST_COLOR_RULES =
@@ -312,6 +355,32 @@ public final class SystemPrompts {
                     + "When an angle is measured against a normal, helper line, or moving segment, construct both rays from the shared point inside `always_redraw(...)`.\n"
                     + "If the intended angle sector could be ambiguous, explicitly set `quadrant=...`; if the storyboard intends the interior/smaller angle, explicitly keep `other_angle=False`.\n";
 
+    /** Angle marker best practices for GeoGebra. */
+    public static final String GEOGEBRA_ANGLE_MARKER_RULES =
+            "GeoGebra angle marker rules:\n"
+                    + "- Prefer `Angle(Line, Line)` or `Angle(Vector, Vector)` over `Angle(Point, Point, Point)` when the boundary lines, segments, or rays already exist in the construction.\n"
+                    + "- Do not create auxiliary points on existing lines just to use the three-point Angle form. Instead, build Line, Ray, or Vector objects from the existing vertex and boundary points, then call Angle on those objects.\n"
+                    + "- Use `Angle(Point, Point, Point)` only when no line/segment/ray boundary object is available or when the three-point form is genuinely more readable.\n"
+                    + "- When the storyboard describes an angle with a vertex and two boundary rays (e.g. \"angle at P between AP and l\"), construct Line or Ray objects for the boundaries (e.g. `linePA = Line(P, A)`) and use `Angle(linePA, l)` instead of inventing a helper point on l.\n";
+
+    /** Rules for minimizing auxiliary/helper objects in storyboard authoring (Visual Design, Storyboard Validation). */
+    public static final String MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES =
+            "Minimize auxiliary helper objects:\n"
+                    + "- When a derived object (angle marker, midpoint, intersection, reflection, etc.) can be fully defined by referencing existing objects, do so directly rather than introducing separate helper/scaffold objects.\n"
+                    + "- For angle markers, define them by referencing the boundary lines, segments, or rays directly in `dependency_note` (e.g. \"angle at P between ray P->A and line l\") rather than creating helper point objects on existing lines just to use a three-point form.\n"
+                    + "- Avoid creating helper points, helper lines, or other scaffolding objects whose sole purpose is to serve as an intermediate input to another object when a direct dependency reference is possible.\n"
+                    + "- If an object exists on the construction (a line, a segment, a ray, a circle), reference it directly instead of creating a duplicate or a proxy point on it.\n"
+                    + "- When the target platform has a concise syntax that works with existing objects, prefer that syntax and record the intent in `dependency_note` so downstream code generation can use it.\n";
+
+    /** Rules for minimizing auxiliary/helper objects in code generation and code repair stages. */
+    public static final String MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES =
+            "Minimize auxiliary helper objects in generated code:\n"
+                    + "- When the target platform has a direct syntax that works with existing objects, use it instead of creating intermediate helper objects.\n"
+                    + "- Do not create auxiliary points on existing lines, segments, or circles just to use a multi-point syntax form when a direct object-based syntax exists (e.g. use `Angle(Line, Line)` instead of creating a helper point for `Angle(Point, Point, Point)`).\n"
+                    + "- Do not create helper lines or segments that merely duplicate existing geometry for the purpose of feeding them into another command.\n"
+                    + "- When a construction or measurement can reference an existing named object directly, do so rather than reconstructing an equivalent from scratch.\n"
+                    + "- Remove or replace any auxiliary object that exists solely as a workaround for an avoidable syntax limitation.\n";
+
     /** Manim typography scale for consistent text sizing. */
     public static final String MANIM_TYPOGRAPHY_SCALE =
             "Manim typography scale:\n"
@@ -432,7 +501,8 @@ public final class SystemPrompts {
 
     /** Storyboard codegen preamble for Manim output. */
     public static final String STORYBOARD_CODEGEN_INTRO_MANIM =
-            "Use the following compact storyboard JSON as the source of truth for staging, object identity, continuity, and scene execution.\n"
+            "Use the following compact storyboard JSON as the semantic authority for staging, object identity, continuity, and scene execution.\n"
+                    + STORYBOARD_AUTHORITY_RULES
                     + "- Treat every object id as a stable visual identity.\n"
                     + "- Treat the storyboard as a complete learner-visible visual specification; do not invent unstated objects or implied labels.\n"
                     + "- If an id persists, keep or transform the same mobject instead of redrawing it.\n"
@@ -447,7 +517,8 @@ public final class SystemPrompts {
 
     /** Storyboard codegen preamble for GeoGebra output. */
     public static final String STORYBOARD_CODEGEN_INTRO_GEOGEBRA =
-            "Use the following compact storyboard JSON as the source of truth for GeoGebra construction order, object identity, continuity, and teaching progression.\n"
+            "Use the following compact storyboard JSON as the semantic authority for GeoGebra construction order, object identity, continuity, and teaching progression.\n"
+                    + STORYBOARD_AUTHORITY_RULES
                     + "- Keep the same object identities stable across steps.\n"
                     + "- Convert `actions` into construction order, visibility changes, highlights, or helper toggles rather than literal animation.\n"
                     + "- Preserve `geometry_constraints`, `behavior`, `anchor_id`, `dependency_note`, and `constraint_note` through dependency-safe GeoGebra commands.\n"

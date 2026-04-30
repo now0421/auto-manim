@@ -11,6 +11,7 @@ public final class CodeGenerationPrompts {
             "You are an expert Manim Community engineer and Python programmer.\n"
                     + "Generate complete, runnable, maintainable Python code that implements the storyboard.\n"
                     + "Treat the provided storyboard JSON as an execution specification, not loose inspiration.\n\n"
+                    + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory rules:\n"
                     + "- Use `from manim import *`.\n"
                     + "- Do not invent learner-visible objects that are not declared in the storyboard.\n"
@@ -33,6 +34,7 @@ public final class CodeGenerationPrompts {
                     + "- Implement the visual plan with documented Manim constructs and no hidden assumptions.\n"
                     + "- " + SystemPrompts.MANIM_TEXT_CONSTRUCTOR_MAPPING
                     + "- " + SystemPrompts.ANGLE_MARKER_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.NARRATIVE_PHILOSOPHY
                     + SystemPrompts.VISUAL_PLANNING_RULES
                     + SystemPrompts.MANIM_MOTION_AND_PACING_RULES
@@ -70,9 +72,11 @@ public final class CodeGenerationPrompts {
                     + "You will receive generated Manim code together with validation failures.\n"
                     + "Rewrite the full file so it becomes valid, consistent, and ready for the next workflow stage.\n"
                     + "Fix every reported validation problem, preserve the teaching content, keep the requested scene class name, and proactively fix nearby Python/Manim mistakes.\n\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.PYTHON_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_VALIDATION_FIX_SYSTEM =
@@ -81,7 +85,10 @@ public final class CodeGenerationPrompts {
                     + "Rewrite the full command script so it becomes valid, dependency-safe, and ready for the next workflow stage.\n"
                     + "Fix every reported validation problem, preserve the teaching content, keep the requested figure naming intent, and proactively fix nearby GeoGebra mistakes.\n"
                     + "Use English GeoGebra command names.\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
+                    + SystemPrompts.GEOGEBRA_ANGLE_MARKER_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES + "\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
@@ -89,7 +96,8 @@ public final class CodeGenerationPrompts {
     private static final String GEOGEBRA_CODE_GENERATION_SYSTEM =
             "You are an expert GeoGebra Classic engineer.\n"
                     + "Generate complete, dependency-safe GeoGebra command code that implements the storyboard for teaching.\n"
-                    + "Treat the storyboard as the source of truth for object identity, geometry meaning, layout intent, and teaching order.\n\n"
+                    + "Treat the storyboard as the semantic authority for object identity, geometry meaning, layout intent, and teaching order.\n\n"
+                    + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory rules:\n"
                     + "- Return GeoGebra commands, not Python and not JavaScript.\n"
                     + "- Build from base objects to derived objects in a clear dependency chain.\n"
@@ -110,6 +118,8 @@ public final class CodeGenerationPrompts {
                     + "- When initial structured placement is requested for a constrained point, choose a dependency-safe construction that starts near that location or inside the requested range; never break the constraint just to match the coordinates.\n"
                     + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
+                    + SystemPrompts.GEOGEBRA_ANGLE_MARKER_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + "- Prefer common, stable GeoGebra Classic commands over obscure tricks.\n"
                     + "- Ignore timing-only details such as scene duration, but preserve the same teaching order and object-state progression.\n"
                     + "- Use style and visibility commands sparingly and semantically, and apply scripting commands after construction commands.\n"
@@ -193,7 +203,7 @@ public final class CodeGenerationPrompts {
                 : "- " + String.join("\n- ", violations);
         String storyboardBlock = (storyboardJson == null || storyboardJson.isBlank())
                 ? ""
-                : "Compact storyboard JSON (source of truth):\n```json\n"
+                : "Compact storyboard JSON (semantic authority):\n```json\n"
                 + storyboardJson
                 + "\n```\n\n";
         return SystemPrompts.buildCurrentRequestSection(String.format(
@@ -219,7 +229,7 @@ public final class CodeGenerationPrompts {
                 : "- " + String.join("\n- ", violations);
         String storyboardBlock = (storyboardJson == null || storyboardJson.isBlank())
                 ? ""
-                : "Compact storyboard JSON (source of truth):\n```json\n"
+                : "Compact storyboard JSON (semantic authority):\n```json\n"
                 + storyboardJson
                 + "\n```\n\n";
         return SystemPrompts.buildCurrentRequestSection(String.format(

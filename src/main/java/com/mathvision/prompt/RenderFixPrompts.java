@@ -14,11 +14,13 @@ public final class RenderFixPrompts {
             "You are a Manim Community debugging expert.\n"
                     + "Fix the code so it renders successfully.\n"
                     + "Preserve the original scene class name and intended animation meaning.\n\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + "Do not break mathematical construction constraints while fixing render issues; derived points should remain derived from their source geometry.\n"
                     + "Mandatory rules:\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.MANIM_NAMING_RULES
                     + "Color rules:\n"
@@ -35,9 +37,11 @@ public final class RenderFixPrompts {
             "You are a GeoGebra Classic debugging expert.\n"
                     + "Fix the GeoGebra command script so every reported failure is resolved when the full script is replayed in order via `evalCommand(...)`.\n"
                     + "Preserve the intended construction meaning, object dependency chain, and storyboard teaching order.\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + "Do not break geometric constraints while fixing command failures; keep derived objects derived from their source objects.\n"
                     + "Use English GeoGebra command names.\n"
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + "Naming rules:\n"
                     + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "Color rules:\n"
@@ -95,7 +99,7 @@ public final class RenderFixPrompts {
         }
         sb.append("\n")
                 .append(storyboardJson != null && !storyboardJson.isBlank()
-                        ? "Compact storyboard JSON (source of truth):\n```json\n"
+                        ? "Compact storyboard JSON (semantic authority):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
                 .append(staticAuditSummary != null && !staticAuditSummary.isBlank()
@@ -130,7 +134,7 @@ public final class RenderFixPrompts {
         }
         sb.append("\n")
                 .append(storyboardJson != null && !storyboardJson.isBlank()
-                        ? "Compact storyboard JSON (source of truth):\n```json\n"
+                        ? "Compact storyboard JSON (semantic authority):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
                 .append("Validation failure details collected from that full pass:\n```\n").append(error).append("\n```\n\n")

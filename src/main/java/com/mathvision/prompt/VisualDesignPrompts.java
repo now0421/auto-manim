@@ -57,10 +57,11 @@ public final class VisualDesignPrompts {
 
     private static final String SCENE_AUTHORING_RULES =
             SystemPrompts.OBJECT_LIFECYCLE_RULES
-                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_CORE
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_OBJECT_SEMANTICS
                         .replace("\n- ", "\n- ")
                         .replace("How to interpret the storyboard fields:\n", "Field responsibilities: ").trim() + "\n"
-                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_EXTENDED.trim() + "\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE.trim() + "\n"
+                    + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT.trim() + "\n"
                     + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES
                     + SystemPrompts.GEOMETRIC_MARKER_AUTHORING_RULES;
 
@@ -101,6 +102,7 @@ public final class VisualDesignPrompts {
                     + "Turn abstract reasoning into a learner-facing visual plan before any code is written.\n"
                     + "Do not invent unsupported givens or alternative solution branches.\n\n"
                     + SCENE_AUTHORING_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
                     + "Manim object and label rules:\n"
                     + "- Every learner-visible Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; do not hide visible labels inside another object's prose description.\n"
                     + "- If a point, marker, label, counter, or helper must visibly follow another object, create a separate object and describe the attachment with `behavior`, `anchor_id`, and `dependency_note`.\n"
@@ -135,6 +137,7 @@ public final class VisualDesignPrompts {
                     + "Turn abstract reasoning into something the learner can see, compare, or manipulate.\n"
                     + "Do not invent unsupported givens or alternative solution branches.\n\n"
                     + SCENE_AUTHORING_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
                     + "GeoGebra label and object rules:\n"
                     + "- Follow GeoGebra naming conventions.\n"
                     + "- Prefer native GeoGebra labels for named geometric objects such as points, lines, segments, rays, circles, and polygons.\n"

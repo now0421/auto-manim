@@ -571,6 +571,15 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             if (obj.getBehavior() != null && !obj.getBehavior().isBlank()) {
                 sb.append(", behavior=").append(obj.getBehavior());
             }
+            if (obj.getAnchorId() != null && !obj.getAnchorId().isBlank()) {
+                sb.append(", anchor_id=").append(obj.getAnchorId());
+            }
+            if (obj.getDependencyNote() != null && !obj.getDependencyNote().isBlank()) {
+                sb.append(", dependency_note=").append(truncate(obj.getDependencyNote(), 80));
+            }
+            if (obj.getConstraintNote() != null && !obj.getConstraintNote().isBlank()) {
+                sb.append(", constraint_note=").append(truncate(obj.getConstraintNote(), 80));
+            }
             if (obj.getPlacement() != null && obj.getPlacement().hasData()) {
                 sb.append(", placement=").append(formatPlacementSummary(obj.getPlacement()));
             }
