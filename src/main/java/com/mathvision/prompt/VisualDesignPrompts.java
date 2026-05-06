@@ -16,7 +16,7 @@ public final class VisualDesignPrompts {
             "Output format:\n"
                     + StoryboardSchemaPrompts.JSON_SYNTAX_REQUIREMENTS
                     + "Return a JSON object with two top-level keys: `scene` and `new_objects`.\n"
-                    + "`scene.entering_objects` and `scene.persistent_objects` are scene-level patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_note, or constraint_note here — those belong in `new_objects`.\n"
+                    + "`scene.entering_objects` and `scene.persistent_objects` are scene-level patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, or constraint_note here — those belong in `new_objects`.\n"
                     + "`new_objects` entries represent the canonical registry definition of each object introduced in this scene. They carry identity, content, dependency, and behavior but not scene-specific placement or style.\n"
                     + "Only add `new_objects` that are teaching-essential, clarify the current beat, or carry distinct geometry/dependency semantics. Reuse existing registry ids instead of creating duplicate labels, repeated formulas, redundant highlights, or decorative helper objects.\n"
                     + "{\n"
@@ -107,7 +107,7 @@ public final class VisualDesignPrompts {
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
                     + "Manim object and label rules:\n"
                     + "- Every planned teaching-essential Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; avoid adding temporary decoration, redundant labels, or unhelpful helper objects to the storyboard.\n"
-                    + "- If a point, marker, label, counter, or helper must visibly follow another object, create a separate object and describe the attachment with `behavior`, `anchor_id`, and `dependency_note`.\n"
+                    + "- If a point, marker, label, counter, or helper must visibly follow another object, create a separate object and describe the attachment with `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation`.\n"
                     + "- For moving points or markers, create a separate label object with `behavior = follows_anchor` so the label tracks the moving object.\n"
                     + "- Manim does not auto-label objects. When an object's name or value helps the learner understand the current beat, explicitly declare a companion `kind: text` label in the same scene's `entering_objects`; attach it with `behavior = follows_anchor` and `anchor_id` pointing to the parent object's id. Omit labels that are redundant or do not improve understanding.\n"
                     + "- Use `screen_overlay_plan` only for true viewport-fixed explanatory overlays, not as a vague place to hide layout conflicts.\n"

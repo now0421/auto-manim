@@ -245,8 +245,11 @@ public class Narrative {
         @JsonProperty("anchor_id")
         private String anchorId;
 
-        @JsonProperty("dependency_note")
-        private String dependencyNote;
+        @JsonProperty("dependency_objects")
+        private List<String> dependencyObjects = new ArrayList<>();
+
+        @JsonProperty("dependency_relation")
+        private String dependencyRelation;
 
         @JsonProperty("constraint_note")
         private String constraintNote;
@@ -281,8 +284,13 @@ public class Narrative {
         public String getAnchorId() { return anchorId; }
         public void setAnchorId(String anchorId) { this.anchorId = anchorId; }
 
-        public String getDependencyNote() { return dependencyNote; }
-        public void setDependencyNote(String dependencyNote) { this.dependencyNote = dependencyNote; }
+        public List<String> getDependencyObjects() { return dependencyObjects; }
+        public void setDependencyObjects(List<String> dependencyObjects) {
+            this.dependencyObjects = dependencyObjects != null ? dependencyObjects : new ArrayList<>();
+        }
+
+        public String getDependencyRelation() { return dependencyRelation; }
+        public void setDependencyRelation(String dependencyRelation) { this.dependencyRelation = dependencyRelation; }
 
         public String getConstraintNote() { return constraintNote; }
         public void setConstraintNote(String constraintNote) { this.constraintNote = constraintNote; }

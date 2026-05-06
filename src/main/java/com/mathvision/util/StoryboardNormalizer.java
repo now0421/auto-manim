@@ -200,7 +200,8 @@ public final class StoryboardNormalizer {
         object.setSourceNode(null);
         object.setBehavior(null);
         object.setAnchorId(null);
-        object.setDependencyNote(null);
+        object.setDependencyObjects(new ArrayList<>());
+        object.setDependencyRelation(null);
         object.setConstraintNote(null);
         if (mode == PatchMode.EXITING) {
             object.setStyle(new ArrayList<>());

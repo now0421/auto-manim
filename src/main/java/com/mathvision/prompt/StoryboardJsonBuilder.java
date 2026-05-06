@@ -130,7 +130,8 @@ public final class StoryboardJsonBuilder {
             putNonBlank(objectNode, "source_node", object.getSourceNode());
             putNonBlank(objectNode, "behavior", object.getBehavior());
             putNonBlank(objectNode, "anchor_id", object.getAnchorId());
-            putNonBlank(objectNode, "dependency_note", object.getDependencyNote());
+            putTrimmedStringArray(objectNode, "dependency_objects", object.getDependencyObjects());
+            putNonBlank(objectNode, "dependency_relation", object.getDependencyRelation());
             putNonBlank(objectNode, "constraint_note", object.getConstraintNote());
             removeIfEmpty(arrayNode, objectNode);
         }

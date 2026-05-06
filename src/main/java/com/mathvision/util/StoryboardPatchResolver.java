@@ -121,7 +121,8 @@ public final class StoryboardPatchResolver {
         copy.setSourceNode(source.getSourceNode());
         copy.setBehavior(source.getBehavior());
         copy.setAnchorId(source.getAnchorId());
-        copy.setDependencyNote(source.getDependencyNote());
+        copy.setDependencyObjects(copyStringList(source.getDependencyObjects()));
+        copy.setDependencyRelation(source.getDependencyRelation());
         copy.setConstraintNote(source.getConstraintNote());
         return copy;
     }
@@ -203,8 +204,11 @@ public final class StoryboardPatchResolver {
         if (!isBlank(patch.getAnchorId())) {
             target.setAnchorId(patch.getAnchorId());
         }
-        if (!isBlank(patch.getDependencyNote())) {
-            target.setDependencyNote(patch.getDependencyNote());
+        if (patch.getDependencyObjects() != null && !patch.getDependencyObjects().isEmpty()) {
+            target.setDependencyObjects(copyStringList(patch.getDependencyObjects()));
+        }
+        if (!isBlank(patch.getDependencyRelation())) {
+            target.setDependencyRelation(patch.getDependencyRelation());
         }
         if (!isBlank(patch.getConstraintNote())) {
             target.setConstraintNote(patch.getConstraintNote());

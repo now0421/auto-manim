@@ -20,7 +20,7 @@ public final class CodeGenerationPrompts {
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + "Additional code generation rules:\n"
                     + "- `entering_objects[].content` describes candidate visible content; implement only the objects that are necessary or helpful for the teaching beat.\n"
-                    + "- When `content`, `dependency_note`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
+                    + "- When `content`, `dependency_objects`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
                     + "- If a storyboard object uses `behavior = follows_anchor`, `derived`, or an equivalent dependency note, implement that relationship continuously with the appropriate Manim mechanism.\n\n"
                     + "Continuity and object-management rules:\n"
                     + "- Build a stable object registry in local variables or dictionaries when useful so ids can be reused across beats.\n"
@@ -107,7 +107,7 @@ public final class CodeGenerationPrompts {
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
                     + "Additional storyboard field rules:\n"
-                    + "- When `content`, `dependency_note`, or other object fields mention another object, treat those mentions as object ids only. Do not reinterpret kind words from prose and do not invent a second object type for the same id.\n"
+                    + "- When `content`, `dependency_objects`, or other object fields mention another object, treat those mentions as object ids only. Do not reinterpret kind words from prose and do not invent a second object type for the same id.\n"
                     + "- Treat storyboard object ids as the naming source for generated GeoGebra variables. Preserve those ids in code, and when you must introduce a helper name, use concise camelCase or math-style identifiers.\n\n"
                     + "- Interpret storyboard `behavior` by dependency semantics, not by motion permission: `static` means independently defined base object, not automatically a free point.\n"
                     + "- If a point is constrained to a path or object, construct it as a point on that object or with an equivalent dependency-safe definition. Do not replace it with a free coordinate point.\n"

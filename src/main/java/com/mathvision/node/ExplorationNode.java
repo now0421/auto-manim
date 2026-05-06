@@ -236,10 +236,8 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             }
 
             int depth = nodeJson.has("min_depth") ? nodeJson.get("min_depth").asInt(0) : 0;
-            boolean foundation = nodeJson.has("is_foundation")
-                    && nodeJson.get("is_foundation").asBoolean(false);
 
-            KnowledgeNode node = new KnowledgeNode(nodeId, step, depth, foundation);
+            KnowledgeNode node = new KnowledgeNode(nodeId, step, depth);
             node.setNodeType(sanitizeNodeType(
                     nodeJson.hasNonNull("node_type") ? nodeJson.get("node_type").asText() : "",
                     graphMode
@@ -391,7 +389,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
             candidate = graphMode.syntheticStartBaseId + "_" + suffix++;
         }
 
-        KnowledgeNode startNode = new KnowledgeNode(candidate, graphMode.syntheticStartStep, 0, false);
+        KnowledgeNode startNode = new KnowledgeNode(candidate, graphMode.syntheticStartStep, 0);
         startNode.setNodeType(graphMode.syntheticStartNodeType);
         startNode.setReason(graphMode.syntheticStartReason);
         nodes.put(candidate, startNode);

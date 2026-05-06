@@ -339,9 +339,6 @@ public class KnowledgeGraph {
             if (node.getNodeType() != null && !node.getNodeType().isBlank()) {
                 sb.append(", type=").append(node.getNodeType());
             }
-            if (node.isFoundation()) {
-                sb.append(", foundation");
-            }
             sb.append("]\n");
 
             List<KnowledgeNode> prerequisites = getPrerequisites(node.getId());

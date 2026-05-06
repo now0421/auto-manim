@@ -14,7 +14,6 @@ import java.util.Map;
         "reason",
         "nodeType",
         "min_depth",
-        "is_foundation",
         "equations",
         "definitions",
         "interpretation",
@@ -43,9 +42,6 @@ public class KnowledgeNode {
     @JsonProperty("min_depth")
     private int minDepth = -1;
 
-    @JsonProperty("is_foundation")
-    private boolean foundation;
-
     private List<String> equations;
     private Map<String, String> definitions;
     private String interpretation;
@@ -53,11 +49,10 @@ public class KnowledgeNode {
 
     public KnowledgeNode() {}
 
-    public KnowledgeNode(String id, String step, int minDepth, boolean foundation) {
+    public KnowledgeNode(String id, String step, int minDepth) {
         this.id = id;
         this.step = step;
         this.minDepth = minDepth;
-        this.foundation = foundation;
     }
 
     public synchronized void updateMinDepth(int candidateDepth) {
@@ -87,9 +82,6 @@ public class KnowledgeNode {
     public int getMinDepth() { return minDepth; }
     public void setMinDepth(int minDepth) { this.minDepth = minDepth; }
 
-    public boolean isFoundation() { return foundation; }
-    public void setFoundation(boolean foundation) { this.foundation = foundation; }
-
     public List<String> getEquations() { return equations; }
     public void setEquations(List<String> equations) { this.equations = equations; }
 
@@ -105,6 +97,6 @@ public class KnowledgeNode {
     @Override
     public String toString() {
         return "KnowledgeNode{id='" + id + "', step='" + step + "', minDepth=" + minDepth
-                + ", nodeType='" + nodeType + "', foundation=" + foundation + "}";
+                + ", nodeType='" + nodeType + "'}";
     }
 }

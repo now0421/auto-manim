@@ -400,7 +400,9 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             copy.setContent(obj.getContent());
             copy.setBehavior(obj.getBehavior());
             copy.setAnchorId(obj.getAnchorId());
-            copy.setDependencyNote(obj.getDependencyNote());
+            copy.setDependencyObjects(obj.getDependencyObjects() != null
+                    ? new ArrayList<>(obj.getDependencyObjects()) : new ArrayList<>());
+            copy.setDependencyRelation(obj.getDependencyRelation());
             copy.setConstraintNote(obj.getConstraintNote());
             copy.setStyle(obj.getStyle());
             copy.setPlacement(obj.getPlacement());
@@ -445,8 +447,11 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             if (obj.getAnchorId() != null && !obj.getAnchorId().isBlank()) {
                 sb.append(", anchor_id=").append(obj.getAnchorId());
             }
-            if (obj.getDependencyNote() != null && !obj.getDependencyNote().isBlank()) {
-                sb.append(", dependency_note=").append(truncate(obj.getDependencyNote(), 80));
+            if (obj.getDependencyObjects() != null && !obj.getDependencyObjects().isEmpty()) {
+                sb.append(", dependency_objects=").append(obj.getDependencyObjects());
+            }
+            if (obj.getDependencyRelation() != null && !obj.getDependencyRelation().isBlank()) {
+                sb.append(", dependency_relation=").append(truncate(obj.getDependencyRelation(), 80));
             }
             if (obj.getConstraintNote() != null && !obj.getConstraintNote().isBlank()) {
                 sb.append(", constraint_note=").append(truncate(obj.getConstraintNote(), 80));

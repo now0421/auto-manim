@@ -140,7 +140,8 @@ public final class StoryboardSchemaPrompts {
                     + "      \"source_node\": \"string, originating step or node when relevant\",\n"
                     + "      \"behavior\": \"string, dependency role such as static|follows_anchor|derived|fixed_overlay\",\n"
                     + "      \"anchor_id\": \"string, id of the object this one should stay attached to when relevant\",\n"
-                    + "      \"dependency_note\": \"string, short note describing what source objects define this object; for angle/arc markers include the vertex plus ordered start and end boundary rays/source objects\",\n"
+                    + "      \"dependency_objects\": [\"string, ordered source object ids only; empty for independent objects\"],\n"
+                    + "      \"dependency_relation\": \"string, concise construction relationship such as independent|follows_anchor|connects_points|reflection_across_line|intersection|midpoint|angle_between|label_for\",\n"
                     + "      \"constraint_note\": \"string, hard local geometric rule for this object; for angle/arc markers include the intended sector or sweep such as smaller/interior, directed, clockwise/counterclockwise, exterior, or side of a reference line/normal\"\n"
                     + "    }";
 
@@ -155,7 +156,8 @@ public final class StoryboardSchemaPrompts {
                     + "      \"source_node\": \"problem_setup\",\n"
                     + "      \"behavior\": \"static\",\n"
                     + "      \"anchor_id\": \"\",\n"
-                    + "      \"dependency_note\": \"independent baseline\",\n"
+                    + "      \"dependency_objects\": [],\n"
+                    + "      \"dependency_relation\": \"independent\",\n"
                     + "      \"constraint_note\": \"fixed baseline\"\n"
                     + "    }";
 
@@ -168,7 +170,8 @@ public final class StoryboardSchemaPrompts {
                     + "      \"source_node\": \"problem_setup\",\n"
                     + "      \"behavior\": \"derived\",\n"
                     + "      \"anchor_id\": \"numberLine\",\n"
-                    + "      \"dependency_note\": \"point on numberLine; draggable along it\",\n"
+                    + "      \"dependency_objects\": [\"numberLine\"],\n"
+                    + "      \"dependency_relation\": \"point_on_object\",\n"
                     + "      \"constraint_note\": \"lies on numberLine\"\n"
                     + "    }";
 
@@ -181,7 +184,8 @@ public final class StoryboardSchemaPrompts {
                     + "      \"source_node\": \"minimum_reveal\",\n"
                     + "      \"behavior\": \"fixed_overlay\",\n"
                     + "      \"anchor_id\": \"\",\n"
-                    + "      \"dependency_note\": \"\",\n"
+                    + "      \"dependency_objects\": [],\n"
+                    + "      \"dependency_relation\": \"independent_overlay\",\n"
                     + "      \"constraint_note\": \"\"\n"
                     + "    }";
 
@@ -194,7 +198,8 @@ public final class StoryboardSchemaPrompts {
                     + "      \"source_node\": \"minimum_reveal\",\n"
                     + "      \"behavior\": \"derived\",\n"
                     + "      \"anchor_id\": \"numberLine\",\n"
-                    + "      \"dependency_note\": \"minimum of the function on numberLine\",\n"
+                    + "      \"dependency_objects\": [\"numberLine\"],\n"
+                    + "      \"dependency_relation\": \"minimum_on_object\",\n"
                     + "      \"constraint_note\": \"lies on numberLine at the minimum\"\n"
                     + "    }";
 
@@ -341,7 +346,7 @@ public final class StoryboardSchemaPrompts {
 
     /** Patch-semantics explanation shared by both output formats. */
     public static final String PATCH_SEMANTICS_NOTE =
-            "`entering_objects` and `persistent_objects` in each scene are patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_note, or constraint_note there — those belong in the object registry.\n"
+            "`entering_objects` and `persistent_objects` in each scene are patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, or constraint_note there — those belong in the object registry.\n"
                     + "`exiting_objects` entries carry `id` only.\n";
 
     /** Text style semantics rules shared by both output formats. */

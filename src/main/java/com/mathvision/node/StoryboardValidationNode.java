@@ -70,6 +70,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
     private static final double MIN_OVERLAP_AREA = 0.015;
     private static final double MIN_OVERLAP_RATIO = 0.08;
     private static final double SPATIAL_BUCKET_SIZE = 1.25;
+    private static final int MAX_VALIDATION_FIX_ATTEMPTS = 3;
 
     private AiClient aiClient;
     private WorkflowConfig workflowConfig;
@@ -105,51 +106,64 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             return narrative;
         }
 
-        Storyboard storyboard = narrative.getStoryboard();
-        List<String> issues = validate(storyboard);
-        this.storyboardValidationReport = baseReport(storyboard, issues);
+        Narrative current = narrative;
+        List<String> issues = validate(current.getStoryboard());
+        this.storyboardValidationReport = baseReport(current.getStoryboard(), issues);
+        logValidationIssues(issues);
 
         if (issues.isEmpty()) {
             log.info("Storyboard validation passed (no issues)");
-        } else {
-            log.warn("Storyboard validation found {} issues:", issues.size());
-            for (String issue : issues) {
-                log.warn("  - {}", issue);
-            }
+            finalizeReport(storyboardValidationReport, true, false, false, List.of(),
+                    "Storyboard validation passed");
+            return current;
         }
 
-        Narrative fixed = attemptLlmFix(narrative, issues);
-        if (fixed != null) {
-            List<String> remainingIssues = validate(fixed.getStoryboard());
-            if (remainingIssues.isEmpty()) {
-                log.info("LLM storyboard cleanup completed successfully");
-                finalizeReport(storyboardValidationReport, true, true, true, remainingIssues,
-                        issues.isEmpty()
-                                ? "Storyboard validation passed and the LLM cleanup pass completed successfully"
-                                : "Storyboard validation issues were fixed successfully");
-                return fixed;
+        boolean fixApplied = false;
+        int attempts = 0;
+        while (!issues.isEmpty() && attempts < MAX_VALIDATION_FIX_ATTEMPTS) {
+            attempts++;
+            log.warn("Attempting LLM storyboard cleanup pass {}/{}",
+                    attempts, MAX_VALIDATION_FIX_ATTEMPTS);
+            Narrative fixed = attemptLlmFix(current, issues);
+            if (fixed == null || fixed.getStoryboard() == null) {
+                log.warn("LLM storyboard cleanup pass {}/{} did not return a usable storyboard",
+                        attempts, MAX_VALIDATION_FIX_ATTEMPTS);
+                finalizeReport(storyboardValidationReport, false, true, fixApplied, issues,
+                        "Storyboard validation found issues and the automatic LLM cleanup did not succeed");
+                return current;
             }
-            log.warn("LLM storyboard cleanup left {} issues", remainingIssues.size());
+
+            current = fixed;
+            fixApplied = true;
+            issues = validate(current.getStoryboard());
             if (issues.isEmpty()) {
-                finalizeReport(storyboardValidationReport, true, true, false, issues,
-                        "Storyboard validation passed, but the LLM cleanup pass introduced issues");
-                return narrative;
+                log.info("LLM storyboard cleanup completed successfully after {} pass(es)", attempts);
+                finalizeReport(storyboardValidationReport, true, true, true, issues,
+                        "Storyboard validation issues were fixed successfully after " + attempts + " pass(es)");
+                return current;
             }
-            finalizeReport(storyboardValidationReport, false, true, true, remainingIssues,
-                    "Storyboard validation fix was applied, but some issues remain");
-            return fixed;
+
+            log.warn("LLM storyboard cleanup pass {}/{} left {} issues",
+                    attempts, MAX_VALIDATION_FIX_ATTEMPTS, issues.size());
+            logValidationIssues(issues);
         }
 
-        if (issues.isEmpty()) {
-            finalizeReport(storyboardValidationReport, true, true, false, List.of(),
-                    "Storyboard validation passed, but the LLM cleanup pass did not return a usable storyboard");
-            return narrative;
-        }
+        log.warn("Storyboard validation still has {} issues after {} cleanup pass(es); proceeding to next node",
+                issues.size(), attempts);
+        finalizeReport(storyboardValidationReport, false, attempts > 0, fixApplied, issues,
+                "Storyboard validation reached the maximum of " + MAX_VALIDATION_FIX_ATTEMPTS
+                        + " cleanup pass(es); proceeding with remaining issues");
+        return current;
+    }
 
-        log.warn("LLM storyboard cleanup failed, proceeding with original storyboard");
-        finalizeReport(storyboardValidationReport, false, true, false, issues,
-                "Storyboard validation found issues and the automatic LLM cleanup did not succeed");
-        return narrative;
+    private void logValidationIssues(List<String> issues) {
+        if (issues == null || issues.isEmpty()) {
+            return;
+        }
+        log.warn("Storyboard validation found {} issues:", issues.size());
+        for (String issue : issues) {
+            log.warn("  - {}", issue);
+        }
     }
 
     @Override
@@ -203,7 +217,44 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
 
         issues.addAll(validateAsciiText(storyboard));
         issues.addAll(validateStoryboardColors(storyboard));
+        issues.addAll(validateDependencyFields(storyboard));
         issues.addAll(validateGeometricMarkerDefinitions(storyboard));
+
+        return issues;
+    }
+
+    private List<String> validateDependencyFields(Storyboard storyboard) {
+        List<String> issues = new ArrayList<>();
+        if (storyboard == null || storyboard.getObjectRegistry() == null) {
+            return issues;
+        }
+
+        Map<String, StoryboardObject> registry = new LinkedHashMap<>();
+        for (StoryboardObject object : storyboard.getObjectRegistry()) {
+            String objectId = StoryboardPatchResolver.objectId(object);
+            if (objectId != null) {
+                registry.put(objectId, object);
+            }
+        }
+
+        for (StoryboardObject object : registry.values()) {
+            String objectId = StoryboardPatchResolver.objectId(object);
+            List<String> dependencies = cleanDependencyObjects(object);
+            boolean dependencyDriven = isDependencyDriven(object);
+            if (dependencyDriven && dependencies.isEmpty()) {
+                issues.add("object_registry: dependency-driven object '" + objectId
+                        + "' must define dependency_objects with source object ids");
+            }
+
+            for (String dependencyId : dependencies) {
+                if (objectId != null && objectId.equals(dependencyId)) {
+                    issues.add("object_registry: object '" + objectId + "' cannot depend on itself");
+                } else if (!registry.containsKey(dependencyId)) {
+                    issues.add("object_registry: object '" + objectId
+                            + "' references unknown dependency_object '" + dependencyId + "'");
+                }
+            }
+        }
 
         return issues;
     }
@@ -218,16 +269,18 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 continue;
             }
             String objectId = StoryboardPatchResolver.objectId(object);
-            String dependency = normalizeForSemanticCheck(object.getDependencyNote());
+            List<String> dependencies = cleanDependencyObjects(object);
+            String dependency = normalizeForSemanticCheck(String.join(" ", dependencies) + " "
+                    + safe(object.getDependencyRelation()) + " " + safe(object.getConstraintNote()));
             String constraint = normalizeForSemanticCheck(object.getConstraintNote());
 
-            if (!mentionsAngleVertex(object, dependency)) {
+            if (dependencies.isEmpty() && !mentionsAngleVertex(object, dependency)) {
                 issues.add("object_registry: angle/arc marker '" + objectId
-                        + "' must define its measured vertex or anchor in dependency_note");
+                        + "' must include its measured vertex or anchor in dependency_objects");
             }
-            if (!mentionsTwoAngleBoundaries(dependency)) {
+            if (dependencies.size() < 2 && !mentionsTwoAngleBoundaries(dependency)) {
                 issues.add("object_registry: angle/arc marker '" + objectId
-                        + "' must define both boundary rays, segments, lines, normals, tangents, or source objects in dependency_note");
+                        + "' must define both boundary rays, segments, lines, normals, tangents, or source objects in dependency_objects/dependency_relation");
             }
             if (isArcMarker(object) && !mentionsOrderedArcSweep(dependency, constraint)) {
                 issues.add("object_registry: arc marker '" + objectId
@@ -253,7 +306,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 safe(object.getId()),
                 safe(object.getKind()),
                 safe(object.getContent()),
-                safe(object.getDependencyNote()),
+                String.join(" ", cleanDependencyObjects(object)),
+                safe(object.getDependencyRelation()),
                 safe(object.getConstraintNote())));
         boolean markerKind = containsAny(combined, " arc ", " angle ", " anglemarker ", " angle_marker ");
         boolean angleMeaning = containsAny(combined, "theta", " angle ", " perpendicular", " normal", " tangent");
@@ -346,6 +400,31 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
 
     private String safe(String text) {
         return text == null ? "" : text;
+    }
+
+    private List<String> cleanDependencyObjects(StoryboardObject object) {
+        List<String> dependencies = new ArrayList<>();
+        if (object == null || object.getDependencyObjects() == null) {
+            return dependencies;
+        }
+        for (String dependencyId : object.getDependencyObjects()) {
+            if (dependencyId != null && !dependencyId.isBlank()) {
+                dependencies.add(dependencyId.trim());
+            }
+        }
+        return dependencies;
+    }
+
+    private boolean isDependencyDriven(StoryboardObject object) {
+        if (object == null) {
+            return false;
+        }
+        String behavior = object.getBehavior();
+        String relation = object.getDependencyRelation();
+        return Narrative.StoryboardObject.BEHAVIOR_DERIVED.equalsIgnoreCase(behavior)
+                || Narrative.StoryboardObject.BEHAVIOR_FOLLOWS_ANCHOR.equalsIgnoreCase(behavior)
+                || (!isBlank(relation) && !relation.trim().equalsIgnoreCase("independent")
+                && !relation.trim().equalsIgnoreCase("independent_overlay"));
     }
 
     private List<String> validateStoryboardColors(Storyboard storyboard) {
@@ -557,8 +636,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         for (StoryboardLayoutElement element : elements) {
             String overflowSummary = summarizeOverflow(element.bounds);
             if (overflowSummary != null) {
-                issues.add(sceneLabel + ": object '" + element.objectId
-                        + "' extends outside the frame bounds (" + overflowSummary + ")");
+                issues.add(formatOffscreenIssue(sceneLabel, element, overflowSummary, elements));
             }
         }
 
@@ -736,6 +814,127 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             parts.add("top=" + round(top));
         }
         return String.join(", ", parts);
+    }
+
+    private String formatOffscreenIssue(String sceneLabel,
+                                        StoryboardLayoutElement element,
+                                        String overflowSummary,
+                                        List<StoryboardLayoutElement> elements) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Issue: ").append(sceneLabel).append(": object '").append(element.objectId)
+                .append("' extends outside the frame bounds (").append(overflowSummary).append(")");
+        String dependencyContext = formatDependencyContext(element.objectId, element.object, elements);
+        if (!dependencyContext.isBlank()) {
+            sb.append("\n").append(dependencyContext);
+        }
+        return sb.toString();
+    }
+
+    private String formatDependencyContext(String objectId,
+                                           StoryboardObject object,
+                                           List<StoryboardLayoutElement> elements) {
+        List<String> dependencies = cleanDependencyObjects(object);
+        if (object == null || dependencies.isEmpty()) {
+            return "";
+        }
+        Map<String, StoryboardLayoutElement> byId = new LinkedHashMap<>();
+        for (StoryboardLayoutElement element : elements) {
+            if (element != null && element.objectId != null) {
+                byId.put(element.objectId, element);
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Dependency chain:\n");
+        sb.append("- ").append(objectId).append(" depends on [")
+                .append(String.join(", ", dependencies)).append("]\n");
+        appendDependencyPlacementLines(dependencies, byId, new LinkedHashSet<>(), sb);
+        if (!isBlank(object.getDependencyRelation())) {
+            sb.append("- relation: ").append(object.getDependencyRelation().trim()).append("\n");
+        }
+        if (!isBlank(object.getConstraintNote())) {
+            sb.append("- constraint: ").append(object.getConstraintNote().trim()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private void appendDependencyPlacementLines(List<String> dependencyIds,
+                                                Map<String, StoryboardLayoutElement> byId,
+                                                LinkedHashSet<String> visited,
+                                                StringBuilder sb) {
+        for (String dependencyId : dependencyIds) {
+            if (dependencyId == null || !visited.add(dependencyId)) {
+                continue;
+            }
+            StoryboardLayoutElement dependencyElement = byId.get(dependencyId);
+            if (dependencyElement == null || dependencyElement.object == null) {
+                sb.append("- ").append(dependencyId).append(": placement unavailable\n");
+                continue;
+            }
+            StoryboardObject dependencyObject = dependencyElement.object;
+            sb.append("- ").append(dependencyId).append(": ")
+                    .append(formatPlacementSummary(dependencyObject)).append("\n");
+            List<String> nestedDependencies = cleanDependencyObjects(dependencyObject);
+            if (!nestedDependencies.isEmpty()) {
+                sb.append("- ").append(dependencyId).append(" depends on [")
+                        .append(String.join(", ", nestedDependencies)).append("]\n");
+                appendDependencyPlacementLines(nestedDependencies, byId, visited, sb);
+            }
+        }
+    }
+
+    private String formatPlacementSummary(StoryboardObject object) {
+        if (object == null || object.getPlacement() == null || !object.getPlacement().hasData()) {
+            return "placement unavailable";
+        }
+        StoryboardPlacement placement = object.getPlacement();
+        StringBuilder sb = new StringBuilder();
+        String coordinateSpace = !isBlank(placement.getCoordinateSpace())
+                ? placement.getCoordinateSpace().trim()
+                : "unknown";
+        sb.append(coordinateSpace).append(" placement");
+        if (Narrative.StoryboardPlacement.COORDINATE_SPACE_ANCHOR.equalsIgnoreCase(coordinateSpace)
+                && !isBlank(object.getAnchorId())) {
+            sb.append(" anchor=").append(object.getAnchorId().trim());
+        }
+        List<String> axisParts = new ArrayList<>();
+        String xSummary = formatAxisSummary("x", placement.getX());
+        String ySummary = formatAxisSummary("y", placement.getY());
+        if (!xSummary.isBlank()) {
+            axisParts.add(xSummary);
+        }
+        if (!ySummary.isBlank()) {
+            axisParts.add(ySummary);
+        }
+        if (!axisParts.isEmpty()) {
+            sb.append(" ").append(String.join(", ", axisParts));
+        }
+        return sb.toString();
+    }
+
+    private String formatAxisSummary(String axisName, StoryboardPlacementAxis axis) {
+        if (axis == null || !axis.hasData()) {
+            return "";
+        }
+        if (axis.getValue() != null) {
+            return axisName + "=" + round(axis.getValue());
+        }
+        Double min = axis.getMin();
+        Double max = axis.getMax();
+        if (min != null && max != null) {
+            double roundedMin = round(min);
+            double roundedMax = round(max);
+            if (Double.compare(roundedMin, roundedMax) == 0) {
+                return axisName + "=" + roundedMin;
+            }
+            return axisName + "=" + roundedMin + ".." + roundedMax;
+        }
+        if (min != null) {
+            return axisName + ">=" + round(min);
+        }
+        if (max != null) {
+            return axisName + "<=" + round(max);
+        }
+        return "";
     }
 
     private List<String> evaluateLayoutOverlapIssues(String sceneLabel,
@@ -1014,7 +1213,12 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             }
             String storyboardJson = JsonUtils.mapper().writeValueAsString(narrative.getStoryboard());
             NodeConversationContext conversationContext = new NodeConversationContext(Integer.MAX_VALUE);
-            conversationContext.setSystemMessage(NarrativePrompts.buildRulesPrompt(outputTarget));
+            String systemPrompt = NarrativePrompts.buildRulesPrompt(outputTarget)
+                    + "\n\nStoryboard validation repair rules:\n"
+                    + "- Use dependency_objects as the authoritative dependency graph.\n"
+                    + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or constraint_note.\n"
+                    + "- Every dependency-driven object must define dependency_objects as object ids and dependency_relation as a concise construction relation; put hard geometric invariants in constraint_note.";
+            conversationContext.setSystemMessage(systemPrompt);
             conversationContext.setFixedContextMessage(NarrativePrompts.buildFixedContextPrompt(
                     narrative.getTargetConcept(),
                     narrative.getTargetDescription(),
@@ -1029,7 +1233,11 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             if (issues != null && !issues.isEmpty()) {
                 userPrompt.append("Static validation findings:\n");
                 for (String issue : issues) {
-                    userPrompt.append("- ").append(issue).append("\n");
+                    if (issue.startsWith("Issue:")) {
+                        userPrompt.append(issue).append("\n");
+                    } else {
+                        userPrompt.append("- ").append(issue).append("\n");
+                    }
                 }
                 userPrompt.append("\n");
             }

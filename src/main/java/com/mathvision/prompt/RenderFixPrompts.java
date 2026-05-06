@@ -14,8 +14,8 @@ public final class RenderFixPrompts {
             "You are a Manim Community debugging expert.\n"
                     + "Fix the code so it renders successfully.\n"
                     + "Preserve the original scene class name and intended animation meaning.\n\n"
-                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
-                    + "Do not break mathematical construction constraints while fixing render issues; derived points should remain derived from their source geometry.\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_REFERENCE_RULES
+                    + "Keep implemented mathematical constructions internally consistent while fixing render issues.\n"
                     + "Mandatory rules:\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
@@ -36,9 +36,9 @@ public final class RenderFixPrompts {
     private static final String GEOGEBRA_SYSTEM =
             "You are a GeoGebra Classic debugging expert.\n"
                     + "Fix the GeoGebra command script so every reported failure is resolved when the full script is replayed in order via `evalCommand(...)`.\n"
-                    + "Preserve the intended construction meaning, object dependency chain, and storyboard teaching order.\n"
-                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
-                    + "Do not break geometric constraints while fixing command failures; keep derived objects derived from their source objects.\n"
+                    + "Preserve the intended construction meaning and object dependency chain where they are useful and valid.\n"
+                    + SystemPrompts.STORYBOARD_REPAIR_REFERENCE_RULES
+                    + "Keep implemented geometric relationships internally consistent while fixing command failures.\n"
                     + "Use English GeoGebra command names.\n"
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
@@ -99,7 +99,7 @@ public final class RenderFixPrompts {
         }
         sb.append("\n")
                 .append(storyboardJson != null && !storyboardJson.isBlank()
-                        ? "Compact storyboard JSON (semantic authority):\n```json\n"
+                        ? "Compact storyboard JSON (reference context, not strict authority):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
                 .append(staticAuditSummary != null && !staticAuditSummary.isBlank()
@@ -112,7 +112,7 @@ public final class RenderFixPrompts {
                 .append("Treat the error summary as a routing hint, not as a single-line patch target.\n")
                 .append("Sweep all `Text(...)`, `Tex(...)`, and `MathTex(...)` calls whenever the error category suggests text-constructor or LaTeX misuse.\n")
                 .append("Prioritize the earliest root-cause category instead of patching downstream symptoms.\n")
-                .append("If the storyboard encodes geometric constraints or derived constructions, preserve them while fixing the render failure.\n")
+                .append("Use storyboard geometric constraints or derived constructions as reference context only; keep the final code internally consistent while fixing the render failure.\n")
                 .append("Also proactively check for common Python and Manim runtime mistakes.\n")
                 .append("Remember: Return ONLY the single Python code block containing the full file. No explanation.\n");
 
@@ -134,14 +134,14 @@ public final class RenderFixPrompts {
         }
         sb.append("\n")
                 .append(storyboardJson != null && !storyboardJson.isBlank()
-                        ? "Compact storyboard JSON (semantic authority):\n```json\n"
+                        ? "Compact storyboard JSON (reference context, not strict authority):\n```json\n"
                         + storyboardJson + "\n```\n\n"
                         : "")
                 .append("Validation failure details collected from that full pass:\n```\n").append(error).append("\n```\n\n")
                 .append("The following GeoGebra command script failed runtime validation after one full replay pass through `evalCommand(...)`.\n\n")
                 .append("```geogebra\n").append(generatedCode).append("\n```\n\n")
                 .append("Please rewrite the FULL command script so all reported failures become valid in one pass and downstream dependent commands remain correct.\n")
-                .append("Use English GeoGebra command names and preserve geometric dependency constraints from the storyboard.\n")
+                .append("Use English GeoGebra command names and keep implemented geometric dependencies internally consistent; use storyboard details as reference context only.\n")
                 .append("If you rename an identifier or add a new one, also update the commented `SCENE_BUTTONS` script so it stays consistent with the final command script.\n")
                 .append("Remember: Return ONLY the single fenced `geogebra` code block. No explanation.\n");
 

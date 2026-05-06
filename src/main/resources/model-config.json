@@ -37,6 +37,14 @@
       "max_output_tokens": 32768,
       "max_input_tokens": 262144
     },
+    "kimi-k2.6": {
+      "model": "kimi-k2.6",
+      "provider": "moonshot",
+      "reasoning_content_fallback": true,
+      "temperature": 1,
+      "max_output_tokens": 32768,
+      "max_input_tokens": 262144
+    },
     "GLM-5": {
       "model": "GLM-5",
       "provider": "zhipu",

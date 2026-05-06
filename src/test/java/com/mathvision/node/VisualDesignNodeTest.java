@@ -325,7 +325,8 @@ class VisualDesignNodeTest {
         newObject.put("source_node", suffix);
         newObject.put("behavior", "static");
         newObject.put("anchor_id", "");
-        newObject.put("dependency_note", "");
+        newObject.putArray("dependency_objects");
+        newObject.put("dependency_relation", "independent");
         newObject.put("constraint_note", "");
 
         function.put("arguments", JsonUtils.toJson(arguments));
