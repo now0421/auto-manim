@@ -57,7 +57,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
     private static final Logger log = LoggerFactory.getLogger(CodeEvaluationNode.class);
 
-    private static final int MAX_REVISION_ATTEMPTS = 2;
+    private static final int DEFAULT_MAX_CODE_FIX_ATTEMPTS = 3;
 
     private static final Pattern FADE_IN_PATTERN = Pattern.compile("\\bFadeIn\\s*\\(");
     private static final Pattern FADE_OUT_PATTERN = Pattern.compile("\\bFadeOut\\s*\\(");
@@ -190,14 +190,15 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         result.setFinalReview(initialReview);
 
         boolean approved = passesGate(initialReview, initialStatic);
-        if (!approved && fixState.getAttempts() < MAX_REVISION_ATTEMPTS) {
+        int maxRevisionAttempts = resolveMaxCodeFixAttempts(input.config());
+        if (!approved && fixState.getAttempts() < maxRevisionAttempts) {
             fixState.setRequestFix(true);
             fixState.setAttempts(fixState.getAttempts() + 1);
             log.warn("Code evaluation rule review still failed for scene {}, routing to shared CodeFixNode (attempt {}/{})",
-                    sceneName, fixState.getAttempts(), MAX_REVISION_ATTEMPTS);
+                    sceneName, fixState.getAttempts(), maxRevisionAttempts);
         } else if (!approved) {
             log.warn("Code evaluation rule review still failed for scene {}, max revision attempts reached ({})",
-                    sceneName, MAX_REVISION_ATTEMPTS);
+                    sceneName, maxRevisionAttempts);
         }
 
         result.setApprovedForRender(approved);
@@ -404,11 +405,10 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                                             String gateReason) {
         List<String> reasons = new ArrayList<>();
 
-        // 1. Fail/warn finding summaries (same objects serialized as staticAnalysisJson)
+        // 1. Blocking finding summaries (same objects serialized as staticAnalysisJson)
         if (analysis != null && analysis.getFindings() != null) {
             for (StaticFinding finding : analysis.getFindings()) {
-                if ("fail".equalsIgnoreCase(finding.getSeverity())
-                        || "warn".equalsIgnoreCase(finding.getSeverity())) {
+                if ("fail".equalsIgnoreCase(finding.getSeverity())) {
                     addReason(reasons, finding.getSummary());
                 }
             }
@@ -451,7 +451,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         }
         return review.isApprovedForRender()
                 && !hasFailedRuleChecks(review)
-                && (review.getBlockingIssues() == null || review.getBlockingIssues().isEmpty());
+                && review.getBlockingIssues().isEmpty();
     }
 
     private String buildGateReason(boolean approved,
@@ -609,6 +609,9 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         List<String> violations = NodeSupport.isGeoGebraTarget(workflowConfig)
                 ? GeoGebraCodeUtils.validateFull(generatedCode)
                 : ManimCodeUtils.validateFull(generatedCode);
+        List<String> warnings = NodeSupport.isGeoGebraTarget(workflowConfig)
+                ? GeoGebraCodeUtils.validateFullWarnings(generatedCode)
+                : ManimCodeUtils.validateFullWarnings(generatedCode);
 
         for (String violation : violations) {
             if (violation == null || violation.isBlank()) {
@@ -616,6 +619,13 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             }
             String trimmed = violation.trim();
             addFinding(analysis, "static_validation", "fail", trimmed, trimmed);
+        }
+        for (String warning : warnings) {
+            if (warning == null || warning.isBlank()) {
+                continue;
+            }
+            String trimmed = warning.trim();
+            addFinding(analysis, "api_whitelist_warning", "warn", trimmed, trimmed);
         }
     }
 
@@ -631,11 +641,19 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         if (review == null || review.getRuleChecks() == null) {
             return false;
         }
-        return review.getRuleChecks().stream().anyMatch(this::isFailedRuleCheck);
+        return review.getRuleChecks().stream()
+                .anyMatch(this::isFailedRuleCheck);
     }
 
     private boolean isFailedRuleCheck(RuleCheck check) {
         return check != null && "fail".equalsIgnoreCase(check.getStatus());
+    }
+
+    private int resolveMaxCodeFixAttempts(WorkflowConfig config) {
+        if (config == null) {
+            return DEFAULT_MAX_CODE_FIX_ATTEMPTS;
+        }
+        return Math.max(config.getCodeFixMaxAttempts(), 0);
     }
 
     private int countMatches(String text, Pattern pattern) {

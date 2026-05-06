@@ -40,6 +40,7 @@ import java.util.Map;
 public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderResult, String> {
 
     private static final Logger log = LoggerFactory.getLogger(RenderNode.class);
+    private static final int DEFAULT_MAX_CODE_FIX_ATTEMPTS = 3;
 
     private final ManimRendererService renderer;
     private final GeoGebraRenderService geoGebraRenderer;
@@ -187,7 +188,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
         }
 
         String quality = config != null ? config.getRenderQuality() : "low";
-        int maxRetries = config != null ? config.getRenderMaxRetries() : 4;
+        int maxRetries = resolveMaxRenderFixAttempts(config);
         int attemptNumber = retryState.getAttempts() + 1;
         log.info("  Render attempt {}/{}", attemptNumber, maxRetries + 1);
 
@@ -354,7 +355,7 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             );
         }
 
-        int maxRetries = config != null ? config.getRenderMaxRetries() : 4;
+        int maxRetries = resolveMaxRenderFixAttempts(config);
         int attemptNumber = retryState.getAttempts() + 1;
         log.info("  GeoGebra validation attempt {}/{}", attemptNumber, maxRetries + 1);
 
@@ -532,6 +533,17 @@ public class RenderNode extends PocketFlow.Node<RenderNode.RenderInput, RenderRe
             return input.config().isGeoGebraTarget();
         }
         return input.codeResult() != null && input.codeResult().isGeoGebraTarget();
+    }
+
+    private int resolveMaxRenderFixAttempts(WorkflowConfig config) {
+        int codeFixMax = config != null
+                ? Math.max(config.getCodeFixMaxAttempts(), 0)
+                : DEFAULT_MAX_CODE_FIX_ATTEMPTS;
+        if (config == null) {
+            return codeFixMax;
+        }
+        int renderMaxRetries = Math.max(config.getRenderMaxRetries(), 0);
+        return Math.min(codeFixMax, renderMaxRetries);
     }
 
     private String abbreviateError(String error) {

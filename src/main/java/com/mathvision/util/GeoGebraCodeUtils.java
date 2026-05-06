@@ -148,13 +148,21 @@ public final class GeoGebraCodeUtils {
                     + " (" + evidence + ")");
         }
 
-        List<String> undocumentedEvidences = findAllUndocumentedGeoGebraCommandCalls(geoGebraCode);
-        for (String evidence : undocumentedEvidences) {
-            violations.add("Static rule violation: undocumented GeoGebra command"
-                    + " (" + evidence + ")");
+        return violations;
+    }
+
+    public static List<String> validateGeoGebraApiWhitelistWarnings(String geoGebraCode) {
+        List<String> warnings = new ArrayList<>();
+        if (geoGebraCode == null || geoGebraCode.isBlank()) {
+            return warnings;
         }
 
-        return violations;
+        List<String> undocumentedEvidences = findAllUndocumentedGeoGebraCommandCalls(geoGebraCode);
+        for (String evidence : undocumentedEvidences) {
+            warnings.add("Static rule warning: undocumented GeoGebra command"
+                    + " (" + evidence + ")");
+        }
+        return warnings;
     }
 
     public static List<String> validateFull(String geoGebraCode) {
@@ -162,6 +170,10 @@ public final class GeoGebraCodeUtils {
         violations.addAll(validateStructure(geoGebraCode));
         violations.addAll(validateGeoGebraRules(geoGebraCode));
         return violations;
+    }
+
+    public static List<String> validateFullWarnings(String geoGebraCode) {
+        return validateGeoGebraApiWhitelistWarnings(geoGebraCode);
     }
 
     public static boolean looksLikeCommandBlock(String geoGebraCode) {

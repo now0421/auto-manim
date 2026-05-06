@@ -77,7 +77,12 @@ class CodeEvaluationNodeTest {
         aiClient.toolResponses.add(reviewResponse(false, 6, 5, 5, 4, 4,
                 "Second revision still does not clear the rule gate.",
                 "Scene remains under the threshold.",
-                "Stop after the second attempt."));
+                "Try one final rewrite."));
+        aiClient.chatResponses.add(wrapCodeResponse(revisedCodeRoundTwo()));
+        aiClient.toolResponses.add(reviewResponse(false, 6, 5, 5, 4, 4,
+                "Third revision still does not clear the rule gate.",
+                "Scene remains under the threshold.",
+                "Stop after the third attempt."));
 
         Map<String, Object> ctx = buildContext(aiClient, initialCode());
         PocketFlow.Flow<?> flow = evaluationFlow();
@@ -91,7 +96,7 @@ class CodeEvaluationNodeTest {
         assertTrue(result.isRevisionTriggered());
         assertTrue(result.isRevisedCodeApplied());
         assertFalse(result.isApprovedForRender());
-        assertEquals(2, result.getRevisionAttempts());
+        assertEquals(3, result.getRevisionAttempts());
         assertNotNull(result.getGateReason());
         assertFalse(result.getGateReason().isBlank());
     }
@@ -192,6 +197,32 @@ class CodeEvaluationNodeTest {
         assertTrue(request.getStoryboardJson().contains("\"entering_objects\""));
         assertTrue(request.getStoryboardJson().contains("\"goal\""));
         assertTrue(request.getStoryboardJson().contains("\"layout_goal\""));
+    }
+
+    @Test
+    void llmApiWhitelistFailureIsNotDowngradedByCodeEvaluation() {
+        String issue = "Static rule warning: undocumented Manim API call `Scene.fake_api`";
+        QueueAiClient aiClient = new QueueAiClient();
+        aiClient.toolResponses.add(reviewResponse(false, 4, 4, 5, 7, 6,
+                "Reviewer incorrectly treated the advisory API warning as blocking.",
+                issue,
+                "Replace the undocumented API."));
+
+        Map<String, Object> ctx = buildContext(aiClient, initialCode(), buildCompactReviewNarrative());
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertFalse(result.isApprovedForRender());
+        assertEquals("fail", result.getFinalReview().getRuleChecks().get(0).getStatus());
+        assertTrue(result.getFinalReview().getBlockingIssues().contains(issue));
+        assertEquals(WorkflowActions.FIX_CODE, action);
+        com.mathvision.model.CodeFixRequest request =
+                (com.mathvision.model.CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
+        assertNotNull(request);
+        assertTrue(request.getErrorReason().contains(issue));
     }
 
     @Test

@@ -5,6 +5,7 @@
   "parallel_visual_design": true,
   "max_concurrent": 16,
   "code_gen_max_retries": 2,
+  "code_fix_max_attempts": 3,
   "render_enabled": true,
   "render_quality": "low",
   "render_max_retries": 4,

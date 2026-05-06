@@ -269,10 +269,10 @@ public final class CodeGenerationPrompts {
     /**
      * Builds the user prompt for generating a single scene method body.
      */
-    public static String sceneCodeUserPrompt(String sceneJson,
-                                             String methodName,
-                                             int sceneIndex,
-                                             int totalScenes) {
+    public static String manimSceneCodeUserPrompt(String sceneJson,
+                                                  String methodName,
+                                                  int sceneIndex,
+                                                  int totalScenes) {
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Now implement scene method `%s` (scene %d of %d).\n\n"
                         + "Scene specification:\n```json\n%s\n```\n\n"

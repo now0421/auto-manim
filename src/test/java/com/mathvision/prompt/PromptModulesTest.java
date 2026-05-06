@@ -19,6 +19,18 @@ class PromptModulesTest {
     }
 
     @Test
+    void codeEvaluationPromptsKeepApiWhitelistWarningsNonBlocking() {
+        String manimPrompt = codeEvaluationSystemPrompt("Triangle", "Demo", "manim");
+        String geogebraPrompt = codeEvaluationSystemPrompt("Triangle", "Demo", "geogebra");
+
+        assertTrue(manimPrompt.contains("API whitelist warning policy"));
+        assertTrue(manimPrompt.contains("Report those findings as `warn`"));
+        assertTrue(manimPrompt.contains("keep them out of `blocking_issues`"));
+        assertTrue(geogebraPrompt.contains("API whitelist warning policy"));
+        assertTrue(geogebraPrompt.contains("do not set `approved_for_render=false` solely because of them"));
+    }
+
+    @Test
     void conceptGraphPromptFramesCompactTypedTeachingDag() {
         String prompt = ExplorationPrompts.buildConceptGraphFixedContextPrompt("Demo")
                 + ExplorationPrompts.buildConceptGraphRulesPrompt(4, 1);

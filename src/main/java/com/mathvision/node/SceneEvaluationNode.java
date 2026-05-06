@@ -59,7 +59,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     private static final double LINE_TEXT_INTERSECTION_TOLERANCE = 0.03;
     private static final double GEOGEBRA_MIN_VIEW_WIDTH_UTILIZATION = 0.25;
     private static final double GEOGEBRA_MIN_VIEW_HEIGHT_UTILIZATION = 0.20;
-    private static final int DEFAULT_MAX_FIX_ATTEMPTS = 2;
+    private static final int DEFAULT_MAX_FIX_ATTEMPTS = 3;
     private static final int MAX_FIX_REPORT_SAMPLES = 12;
     private static final int MAX_ISSUES_PER_SAMPLE_IN_FIX_REPORT = 6;
 
@@ -1124,7 +1124,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (config == null) {
             return DEFAULT_MAX_FIX_ATTEMPTS;
         }
-        return Math.max(config.getSceneEvaluationMaxRetries(), 0);
+        return Math.max(config.getCodeFixMaxAttempts(), 0);
     }
 
     private void finalizeResult(SceneEvaluationResult result,

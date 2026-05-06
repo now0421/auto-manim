@@ -49,10 +49,12 @@ class GeoGebraCodeUtilsTest {
     }
 
     @Test
-    void validateGeoGebraRules_detectsUndocumentedCommand() {
+    void validateGeoGebraRules_warnsOnlyForUndocumentedCommand() {
         List<String> violations = GeoGebraCodeUtils.validateGeoGebraRules("triangle = Triangle(A, B, C)");
+        List<String> warnings = GeoGebraCodeUtils.validateGeoGebraApiWhitelistWarnings("triangle = Triangle(A, B, C)");
 
-        assertTrue(violations.stream().anyMatch(v -> v.contains("undocumented GeoGebra command")
+        assertTrue(violations.stream().noneMatch(v -> v.contains("undocumented GeoGebra command")));
+        assertTrue(warnings.stream().anyMatch(v -> v.contains("undocumented GeoGebra command")
                 && v.contains("Triangle()")));
     }
 

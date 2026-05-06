@@ -172,20 +172,24 @@ class ManimCodeUtilsTest {
     }
 
     @Test
-    void validateManimRules_flagsUnimportedExternalModuleCalls() {
+    void validateManimRules_warnsOnlyForUnimportedExternalModuleCalls() {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        point = Dot(np.array([0, 0, 0]))";
         List<String> violations = ManimCodeUtils.validateManimRules(code);
-        assertTrue(violations.stream().anyMatch(v -> v.contains("Static rule violation")
+        List<String> warnings = ManimCodeUtils.validateManimApiWhitelistWarnings(code);
+        assertTrue(violations.stream().noneMatch(v -> v.contains("np.array")));
+        assertTrue(warnings.stream().anyMatch(v -> v.contains("Static rule warning")
                 && v.contains("np.array")));
     }
 
     @Test
-    void validateManimRules_detectsOtherUndocumentedMethods() {
+    void validateManimRules_warnsOnlyForOtherUndocumentedMethods() {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        mob.apply_over_attr_arrays(func)";
         List<String> violations = ManimCodeUtils.validateManimRules(code);
-        assertTrue(violations.stream().anyMatch(v -> v.contains("Static rule violation")
+        List<String> warnings = ManimCodeUtils.validateManimApiWhitelistWarnings(code);
+        assertTrue(violations.stream().noneMatch(v -> v.contains("apply_over_attr_arrays")));
+        assertTrue(warnings.stream().anyMatch(v -> v.contains("Static rule warning")
                 && v.contains("apply_over_attr_arrays")));
     }
 

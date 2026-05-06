@@ -28,6 +28,12 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.TOOL_CALL_HINT
                     + SystemPrompts.JSON_ONLY_OUTPUT;
 
+    private static final String REVIEW_API_WHITELIST_WARNING_POLICY =
+            "API whitelist warning policy:\n"
+                    + "- Static findings with rule_id `api_whitelist_warning` or text like `Static rule warning: undocumented ...` are advisory warnings.\n"
+                    + "- Report those findings as `warn`, keep them out of `blocking_issues`, and do not set `approved_for_render=false` solely because of them.\n"
+                    + "- Use `fail` for API/syntax issues only when static analysis reports a `fail`, the code clearly cannot execute, or the code uses a documented-invalid form that directly breaks storyboard fidelity.\n\n";
+
     private static final String REVIEW_SYSTEM_MANIM =
             "You are a senior Manim code reviewer.\n"
                     + "Your job is NOT to debug runtime errors.\n"
@@ -52,6 +58,7 @@ public final class CodeEvaluationPrompts {
                     + "- For 3D scenes, check projected readability, camera clarity, and fixed-in-frame overlays.\n"
                     + "- A later geometry-based stage will inspect rendered frames for actual overlap/offscreen issues. Here, fail only when the code itself clearly violates the storyboard or these rules.\n"
                     + "- Treat density counts from static analysis as heuristics, not automatic failures, when the code uses staging, dimming, grouping, cleanup, or pauses that keep the frame readable.\n\n"
+                    + REVIEW_API_WHITELIST_WARNING_POLICY
                     + REVIEW_OUTPUT_SCHEMA;
 
     private static final String REVIEW_SYSTEM_GEOGEBRA =
@@ -74,6 +81,7 @@ public final class CodeEvaluationPrompts {
                     + "- `teaching_evidence`: result text or labels are supported by matching constructed geometry; no semantically wrong substitution such as drawing a border where a full grid was requested.\n"
                     + "- A later geometry-based stage will inspect rendered geometry for actual overlap/offscreen issues. Do not duplicate that stage.\n"
                     + "- GeoGebra is interactive, but initial-view readability is mandatory. Focus on the default rendered view and storyboard fidelity.\n\n"
+                    + REVIEW_API_WHITELIST_WARNING_POLICY
                     + REVIEW_OUTPUT_SCHEMA;
 
     private static final String REVISION_SYSTEM_MANIM =

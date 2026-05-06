@@ -28,6 +28,9 @@ public final class ManimCodeUtils {
     private static final Pattern STATIC_INDEXING_VIOLATION = Pattern.compile(
             "\\w+\\[\\d+\\]\\[\\d+:\\d+\\]");
 
+    private static final Pattern UNSAFE_SET_POINTS_CALL = Pattern.compile(
+            "\\.set_points\\s*\\(");
+
     private static final Pattern TEXT_CONSTRUCTOR_PATTERN = Pattern.compile(
             "\\b(Text|Tex|MathTex)\\s*\\(\\s*(?:r|rf|fr)?([\"'])(.*?)\\2",
             Pattern.DOTALL
@@ -131,8 +134,8 @@ public final class ManimCodeUtils {
                     + " (" + evidence + ")");
         }
 
-        for (String evidence : findAllUndocumentedManimMethodCalls(manimCode)) {
-            violations.add("Static rule violation: undocumented Manim API call"
+        for (String evidence : findAllUnsafeSetPointsCalls(manimCode)) {
+            violations.add("Static rule violation: unsafe VMobject.set_points() call"
                     + " (" + evidence + ")");
         }
 
@@ -141,11 +144,28 @@ public final class ManimCodeUtils {
         return violations;
     }
 
+    public static List<String> validateManimApiWhitelistWarnings(String manimCode) {
+        List<String> warnings = new ArrayList<>();
+        if (manimCode == null || manimCode.isBlank()) {
+            return warnings;
+        }
+
+        for (String evidence : findAllUndocumentedManimMethodCalls(manimCode)) {
+            warnings.add("Static rule warning: undocumented Manim API call"
+                    + " (" + evidence + ")");
+        }
+        return warnings;
+    }
+
     public static List<String> validateFull(String manimCode) {
         List<String> violations = new ArrayList<>();
         violations.addAll(validateStructure(manimCode));
         violations.addAll(validateManimRules(manimCode));
         return violations;
+    }
+
+    public static List<String> validateFullWarnings(String manimCode) {
+        return validateManimApiWhitelistWarnings(manimCode);
     }
 
     public static boolean hasMainSceneClass(String manimCode) {
@@ -189,6 +209,29 @@ public final class ManimCodeUtils {
                     String fragment = trimmed.length() > 80 ? trimmed.substring(0, 80) + "..." : trimmed;
                     evidences.add("line " + (i + 1) + ": " + receiver + "." + methodName + "() - " + fragment);
                 }
+            }
+        }
+        return evidences;
+    }
+
+    private static List<String> findAllUnsafeSetPointsCalls(String manimCode) {
+        List<String> evidences = new ArrayList<>();
+        if (manimCode == null || manimCode.isBlank()) {
+            return evidences;
+        }
+        String[] lines = manimCode.split("\\R");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (line == null || line.isBlank()) {
+                continue;
+            }
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#")) {
+                continue;
+            }
+            if (UNSAFE_SET_POINTS_CALL.matcher(line).find()) {
+                String fragment = trimmed.length() > 80 ? trimmed.substring(0, 80) + "..." : trimmed;
+                evidences.add("line " + (i + 1) + ": " + fragment);
             }
         }
         return evidences;

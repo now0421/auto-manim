@@ -26,6 +26,7 @@ public class WorkflowConfig {
     private boolean parallelVisualDesign;
     private int maxConcurrent;
     private int codeGenMaxRetries;
+    private int codeFixMaxAttempts = 3;
     private boolean renderEnabled;
     private String renderQuality;
     private int renderMaxRetries;
@@ -96,6 +97,10 @@ public class WorkflowConfig {
     public void setMaxConcurrent(int maxConcurrent) { this.maxConcurrent = maxConcurrent; }
     public int getCodeGenMaxRetries() { return codeGenMaxRetries; }
     public void setCodeGenMaxRetries(int codeGenMaxRetries) { this.codeGenMaxRetries = codeGenMaxRetries; }
+    public int getCodeFixMaxAttempts() { return codeFixMaxAttempts; }
+    public void setCodeFixMaxAttempts(int codeFixMaxAttempts) {
+        this.codeFixMaxAttempts = codeFixMaxAttempts;
+    }
     public boolean isRenderEnabled() { return renderEnabled; }
     public void setRenderEnabled(boolean renderEnabled) { this.renderEnabled = renderEnabled; }
     public String getRenderQuality() { return renderQuality; }
