@@ -9,6 +9,7 @@ import com.mathvision.model.Narrative.StoryboardPlacement;
 import com.mathvision.model.Narrative.StoryboardPlacementAxis;
 import com.mathvision.model.Narrative.StoryboardScene;
 import com.mathvision.model.StoryboardValidationReport;
+import com.mathvision.model.StoryboardValidationTraceEntry;
 import com.mathvision.model.WorkflowKeys;
 import com.mathvision.prompt.NarrativePrompts;
 import com.mathvision.prompt.SystemPrompts;
@@ -21,12 +22,14 @@ import com.mathvision.util.NodeConversationContext;
 import com.mathvision.util.StoryboardNormalizer;
 import com.mathvision.util.StoryboardPatchResolver;
 import com.mathvision.util.TargetDescriptionBuilder;
+import com.mathvision.util.TimeUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.github.the_pocket.PocketFlow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -48,20 +51,9 @@ import java.util.concurrent.CompletionException;
 public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrative, String> {
 
     private static final Logger log = LoggerFactory.getLogger(StoryboardValidationNode.class);
-    private static final Set<String> GEOGEBRA_FOREGROUND_COLORS = Set.of(
-            "#111827", "#1F2937", "#0B3D91", "#1D4ED8", "#075985", "#0F766E",
-            "#166534", "#365314", "#7F1D1D", "#B91C1C", "#9F1239", "#831843",
-            "#581C87", "#6D28D9", "#7C2D12", "#92400E"
-    );
-    private static final Set<String> GEOGEBRA_BACKGROUND_COLORS = Set.of("WHITE", "#FFFFFF");
-    private static final Set<String> MANIM_FOREGROUND_COLORS = Set.of(
-            "WHITE", "BLUE", "GREEN", "YELLOW", "RED", "PURPLE", "PINK", "ORANGE", "TEAL", "GOLD",
-            "BLUE_A", "BLUE_B", "GREEN_A", "GREEN_B", "YELLOW_A", "YELLOW_B", "YELLOW_C",
-            "RED_A", "RED_B", "PURPLE_A", "PURPLE_B", "TEAL_A", "TEAL_B",
-            "GOLD_A", "GOLD_B", "GOLD_C", "MAROON_A", "MAROON_B", "LIGHT_PINK",
-            "PURE_RED", "PURE_GREEN", "PURE_BLUE", "PURE_YELLOW", "PURE_CYAN", "PURE_MAGENTA"
-    );
-    private static final Set<String> MANIM_BACKGROUND_COLORS = Set.of("BLACK");
+    private static final String DEFAULT_STORYBOARD_BACKGROUND = "#000000";
+    private static final double NON_TEXT_CONTRAST_THRESHOLD = 3.0;
+    private static final double TEXT_CONTRAST_THRESHOLD = 4.5;
     private static final double FRAME_MIN_X = -7.111111;
     private static final double FRAME_MAX_X = 7.111111;
     private static final double FRAME_MIN_Y = -4.0;
@@ -107,8 +99,19 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         }
 
         Narrative current = narrative;
+        Instant initialValidationStart = Instant.now();
         List<String> issues = validate(current.getStoryboard());
         this.storyboardValidationReport = baseReport(current.getStoryboard(), issues);
+        appendValidationTraceEntry(
+                current.getStoryboard(),
+                "initial_validation",
+                0,
+                false,
+                false,
+                issues,
+                0,
+                TimeUtils.secondsSince(initialValidationStart),
+                "Initial storyboard validation");
         logValidationIssues(issues);
 
         if (issues.isEmpty()) {
@@ -124,10 +127,23 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             attempts++;
             log.warn("Attempting LLM storyboard cleanup pass {}/{}",
                     attempts, MAX_VALIDATION_FIX_ATTEMPTS);
+            Instant cleanupStart = Instant.now();
+            int toolCallsBefore = toolCalls;
             Narrative fixed = attemptLlmFix(current, issues);
+            int cleanupToolCalls = toolCalls - toolCallsBefore;
             if (fixed == null || fixed.getStoryboard() == null) {
                 log.warn("LLM storyboard cleanup pass {}/{} did not return a usable storyboard",
                         attempts, MAX_VALIDATION_FIX_ATTEMPTS);
+                appendValidationTraceEntry(
+                        current.getStoryboard(),
+                        "cleanup_failed",
+                        attempts,
+                        true,
+                        false,
+                        issues,
+                        cleanupToolCalls,
+                        TimeUtils.secondsSince(cleanupStart),
+                        "LLM storyboard cleanup did not return a usable storyboard");
                 finalizeReport(storyboardValidationReport, false, true, fixApplied, issues,
                         "Storyboard validation found issues and the automatic LLM cleanup did not succeed");
                 return current;
@@ -136,6 +152,18 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             current = fixed;
             fixApplied = true;
             issues = validate(current.getStoryboard());
+            appendValidationTraceEntry(
+                    current.getStoryboard(),
+                    "post_cleanup_validation",
+                    attempts,
+                    true,
+                    true,
+                    issues,
+                    cleanupToolCalls,
+                    TimeUtils.secondsSince(cleanupStart),
+                    issues.isEmpty()
+                            ? "Cleanup pass " + attempts + " resolved all storyboard validation issues"
+                            : "Cleanup pass " + attempts + " left " + issues.size() + " storyboard validation issue(s)");
             if (issues.isEmpty()) {
                 log.info("LLM storyboard cleanup completed successfully after {} pass(es)", attempts);
                 finalizeReport(storyboardValidationReport, true, true, true, issues,
@@ -458,20 +486,39 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 continue;
             }
             String objectId = StoryboardPatchResolver.objectId(object);
-            for (Narrative.StoryboardStyle style : object.getStyle()) {
-                if (style == null || style.getProperties() == null) {
-                    continue;
+            List<ColorReference> colors = collectColorReferences(object);
+            for (ColorReference color : colors) {
+                if (!isSixDigitHexColor(color.value)) {
+                    issues.add(context + ": object '" + objectId + "' uses invalid color '" + color.value
+                            + "' at style." + color.propertyPath
+                            + "; expected 6-digit hex format #RRGGBB with opacity in a separate opacity field");
                 }
-                validateColorProperties(context, objectId, style.getProperties(), "", issues);
             }
+            validateObjectColorContrast(context, objectId, object, colors, issues);
         }
     }
 
-    private void validateColorProperties(String context,
-                                         String objectId,
-                                         Map<String, Object> properties,
-                                         String path,
-                                         List<String> issues) {
+    private List<ColorReference> collectColorReferences(StoryboardObject object) {
+        List<ColorReference> colors = new ArrayList<>();
+        if (object == null || object.getStyle() == null) {
+            return colors;
+        }
+        for (Narrative.StoryboardStyle style : object.getStyle()) {
+            if (style == null || style.getProperties() == null) {
+                continue;
+            }
+            String role = style.getRole();
+            String type = style.getType();
+            collectColorProperties(style.getProperties(), "", role, type, colors);
+        }
+        return colors;
+    }
+
+    private void collectColorProperties(Map<String, Object> properties,
+                                        String path,
+                                        String styleRole,
+                                        String styleType,
+                                        List<ColorReference> colors) {
         for (Map.Entry<String, Object> entry : properties.entrySet()) {
             if (entry == null || entry.getKey() == null) {
                 continue;
@@ -487,23 +534,23 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                         stringKeyed.put(String.valueOf(nestedEntry.getKey()), nestedEntry.getValue());
                     }
                 }
-                validateColorProperties(context, objectId, stringKeyed, childPath, issues);
+                collectColorProperties(stringKeyed, childPath, styleRole, styleType, colors);
             } else if (value instanceof List<?>) {
                 List<?> values = (List<?>) value;
                 for (int i = 0; i < values.size(); i++) {
-                    validateColorValue(context, objectId, childPath + "[" + i + "]", values.get(i), issues);
+                    collectColorValue(childPath + "[" + i + "]", values.get(i), styleRole, styleType, colors);
                 }
             } else {
-                validateColorValue(context, objectId, childPath, value, issues);
+                collectColorValue(childPath, value, styleRole, styleType, colors);
             }
         }
     }
 
-    private void validateColorValue(String context,
-                                    String objectId,
-                                    String propertyPath,
-                                    Object rawValue,
-                                    List<String> issues) {
+    private void collectColorValue(String propertyPath,
+                                   Object rawValue,
+                                   String styleRole,
+                                   String styleType,
+                                   List<ColorReference> colors) {
         if (rawValue == null || propertyPath == null
                 || !propertyPath.toLowerCase(Locale.ROOT).contains("color")) {
             return;
@@ -512,30 +559,122 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (color.isBlank()) {
             return;
         }
-        String normalized = color.toUpperCase(Locale.ROOT);
-        boolean backgroundProperty = propertyPath.toLowerCase(Locale.ROOT).contains("background")
-                || propertyPath.toLowerCase(Locale.ROOT).contains("backstroke");
-        boolean valid = WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equalsIgnoreCase(outputTarget)
-                ? isAllowedGeoGebraColor(normalized, backgroundProperty)
-                : isAllowedManimColor(normalized, backgroundProperty);
-        if (!valid) {
-            issues.add(context + ": object '" + objectId + "' uses unsupported color '" + color
-                    + "' at style." + propertyPath + " for output_target=" + outputTarget);
+        colors.add(new ColorReference(propertyPath, color, styleRole, styleType));
+    }
+
+    private void validateObjectColorContrast(String context,
+                                             String objectId,
+                                             StoryboardObject object,
+                                             List<ColorReference> colors,
+                                             List<String> issues) {
+        List<ColorReference> validColors = colors.stream()
+                .filter(color -> isSixDigitHexColor(color.value))
+                .collect(java.util.stream.Collectors.toList());
+        if (validColors.isEmpty()) {
+            return;
+        }
+
+        if (isTextualColorObject(object, validColors)) {
+            ColorReference foreground = selectTextForeground(validColors);
+            if (foreground == null) {
+                return;
+            }
+            ColorReference background = selectTextBackground(validColors);
+            String backgroundColor = background != null ? background.value : DEFAULT_STORYBOARD_BACKGROUND;
+            validateContrast(context, objectId, foreground.value, backgroundColor,
+                    TEXT_CONTRAST_THRESHOLD, "text", issues);
+            return;
+        }
+
+        for (ColorReference foreground : validColors) {
+            if (foreground.isExplicitBackground()) {
+                continue;
+            }
+            validateContrast(context, objectId, foreground.value, DEFAULT_STORYBOARD_BACKGROUND,
+                    NON_TEXT_CONTRAST_THRESHOLD, "non-text", issues);
         }
     }
 
-    private boolean isAllowedGeoGebraColor(String color, boolean backgroundProperty) {
-        if (GEOGEBRA_FOREGROUND_COLORS.contains(color)) {
-            return true;
-        }
-        return backgroundProperty && GEOGEBRA_BACKGROUND_COLORS.contains(color);
+    private boolean isSixDigitHexColor(String color) {
+        return color != null && color.matches("#[0-9A-Fa-f]{6}");
     }
 
-    private boolean isAllowedManimColor(String color, boolean backgroundProperty) {
-        if (MANIM_FOREGROUND_COLORS.contains(color)) {
+    private void validateContrast(String context,
+                                  String objectId,
+                                  String foreground,
+                                  String background,
+                                  double threshold,
+                                  String category,
+                                  List<String> issues) {
+        double contrast = contrastRatio(foreground, background);
+        if (contrast + 1e-9 < threshold) {
+            issues.add(context + ": object '" + objectId + "' has insufficient " + category
+                    + " color contrast; foreground=" + foreground.toUpperCase(Locale.ROOT)
+                    + ", background=" + background.toUpperCase(Locale.ROOT)
+                    + ", contrast=" + formatContrast(contrast)
+                    + ", required>=" + formatContrast(threshold));
+        }
+    }
+
+    private double contrastRatio(String foreground, String background) {
+        double fg = relativeLuminance(foreground);
+        double bg = relativeLuminance(background);
+        double lighter = Math.max(fg, bg);
+        double darker = Math.min(fg, bg);
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private double relativeLuminance(String color) {
+        int r = Integer.parseInt(color.substring(1, 3), 16);
+        int g = Integer.parseInt(color.substring(3, 5), 16);
+        int b = Integer.parseInt(color.substring(5, 7), 16);
+        return 0.2126 * linearRgbChannel(r)
+                + 0.7152 * linearRgbChannel(g)
+                + 0.0722 * linearRgbChannel(b);
+    }
+
+    private double linearRgbChannel(int channel) {
+        double srgb = channel / 255.0;
+        return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+    }
+
+    private String formatContrast(double contrast) {
+        return String.format(Locale.ROOT, "%.2f", contrast);
+    }
+
+    private boolean isTextualColorObject(StoryboardObject object, List<ColorReference> colors) {
+        if (isTextual(object)) {
             return true;
         }
-        return backgroundProperty && MANIM_BACKGROUND_COLORS.contains(color);
+        return colors.stream().anyMatch(ColorReference::isTextLayer);
+    }
+
+    private ColorReference selectTextForeground(List<ColorReference> colors) {
+        for (ColorReference color : colors) {
+            if (color.isTextLayer() && !color.isExplicitBackground()) {
+                return color;
+            }
+        }
+        for (ColorReference color : colors) {
+            if (!color.isExplicitBackground()) {
+                return color;
+            }
+        }
+        return null;
+    }
+
+    private ColorReference selectTextBackground(List<ColorReference> colors) {
+        for (ColorReference color : colors) {
+            if (color.isTextBackgroundFill()) {
+                return color;
+            }
+        }
+        for (ColorReference color : colors) {
+            if (color.isExplicitBackground()) {
+                return color;
+            }
+        }
+        return null;
     }
 
     private List<String> validateAsciiText(Storyboard storyboard) {
@@ -1065,7 +1204,14 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             return false;
         }
         String kind = object.getKind();
-        if ("text".equalsIgnoreCase(kind) || "label".equalsIgnoreCase(kind)) {
+        if ("text".equalsIgnoreCase(kind)
+                || "label".equalsIgnoreCase(kind)
+                || "equation".equalsIgnoreCase(kind)
+                || "formula".equalsIgnoreCase(kind)
+                || "title".equalsIgnoreCase(kind)
+                || "caption".equalsIgnoreCase(kind)
+                || "text_card".equalsIgnoreCase(kind)
+                || "formula_card".equalsIgnoreCase(kind)) {
             return true;
         }
         if (object.getStyle() == null) {
@@ -1203,6 +1349,41 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         report.setMessage(message);
     }
 
+    private void appendValidationTraceEntry(Storyboard storyboard,
+                                            String phase,
+                                            int cleanupAttempt,
+                                            boolean fixAttempted,
+                                            boolean fixApplied,
+                                            List<String> issues,
+                                            int toolCalls,
+                                            double executionTimeSeconds,
+                                            String message) {
+        if (storyboardValidationReport == null) {
+            return;
+        }
+        List<String> resolvedIssues = issues != null ? new ArrayList<>(issues) : new ArrayList<>();
+        StoryboardValidationTraceEntry entry = new StoryboardValidationTraceEntry();
+        entry.setSequence(storyboardValidationReport.getEntries().size() + 1);
+        entry.setPhase(phase);
+        entry.setCleanupAttempt(cleanupAttempt);
+        entry.setPassed(resolvedIssues.isEmpty());
+        entry.setSceneCount(countScenes(storyboard));
+        entry.setIssueCount(resolvedIssues.size());
+        entry.setIssues(resolvedIssues);
+        entry.setFixAttempted(fixAttempted);
+        entry.setFixApplied(fixApplied);
+        entry.setToolCalls(toolCalls);
+        entry.setExecutionTimeSeconds(executionTimeSeconds);
+        entry.setMessage(message);
+        storyboardValidationReport.addEntry(entry);
+    }
+
+    private int countScenes(Storyboard storyboard) {
+        return storyboard != null && storyboard.getScenes() != null
+                ? storyboard.getScenes().size()
+                : 0;
+    }
+
     // ---- LLM fix pass ----
 
     private Narrative attemptLlmFix(Narrative narrative, List<String> issues) {
@@ -1216,6 +1397,10 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             String systemPrompt = NarrativePrompts.buildRulesPrompt(outputTarget)
                     + "\n\nStoryboard validation repair rules:\n"
                     + "- Use dependency_objects as the authoritative dependency graph.\n"
+                    + "- Rewrite storyboard colors as 6-digit hex strings (`#RRGGBB`) only; do not use named colors or 8-digit hex.\n"
+                    + "- Keep opacity in separate `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
+                    + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to #000000 when no text background is present.\n"
+                    + "- For non-text objects, ensure foreground colors contrast with #000000 at ratio >= 3.0.\n"
                     + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or constraint_note.\n"
                     + "- Every dependency-driven object must define dependency_objects as object ids and dependency_relation as a concise construction relation; put hard geometric invariants in constraint_note.";
             conversationContext.setSystemMessage(systemPrompt);
@@ -1419,6 +1604,58 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             this.maxX = maxX;
             this.minY = minY;
             this.maxY = maxY;
+        }
+    }
+
+    private static final class ColorReference {
+        private final String propertyPath;
+        private final String value;
+        private final String styleRole;
+        private final String styleType;
+
+        private ColorReference(String propertyPath,
+                               String value,
+                               String styleRole,
+                               String styleType) {
+            this.propertyPath = propertyPath == null ? "" : propertyPath;
+            this.value = value == null ? "" : value.trim();
+            this.styleRole = styleRole == null ? "" : styleRole;
+            this.styleType = styleType == null ? "" : styleType;
+        }
+
+        private boolean isTextLayer() {
+            String combined = normalizedLayer();
+            return combined.contains("text")
+                    || combined.contains("math")
+                    || combined.contains("formula")
+                    || combined.contains("title")
+                    || combined.contains("caption")
+                    || combined.contains("label");
+        }
+
+        private boolean isExplicitBackground() {
+            String path = propertyPath.toLowerCase(Locale.ROOT);
+            String combined = normalizedLayer();
+            return path.contains("background")
+                    || path.contains("backstroke")
+                    || combined.contains("background")
+                    || combined.contains("box")
+                    || combined.contains("card");
+        }
+
+        private boolean isTextBackgroundFill() {
+            if (!isExplicitBackground()) {
+                return false;
+            }
+            String path = propertyPath.toLowerCase(Locale.ROOT);
+            return path.contains("background")
+                    || path.contains("fill_color")
+                    || path.equals("color")
+                    || path.endsWith(".color");
+        }
+
+        private String normalizedLayer() {
+            return (styleRole + " " + styleType).toLowerCase(Locale.ROOT);
         }
     }
 

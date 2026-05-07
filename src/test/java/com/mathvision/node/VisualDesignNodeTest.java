@@ -31,19 +31,19 @@ class VisualDesignNodeTest {
     void visualDesignPromptUsesCompactKnowledgeGraphFields() {
         CapturingAiClient aiClient = new CapturingAiClient(validSceneDesignResponse());
 
-        KnowledgeNode problem = new KnowledgeNode("problem", "State the reflection problem", 0, false);
+        KnowledgeNode problem = new KnowledgeNode("problem", "State the reflection problem", 0);
         problem.setNodeType(KnowledgeNode.NODE_TYPE_PROBLEM);
         problem.setReason("Frame the opening beat.");
         problem.setEquations(java.util.List.of("AP = A'P"));
         problem.setDefinitions(Map.of("A'", "reflection of A across l"));
 
-        KnowledgeNode currentStep = new KnowledgeNode("reflect", "Show the reflected point A'", 1, false);
+        KnowledgeNode currentStep = new KnowledgeNode("reflect", "Show the reflected point A'", 1);
         currentStep.setNodeType(KnowledgeNode.NODE_TYPE_CONSTRUCTION);
         currentStep.setReason("Reflection creates an equal-length path.");
         currentStep.setEquations(java.util.List.of("AP = A'P"));
         currentStep.setDefinitions(Map.of("A'", "reflection of A across l"));
 
-        KnowledgeNode conclusion = new KnowledgeNode("answer", "Conclude the reflected route is shortest", 2, false);
+        KnowledgeNode conclusion = new KnowledgeNode("answer", "Conclude the reflected route is shortest", 2);
         conclusion.setNodeType(KnowledgeNode.NODE_TYPE_CONCLUSION);
         conclusion.setReason("Close the explanation.");
 
@@ -144,7 +144,7 @@ class VisualDesignNodeTest {
     }
 
     private static KnowledgeNode node(String id, String step, String nodeType) {
-        KnowledgeNode node = new KnowledgeNode(id, step, 0, false);
+        KnowledgeNode node = new KnowledgeNode(id, step, 0);
         node.setNodeType(nodeType);
         return node;
     }

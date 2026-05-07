@@ -45,6 +45,12 @@ public class StoryboardValidationReport {
     @JsonProperty("final_issues")
     private List<String> finalIssues = new ArrayList<>();
 
+    @JsonProperty("total_validation_events")
+    private int totalValidationEvents;
+
+    @JsonProperty("entries")
+    private List<StoryboardValidationTraceEntry> entries = new ArrayList<>();
+
     @JsonProperty("message")
     private String message;
 
@@ -83,6 +89,24 @@ public class StoryboardValidationReport {
     public List<String> getFinalIssues() { return finalIssues; }
     public void setFinalIssues(List<String> finalIssues) {
         this.finalIssues = finalIssues != null ? finalIssues : new ArrayList<>();
+    }
+
+    public int getTotalValidationEvents() { return totalValidationEvents; }
+    public void setTotalValidationEvents(int totalValidationEvents) {
+        this.totalValidationEvents = totalValidationEvents;
+    }
+
+    public List<StoryboardValidationTraceEntry> getEntries() { return entries; }
+    public void setEntries(List<StoryboardValidationTraceEntry> entries) {
+        this.entries = entries != null ? new ArrayList<>(entries) : new ArrayList<>();
+    }
+
+    public void addEntry(StoryboardValidationTraceEntry entry) {
+        if (entry == null) {
+            return;
+        }
+        entries.add(entry);
+        totalValidationEvents = entries.size();
     }
 
     public String getMessage() { return message; }

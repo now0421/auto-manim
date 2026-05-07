@@ -27,7 +27,7 @@ public final class StoryboardSchemaPrompts {
     /** Lexical contract reinforcing quote discipline and forbidding bare identifiers. */
     public static final String JSON_LEXICAL_CONTRACT =
             "JSON lexical contract:\n"
-                    + "- Use double quotes for all JSON keys and all string values, including categorical fields such as kind, behavior, scene_mode, action type, style role/type, color names, and label content.\n"
+                    + "- Use double quotes for all JSON keys and all string values, including categorical fields such as kind, behavior, scene_mode, action type, style role/type, hex colors, and label content.\n"
                     + "- Do not output markdown fences, comments, trailing commas, or single-quoted strings.\n"
                     + "- Do not output bare identifiers as JSON values. Invalid: \"type\": create. Valid: \"type\": \"create\".\n";
 
@@ -36,11 +36,11 @@ public final class StoryboardSchemaPrompts {
             "Invalid examples to avoid:\n"
                     + "- {\"type\": create}\n"
                     + "- {\"behavior\": static}\n"
-                    + "- {\"properties\": {\"color\": YELLOW}}\n"
+                    + "- {\"properties\": {\"color\": #FACC15}}\n"
                     + "Valid equivalents:\n"
                     + "- {\"type\": \"create\"}\n"
                     + "- {\"behavior\": \"static\"}\n"
-                    + "- {\"properties\": {\"color\": \"YELLOW\"}}\n";
+                    + "- {\"properties\": {\"color\": \"#FACC15\"}}\n";
 
     // ── Field-level schemas ────────────────────────────────────────────
 
@@ -234,7 +234,7 @@ public final class StoryboardSchemaPrompts {
                     + "            \"role\": \"text\",\n"
                     + "            \"type\": \"math_text\",\n"
                     + "            \"properties\": {\n"
-                    + "              \"color\": \"BLACK\",\n"
+                    + "              \"color\": \"#111827\",\n"
                     + "              \"font_size\": 30,\n"
                     + "              \"z_index\": 2\n"
                     + "            }\n"
@@ -243,9 +243,9 @@ public final class StoryboardSchemaPrompts {
                     + "            \"role\": \"background\",\n"
                     + "            \"type\": \"background_box\",\n"
                     + "            \"properties\": {\n"
-                    + "              \"fill_color\": \"WHITE\",\n"
+                    + "              \"fill_color\": \"#FFFFFF\",\n"
                     + "              \"fill_opacity\": 1,\n"
-                    + "              \"stroke_color\": \"WHITE\",\n"
+                    + "              \"stroke_color\": \"#FFFFFF\",\n"
                     + "              \"stroke_width\": 1,\n"
                     + "              \"corner_radius\": 0.2,\n"
                     + "              \"padding\": 0.2\n"
@@ -300,7 +300,7 @@ public final class StoryboardSchemaPrompts {
                     + "          {\n"
                     + "            \"role\": \"emphasis\",\n"
                     + "            \"type\": \"highlight_ring\",\n"
-                    + "            \"properties\": { \"color\": \"YELLOW\", \"stroke_width\": 3 }\n"
+                    + "            \"properties\": { \"color\": \"#FACC15\", \"stroke_width\": 3 }\n"
                     + "          }\n"
                     + "        ]\n"
                     + "      }\n"

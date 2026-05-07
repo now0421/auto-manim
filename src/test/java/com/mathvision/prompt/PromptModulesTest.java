@@ -38,7 +38,6 @@ class PromptModulesTest {
         assertTrue(prompt.contains("compact teaching DAG"));
         assertTrue(prompt.contains("5 to 9 strong beats"));
         assertTrue(prompt.contains("concept, observation, construction, derivation, conclusion"));
-        assertTrue(prompt.contains("`is_foundation` is metadata only"));
     }
 
     @Test

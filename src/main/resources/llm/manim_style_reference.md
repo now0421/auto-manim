@@ -6,10 +6,12 @@ generation.
 
 ## Rules
 
-* Manim uses a black background by default.
-* Use only the project-approved Manim color constants listed below.
-* Do not use arbitrary hex colors, Manim color constants outside this reference,
-  CSS-style syntax, gradients, shadows, blur, or unsupported rendering terms.
+* Manim uses a black background by default (`#000000`).
+* Write every storyboard color as a 6-digit hex string in `#RRGGBB` format.
+* Do not use Manim named color constants, CSS color names, 8-digit hex values,
+  RGB strings, gradients, shadows, blur, or unsupported rendering terms.
+* Put transparency in a separate `opacity`, `fill_opacity`, or
+  `stroke_opacity` field. Do not encode alpha in the color string.
 * Use concise, backend-friendly style properties.
 * Prefer structured properties over vague prose.
 * Treat style as part of teaching, not decoration alone.
@@ -17,69 +19,46 @@ generation.
 * Keep one clear visual focus per scene.
 * Preserve intentional empty space; do not saturate the whole frame.
 
-## 1. Allowed Color Constants
+## 1. Color Format And Contrast
 
-Use only names from this whitelist in `color_scheme`, `color_palette`, object
-`style`, or scene notes.
+Use hex colors in `color_scheme`, `color_palette`, object `style`, and scene
+notes.
 
-Background and readability treatment:
+Valid examples:
 
-* `BLACK`
+* `#3498DB`
+* `#FFFFFF`
+* `#1A1A1A`
 
-Foreground colors for the black Manim canvas:
+Invalid examples:
 
-* `WHITE`
 * `BLUE`
-* `GREEN`
-* `YELLOW`
-* `RED`
-* `PURPLE`
-* `PINK`
-* `ORANGE`
-* `TEAL`
-* `GOLD`
-* `BLUE_A`
-* `BLUE_B`
-* `GREEN_A`
-* `GREEN_B`
-* `YELLOW_A`
-* `YELLOW_B`
-* `YELLOW_C`
-* `RED_A`
-* `RED_B`
-* `PURPLE_A`
-* `PURPLE_B`
-* `TEAL_A`
-* `TEAL_B`
-* `GOLD_A`
-* `GOLD_B`
-* `GOLD_C`
-* `MAROON_A`
-* `MAROON_B`
-* `LIGHT_PINK`
-* `PURE_RED`
-* `PURE_GREEN`
-* `PURE_BLUE`
-* `PURE_YELLOW`
-* `PURE_CYAN`
-* `PURE_MAGENTA`
+* `WHITE`
+* `BLACK`
+* `#CC3498DB`
+* `rgba(52, 152, 219, 0.8)`
 
-Do not use dark or low-contrast foreground colors such as `DARK_BLUE`,
-`DARK_GRAY`, `GRAY_E`, `BLUE_E`, `GREEN_E`, `PURPLE_E`, `MAROON_E`,
-`LOGO_BLACK`, or custom hex colors.
+Contrast requirements:
+
+* Ordinary non-text strokes, arrows, geometry, markers, and decorative elements
+  must contrast against the default black background `#000000` at ratio >= 3.0.
+* Text, titles, formulas, labels, badges, and callouts must contrast at ratio
+  >= 4.5 against their own text-card or background-box color.
+* If a text element has no explicit text-card or background-box color, compare
+  its text color against `#000000`.
 
 ## 2. Safe Style Properties
 
 Use concise key-value properties that can later map to Manim styling code.
 
 ```text
-color            // one allowed foreground color
-fill_color       // one allowed foreground color
+color            // 6-digit hex color, #RRGGBB
+fill_color       // 6-digit hex color, #RRGGBB
 fill_opacity     // 0..1
-stroke_color     // one allowed foreground color
+stroke_color     // 6-digit hex color, #RRGGBB
 stroke_width     // numeric stroke width
 stroke_opacity   // 0..1
-opacity          // overall opacity
+opacity          // overall opacity, 0..1
 scale            // relative size multiplier
 font_size        // text size when needed
 ```
@@ -91,9 +70,9 @@ with later Manim code generation.
 
 ### Semantic Palette
 
-* `color_scheme` should map colors to roles or concepts, for example
-  "moving point = GREEN_A, fixed anchors = RED_A/BLUE_A, result highlight =
-  YELLOW_B".
+* `color_scheme` should map hex colors to roles or concepts, for example
+  "moving point = #22C55E, fixed anchors = #F87171/#60A5FA, result highlight =
+  #FACC15".
 * Keep the same concept in the same color across scenes.
 * Prefer a small consistent palette over many unrelated colors.
 
@@ -123,7 +102,7 @@ Do not keep every object at full opacity.
 * Keep `font_size >= 18` for readable supporting text.
 * Use larger sizes for scene titles, section headers, and key conclusions.
 * If text must overlap busy geometry, plan a background box or backstroke-style
-  readability treatment.
+  readability treatment and ensure the text/background contrast is >= 4.5.
 
 ### Layout And Motion Vocabulary
 
@@ -138,13 +117,13 @@ Do not keep every object at full opacity.
 
 When writing storyboard JSON:
 
-* `color_palette` must contain only whitelisted Manim color constants from this
-  reference.
+* `color_palette` must contain only 6-digit hex color strings.
 * `color_scheme` should describe semantic mapping, not implementation details or
   raw code.
 * Object `style` should stay concise and implementation-friendly.
-* Prefer structured properties such as `color`, `fill_opacity`, and
-  `stroke_width` over free-form style prose.
+* Prefer structured properties such as `color`, `fill_color`, `opacity`,
+  `fill_opacity`, `stroke_width`, and `stroke_opacity` over free-form style
+  prose.
 * Use `opacity`, `fill_opacity`, and `stroke_opacity` deliberately to encode
   hierarchy.
 * Use `font_size` to separate title, body, label, and caption roles.

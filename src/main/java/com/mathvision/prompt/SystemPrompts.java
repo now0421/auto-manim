@@ -237,33 +237,29 @@ public final class SystemPrompts {
 
     /** High-contrast color rules to avoid pale-on-pale combinations. */
     public static final String HIGH_CONTRAST_COLOR_RULES =
-            "Keep text, labels, strokes, and fills visually distinct from their background.\n"
-                    + "Avoid low-contrast pairings such as yellow on white, white on light yellow, or similar pale-on-pale combinations.\n";
+            "Use 6-digit hex colors only (`#RRGGBB`) in storyboard style properties; do not use named colors, 8-digit hex, RGB strings, or alpha embedded in the color.\n"
+                    + "Represent transparency separately with `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
+                    + "Keep text, labels, strokes, and fills visually distinct from their background.\n"
+                    + "Avoid low-contrast pairings such as yellow on white, white on light yellow, or similar pale-on-pale combinations.\n"
+                    + "Non-text foreground colors must contrast against the default black storyboard background `#000000` at ratio >= 3.0.\n"
+                    + "Text, titles, formulas, labels, and callouts must contrast at ratio >= 4.5 against their own text-card/background-box color; if no text background is defined, use `#000000` as the background.\n";
 
     /** High-contrast color rules formatted as bullet lines for direct prompt insertion. */
     public static final String HIGH_CONTRAST_COLOR_RULES_BULLETS =
             "- " + HIGH_CONTRAST_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
 
     public static final String GEOGEBRA_COLOR_RULES =
-            "GeoGebra uses a white canvas by default. Use only these project-approved foreground colors: "
-                    + "`#111827`, `#1F2937`, `#0B3D91`, `#1D4ED8`, `#075985`, `#0F766E`, "
-                    + "`#166534`, `#365314`, `#7F1D1D`, `#B91C1C`, `#9F1239`, `#831843`, "
-                    + "`#581C87`, `#6D28D9`, `#7C2D12`, `#92400E`.\n"
-                    + "Use `WHITE` or `#FFFFFF` only for the GeoGebra background, never for foreground strokes, labels, or fills.\n"
-                    + "Do not use yellow, gold, lime, cyan, light blue, light green, light orange, light yellow, light purple, pink, silver, light gray, or other pale colors on the white canvas.\n";
+            "GeoGebra storyboard colors must be written as 6-digit hex strings such as `#1D4ED8`, `#FFFFFF`, or `#111827`.\n"
+                    + "Do not use named colors or a fixed project color whitelist at the storyboard stage.\n"
+                    + "Use `opacity`, `fill_opacity`, or `stroke_opacity` for transparency instead of 8-digit hex.\n";
 
     public static final String GEOGEBRA_COLOR_RULES_BULLETS =
             "- " + GEOGEBRA_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
 
     public static final String MANIM_COLOR_RULES =
-            "Manim uses a black background by default. Use only these project-approved foreground color constants: "
-                    + "`WHITE`, `BLUE`, `GREEN`, `YELLOW`, `RED`, `PURPLE`, `PINK`, `ORANGE`, "
-                    + "`TEAL`, `GOLD`, `BLUE_A`, `BLUE_B`, `GREEN_A`, `GREEN_B`, `YELLOW_A`, "
-                    + "`YELLOW_B`, `YELLOW_C`, `RED_A`, `RED_B`, `PURPLE_A`, `PURPLE_B`, "
-                    + "`TEAL_A`, `TEAL_B`, `GOLD_A`, `GOLD_B`, `GOLD_C`, `MAROON_A`, `MAROON_B`, `LIGHT_PINK`, "
-                    + "`PURE_RED`, `PURE_GREEN`, `PURE_BLUE`, `PURE_YELLOW`, `PURE_CYAN`, `PURE_MAGENTA`.\n"
-                    + "Use `BLACK` only for the Manim background or backstroke readability treatment, never as a foreground object color on the black canvas.\n"
-                    + "Do not use dark or low-contrast foreground colors such as `DARK_BLUE`, `DARK_GRAY`, `GRAY_E`, `BLUE_E`, `GREEN_E`, `PURPLE_E`, `MAROON_E`, `LOGO_BLACK`, or custom hex colors.\n";
+            "Manim storyboard colors must be written as 6-digit hex strings such as `#3498DB`, `#FFFFFF`, or `#1A1A1A`.\n"
+                    + "Do not use Manim named color constants in storyboard JSON.\n"
+                    + "Use `opacity`, `fill_opacity`, or `stroke_opacity` for transparency instead of 8-digit hex.\n";
 
     public static final String MANIM_COLOR_RULES_BULLETS =
             "- " + MANIM_COLOR_RULES.replace("\n", "\n- ").trim() + "\n";
@@ -325,7 +321,7 @@ public final class SystemPrompts {
                     + "- Keep supporting text comfortably readable; avoid tiny labels and long edge-to-edge strings.\n"
                     + "- Use `buff=0.5` or larger on every `.to_edge()` call; values below 0.5 risk clipping.\n"
                     + "- After creating long text, check whether `text.width > config.frame_width - 1.0` and call `text.set_width(config.frame_width - 1.0)` if so.\n"
-                    + "- MathTex and Tex default to WHITE text. When placing them inside a WHITE BackgroundRectangle or on any light-colored card, always set the text color to BLACK (or another dark color) explicitly with `.set_color(BLACK)`.\n"
+                    + "- MathTex and Tex default to `#FFFFFF` text. When placing them inside a `#FFFFFF` BackgroundRectangle or on any light-colored card, explicitly set a dark text color such as `#111827`.\n"
                     + "- If text overlaps busy geometry, plan a background box or backstroke-style treatment.\n"
                     + "- Use screen-fixed overlays for explanatory text only when that text should stay independent of world motion.\n";
 

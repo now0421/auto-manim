@@ -544,46 +544,15 @@ for part in eq.submobjects:
 
 ### Styling and Color
 
-#### Project-Safe Color Constants
+#### Project Color Format
 
-Manim uses a black background by default in this project. Use only the following
-project-approved foreground color constants unless a rule explicitly says a
-color is background-only.
+Storyboard colors use 6-digit hex strings (`#RRGGBB`). When implementing Manim
+code from storyboard JSON, map those hex strings into shared constants or
+`ManimColor("#RRGGBB")` values near the top of the generated file so palette
+meaning stays consistent.
 
-Background and readability treatment:
-
-- `BLACK`
-
-Foreground colors:
-
-- `WHITE`
-- `BLUE`
-- `GREEN`
-- `YELLOW`
-- `RED`
-- `PURPLE`
-- `PINK`
-- `ORANGE`
-- `TEAL`
-- `GOLD`
-- `LIGHT_PINK`
-- `BLUE_A`, `BLUE_B`
-- `GREEN_A`, `GREEN_B`
-- `YELLOW_A`, `YELLOW_B`, `YELLOW_C`
-- `RED_A`, `RED_B`
-- `PURPLE_A`, `PURPLE_B`
-- `TEAL_A`, `TEAL_B`
-- `GOLD_A`, `GOLD_B`, `GOLD_C`
-- `MAROON_A`, `MAROON_B`
-- `PURE_RED`
-- `PURE_GREEN`
-- `PURE_BLUE`
-- `PURE_YELLOW`
-- `PURE_CYAN`
-- `PURE_MAGENTA`
-
-Do not use dark or low-contrast foreground colors, logo colors, custom hex
-colors, or `ManimColor(...)`.
+Use separate opacity arguments or style fields for transparency. Do not encode
+alpha in an 8-digit hex color.
 
 #### Fill, Stroke, Opacity, Style
 
@@ -648,8 +617,8 @@ Example:
 mid = interpolate_color(BLUE, RED, 0.5)
 ```
 
-Do not use arbitrary hex colors, `ManimColor(...)`, `rgb_to_color(...)`,
-`random_color()`, or `random_bright_color()` in generated project code.
+Do not use 8-digit hex colors, `rgb_to_color(...)`, `random_color()`, or
+`random_bright_color()` in generated project code.
 
 ### Coordinate Systems and Plotting
 

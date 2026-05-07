@@ -787,9 +787,9 @@ Common 3D commands include `Plane`, `PerpendicularPlane`, `Sphere`, `Cylinder`,
 
 - Style commands do not create mathematical objects and should be applied after
   construction.
-- GeoGebra uses a white canvas by default. Use only the project-approved colors
-  in `geogebra_style_reference.md`; do not invent arbitrary hex colors or use
-  pale named colors.
+- Storyboard colors use 6-digit hex strings (`#RRGGBB`). Use separate opacity
+  fields or command arguments for transparency; do not encode alpha in 8-digit
+  hex and do not use named colors in storyboard-level style.
 - Numeric RGB and opacity channels use the `0..1` scale, not `0..255`.
 - Use labels and captions sparingly; prefer labels for named points and short
   captions for lines, regions, or functions.
@@ -800,7 +800,7 @@ SetBackgroundColor( <Object>, <Red>, <Green>, <Blue> )
 SetBackgroundColor( <Object>, <"Color"> )
 SetBackgroundColor( <Red>, <Green>, <Blue> )         // active Graphics View; numeric channels use 0..1
 SetBackgroundColor( <"Color"> )                      // active Graphics View
-SetColor( <Object>, <ProjectColor> )                 // use only colors from geogebra_style_reference.md
+SetColor( <Object>, <ProjectColor> )                 // storyboard ProjectColor is a #RRGGBB hex color
 SetDynamicColor( <Object>, <Red>, <Green>, <Blue> )
 SetDynamicColor( <Object>, <Red>, <Green>, <Blue>, <Opacity> ) // all numeric inputs use 0..1
 SetLineThickness( <Object>, <Number> )

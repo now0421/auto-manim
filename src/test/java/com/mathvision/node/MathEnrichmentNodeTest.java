@@ -30,15 +30,15 @@ class MathEnrichmentNodeTest {
     @Test
     void enrichmentPromptUsesCompactKnowledgeGraphFields() {
         CapturingAiClient aiClient = new CapturingAiClient(validEnrichmentResponse());
-        KnowledgeNode problem = new KnowledgeNode("problem", "State the shortest-path problem", 0, false);
+        KnowledgeNode problem = new KnowledgeNode("problem", "State the shortest-path problem", 0);
         problem.setNodeType(KnowledgeNode.NODE_TYPE_PROBLEM);
         problem.setReason("Frame the opening beat.");
 
-        KnowledgeNode currentStep = new KnowledgeNode("reflect", "Reflect point A across line l", 1, false);
+        KnowledgeNode currentStep = new KnowledgeNode("reflect", "Reflect point A across line l", 1);
         currentStep.setNodeType(KnowledgeNode.NODE_TYPE_CONSTRUCTION);
         currentStep.setReason("Use symmetry to compare path lengths.");
 
-        KnowledgeNode conclusion = new KnowledgeNode("answer", "Conclude the reflected route is shortest", 2, false);
+        KnowledgeNode conclusion = new KnowledgeNode("answer", "Conclude the reflected route is shortest", 2);
         conclusion.setNodeType(KnowledgeNode.NODE_TYPE_CONCLUSION);
         conclusion.setReason("Close with the final answer.");
 
@@ -84,7 +84,7 @@ class MathEnrichmentNodeTest {
     @Test
     void acceptsExplicitlyEmptyMathFieldsAsValidEnrichment() throws Exception {
         MathEnrichmentNode enrichmentNode = new MathEnrichmentNode();
-        KnowledgeNode node = new KnowledgeNode("step_1", "Describe the setup", 0, false);
+        KnowledgeNode node = new KnowledgeNode("step_1", "Describe the setup", 0);
 
         ObjectNode payload = JsonUtils.mapper().createObjectNode();
         payload.putArray("equations");
@@ -104,7 +104,7 @@ class MathEnrichmentNodeTest {
     @Test
     void trimsAndFiltersBlankMathEntries() throws Exception {
         MathEnrichmentNode enrichmentNode = new MathEnrichmentNode();
-        KnowledgeNode node = new KnowledgeNode("step_2", "Solve for x", 0, false);
+        KnowledgeNode node = new KnowledgeNode("step_2", "Solve for x", 0);
 
         ObjectNode payload = JsonUtils.mapper().createObjectNode();
         ArrayNode equations = payload.putArray("equations");
@@ -193,7 +193,7 @@ class MathEnrichmentNodeTest {
     }
 
     private static KnowledgeNode node(String id, String step, String nodeType) {
-        KnowledgeNode node = new KnowledgeNode(id, step, 0, false);
+        KnowledgeNode node = new KnowledgeNode(id, step, 0);
         node.setNodeType(nodeType);
         return node;
     }

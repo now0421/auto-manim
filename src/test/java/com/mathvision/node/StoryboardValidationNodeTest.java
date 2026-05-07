@@ -238,11 +238,14 @@ class StoryboardValidationNodeTest {
         assertTrue(validatedStoryboardJson.contains("Layout validation"));
         assertTrue(reportJson.contains("\"initial_issue_count\""));
         assertTrue(reportJson.contains("\"initial_issues\""));
+        assertTrue(reportJson.contains("\"total_validation_events\""));
+        assertTrue(reportJson.contains("\"entries\""));
+        assertTrue(reportJson.contains("\"phase\" : \"initial_validation\""));
         assertTrue(reportJson.contains("extends outside the frame bounds"));
     }
 
     @Test
-    void stopsValidationFixLoopAfterThreeUnsuccessfulPasses() {
+    void stopsValidationFixLoopAfterThreeUnsuccessfulPasses() throws IOException {
         StoryboardValidationNode node = new StoryboardValidationNode();
         WorkflowConfig config = new WorkflowConfig();
         config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_MANIM);
@@ -255,12 +258,21 @@ class StoryboardValidationNodeTest {
         ctx.put(WorkflowKeys.CONFIG, config);
         ctx.put(WorkflowKeys.NARRATIVE, new Narrative("Demo concept", "Demo description", storyboard));
         ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
+        ctx.put(WorkflowKeys.OUTPUT_DIR, tempDir);
 
         Narrative prepNarrative = node.prep(ctx);
         Narrative resultNarrative = node.exec(prepNarrative);
+        node.post(ctx, prepNarrative, resultNarrative);
 
         assertEquals(3, aiClient.toolCalls.get());
         assertEquals(1, node.validate(resultNarrative.getStoryboard()).size());
+
+        JsonNode report = JsonUtils.mapper().readTree(tempDir.resolve("3_storyboard_validation.json").toFile());
+        assertEquals(4, report.get("total_validation_events").asInt());
+        assertEquals(4, report.get("entries").size());
+        assertEquals("initial_validation", report.get("entries").get(0).get("phase").asText());
+        assertEquals("post_cleanup_validation", report.get("entries").get(3).get("phase").asText());
+        assertEquals(3, report.get("entries").get(3).get("cleanup_attempt").asInt());
     }
 
     private StoryboardValidationNode prepareNode(String outputTarget) {

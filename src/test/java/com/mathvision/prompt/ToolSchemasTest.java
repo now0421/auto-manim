@@ -77,7 +77,6 @@ class ToolSchemasTest {
         assertTrue(ToolSchemas.CONCEPT_GRAPH.contains("construction"));
         assertTrue(ToolSchemas.CONCEPT_GRAPH.contains("derivation"));
         assertTrue(ToolSchemas.CONCEPT_GRAPH.contains("conclusion"));
-        assertTrue(ToolSchemas.CONCEPT_GRAPH.contains("is_foundation"));
         assertFalse(ToolSchemas.CONCEPT_GRAPH.contains("prerequisite_edges"));
     }
 

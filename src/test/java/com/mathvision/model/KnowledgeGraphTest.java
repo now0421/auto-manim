@@ -201,7 +201,7 @@ class KnowledgeGraphTest {
     }
 
     private static KnowledgeNode node(String id, String step, int minDepth, String nodeType) {
-        KnowledgeNode node = new KnowledgeNode(id, step, minDepth, false);
+        KnowledgeNode node = new KnowledgeNode(id, step, minDepth);
         node.setNodeType(nodeType);
         return node;
     }

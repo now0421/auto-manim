@@ -38,11 +38,11 @@ public final class CodeEvaluationPrompts {
             "You are a senior Manim code reviewer.\n"
                     + "Your job is NOT to debug runtime errors.\n"
                     + "Your primary job is rule-compliance inspection before render.\n"
-                    + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete code evidence and storyboard reference context when useful.\n\n"
-                    + SystemPrompts.STORYBOARD_REFERENCE_RULES
+                    + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete code evidence and storyboard semantic context when useful.\n\n"
+                    + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory Manim rule checklist:\n"
-                    + "- `teaching_coherence`: the code presents a coherent teaching animation for the target concept; storyboard details are reference hints, not required one-for-one implementation requirements.\n"
-                    + "- `geometry_consistency`: geometry implemented in the code is internally consistent; storyboard constraints may guide the review but should not be treated as hard blockers by themselves.\n"
+                    + "- `teaching_coherence`: the code presents a coherent teaching animation for the target concept and preserves the storyboard's core teaching goal, scene order, continuity, and semantic intent; storyboard objects remain candidate elements rather than a one-for-one rendering checklist.\n"
+                    + "- `geometry_consistency`: geometry implemented in the code is internally consistent and preserves storyboard hard geometry/dependency requirements when present.\n"
                     + "- `layout_and_hierarchy`: important visible content maintains one clear focus, uses opacity hierarchy, preserves empty overlay space, and avoids code-evident persistent crowding.\n"
                     + "- `continuity_and_identity`: persistent code objects remain stable where continuity matters, prefer transforms/restyles over unnecessary redraws, and clean temporary annotations when their beat is done.\n"
                     + "- `pacing_and_narration`: important reveals have subtitle-ready beats, `self.add_subcaption(...)` or `subcaption=`, and enough `self.wait(...)` breathing room instead of stacked animations.\n"
@@ -64,12 +64,12 @@ public final class CodeEvaluationPrompts {
             "You are a senior GeoGebra construction reviewer.\n"
                     + "Your job is NOT to debug runtime errors unless they directly affect runtime validity or construction clarity.\n"
                     + "Your primary job is rule-compliance inspection for a GeoGebra teaching construction before render.\n"
-                    + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete code evidence and storyboard reference context when useful.\n\n"
-                    + SystemPrompts.STORYBOARD_REFERENCE_RULES
+                    + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete code evidence and storyboard semantic context when useful.\n\n"
+                    + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory GeoGebra rule checklist:\n"
-                    + "- `teaching_coherence`: the command script presents a coherent teaching construction for the target concept; storyboard details are reference hints, not required one-for-one implementation requirements.\n"
-                    + "- `visibility_progression`: scene-level visibility and highlight progression is coherent in the script; exact storyboard progression is not a hard blocker.\n"
-                    + "- `geometry_consistency`: geometry implemented in the script is internally consistent and uses documented constructions.\n"
+                    + "- `teaching_coherence`: the command script presents a coherent teaching construction for the target concept and preserves the storyboard's core teaching goal, scene order, continuity, and semantic intent; storyboard objects remain candidate elements rather than a one-for-one rendering checklist.\n"
+                    + "- `visibility_progression`: scene-level visibility and highlight progression is coherent in the script and preserves storyboard object-state progression semantically; exact timing or every decorative beat is not a hard blocker.\n"
+                    + "- `geometry_consistency`: geometry implemented in the script is internally consistent, uses documented constructions, and preserves storyboard hard geometry/dependency requirements when present.\n"
                     + "- `object_identity`: object ids/names remain stable, helpers are not mistaken for storyboard objects, and redundant duplicates on the same endpoints are avoided.\n"
                     + "- `layout_and_readability`: coordinates, labels, style, contrast, and initial view are readable and coherent.\n"
                     + "- `viewport_contract`: the initial visible coordinate window is treated as x[-7,7], y[-4,4]; important objects should fit this view without relying on user zooming or panning, and the construction should not be tiny or clustered inside an over-wide view.\n"
@@ -87,7 +87,7 @@ public final class CodeEvaluationPrompts {
                     + "You will receive storyboard JSON, static visual findings, a structured review, and the current code.\n"
                     + "Rewrite the full code.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
-                    + SystemPrompts.STORYBOARD_REPAIR_REFERENCE_RULES
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
@@ -102,8 +102,7 @@ public final class CodeEvaluationPrompts {
                     + "You will receive storyboard JSON, static visual findings, a structured review, and the current command script.\n"
                     + "Rewrite the full command script.\n"
                     + "Preserve runtime validity, construction coherence, object identities where useful, scene visibility progression, and teaching intent.\n"
-                    + "Use storyboard details as reference context, not as strict requirements that must be restored one-for-one.\n"
-                    + SystemPrompts.STORYBOARD_REPAIR_REFERENCE_RULES
+                    + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
                     + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
@@ -149,21 +148,21 @@ public final class CodeEvaluationPrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return SystemPrompts.buildCurrentRequestSection(String.format(
                     "Figure name: %s\n\n"
-                            + "Compact storyboard JSON (reference context, not strict authority):\n```json\n%s\n```\n\n"
+                            + "Compact storyboard JSON (semantic review context):\n```json\n%s\n```\n\n"
                             + "Static visual analysis:\n```json\n%s\n```\n\n"
                             + "GeoGebra command script to review:\n```geogebra\n%s\n```\n\n"
                             + "Check every mandatory GeoGebra rule before render.\n"
-                            + "Focus on whether the actual construction, scene visibility progression, and teaching evidence are coherent and render-ready; use the storyboard only as reference context.\n"
+                            + "Focus on whether the actual construction, scene visibility progression, and teaching evidence are coherent, render-ready, and aligned with storyboard hard geometry, dependency, continuity, and teaching semantics.\n"
                             + "Return only the structured rule-compliance output.",
                     sceneName, storyboardJson, staticAnalysisJson, generatedCode));
         }
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Scene class name: %s\n\n"
-                        + "Compact storyboard JSON (reference context, not strict authority):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (semantic review context):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Manim code to review:\n```python\n%s\n```\n\n"
                         + "Check every mandatory Manim rule before render.\n"
-                        + "Focus on teaching coherence, internally consistent geometry, continuity, pacing versus narration, 3D readability, fixed-in-frame overlays, correct spatial relationships, text readability, and code-evident clutter. Use storyboard details as reference hints only.\n"
+                        + "Focus on teaching coherence, internally consistent geometry, continuity, pacing versus narration, 3D readability, fixed-in-frame overlays, correct spatial relationships, text readability, code-evident clutter, and alignment with storyboard hard geometry, dependency, continuity, and teaching semantics.\n"
                         + "Return only the structured rule-compliance output.",
                 sceneName, storyboardJson, staticAnalysisJson, generatedCode));
     }
@@ -213,12 +212,12 @@ public final class CodeEvaluationPrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return SystemPrompts.buildCurrentRequestSection(String.format(
                     "Figure name: %s\n\n"
-                            + "Compact storyboard JSON (reference context, not strict authority):\n```json\n%s\n```\n\n"
+                            + "Compact storyboard JSON (semantic repair context):\n```json\n%s\n```\n\n"
                             + "Static visual analysis:\n```json\n%s\n```\n\n"
                             + "Structured code review:\n```json\n%s\n```\n\n"
                             + "Current GeoGebra command script:\n```geogebra\n%s\n```\n\n"
-                            + "Rewrite the FULL command script to be valid, coherent, readable, and aligned with the overall teaching goal. Use storyboard details as optional reference context.\n"
-                            + "Keep implemented geometric relationships internally consistent; do not enforce storyboard geometry one-for-one when it conflicts with a safer implementation.\n"
+                            + "Rewrite the FULL command script to be valid, coherent, readable, and aligned with the storyboard's teaching goal, key object identity, scene order, continuity, geometry meaning, and dependency relationships.\n"
+                            + "Keep implemented geometric relationships internally consistent; preserve storyboard hard geometry/dependency semantics, and use documented equivalent constructions when exact details are unsafe or unsupported.\n"
                             + "Preserve the initial viewport contract with `SetCoordSystem(-7, 7, -4, 4)`, and fix layout by scaling/spreading/recentering the construction rather than relying on user zoom.\n"
                             + "Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n"
                             + "Return ONLY the full GeoGebra code block.",
@@ -226,12 +225,12 @@ public final class CodeEvaluationPrompts {
         }
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Scene class name: %s\n\n"
-                        + "Compact storyboard JSON (reference context, not strict authority):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (semantic repair context):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Structured code review:\n```json\n%s\n```\n\n"
                         + "Current Manim code:\n```python\n%s\n```\n\n"
                         + "Rewrite the FULL code to reduce clutter, preserve continuity, correct semantically wrong placements such as angle arcs or labels attached to the wrong geometry, better match pacing to narration, and keep 3D overlays readable.\n"
-                        + "Keep implemented geometric relationships internally consistent while making layout safer; use storyboard geometry as reference context, not as a strict constraint.\n"
+                        + "Keep implemented geometric relationships internally consistent while making layout safer; preserve storyboard hard geometry/dependency semantics, key object identity, scene order, continuity, and teaching intent. Use equivalent documented Manim constructions when exact storyboard details are unsafe or unsupported.\n"
                         + "Also fix nearby Python/Manim runtime mistakes. Preserve the scene class name and teaching goal.\n"
                         + "Return ONLY the full Python code block.",
                 sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode));

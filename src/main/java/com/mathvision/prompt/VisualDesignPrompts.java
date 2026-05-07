@@ -119,7 +119,7 @@ public final class VisualDesignPrompts {
                     + "Manim visual-planning constraints:\n"
                     + "- " + SystemPrompts.MANIM_LAYOUT_FRAME_RULES.replace("\n", "\n- ").trim() + "\n"
                     + "- Use `scene_mode = 3d` only when depth is genuinely needed for the teaching goal.\n"
-                    + "- Use a black background with the project-approved bright foreground palette.\n"
+                    + "- Use the default black background `#000000` and choose readable 6-digit hex foreground colors by contrast, not by a fixed color whitelist.\n"
                     + "- Prefer a stable world layout and meaningful transforms over repeatedly replacing the whole diagram.\n"
                     + "- Distinguish what should animate from what should stay static; motion is not mandatory.\n"
                     + "- The visual plan must be concrete enough for documented Manim constructs, with no hidden assumptions.\n"

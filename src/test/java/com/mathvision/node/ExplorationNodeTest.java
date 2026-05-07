@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExplorationNodeTest {
 
@@ -61,7 +60,6 @@ class ExplorationNodeTest {
         assertEquals(3, graph.countNodes());
         assertEquals(2, graph.countEdges());
         assertEquals(KnowledgeNode.NODE_TYPE_OBSERVATION, graph.getNode("symmetry").getNodeType());
-        assertTrue(graph.getNode("symmetry").isFoundation());
         assertEquals(List.of("takeaway"), graph.getNextEdges().get("build"));
         assertEquals("takeaway", graph.findPrimaryTerminalNodeId());
         assertEquals(List.of("symmetry", "build", "takeaway"),
@@ -183,8 +181,7 @@ class ExplorationNodeTest {
                 .put("step", "Introduce the theorem through one visual hook")
                 .put("reason", "This is the opening beat.")
                 .put("node_type", "concept")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
         arguments.putObject("next_edges");
         return arguments;
     }
@@ -198,22 +195,19 @@ class ExplorationNodeTest {
                 .put("step", "Observe that intersection points stay equally distant from both endpoints")
                 .put("reason", "This is the learner-facing invariant.")
                 .put("node_type", "observation")
-                .put("min_depth", 8)
-                .put("is_foundation", true);
+                .put("min_depth", 8);
         nodes.addObject()
                 .put("id", "build")
                 .put("step", "Build equal-radius circles from the endpoints")
                 .put("reason", "The construction creates the symmetry anchor.")
                 .put("node_type", "construction")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
         nodes.addObject()
                 .put("id", "takeaway")
                 .put("step", "State the final perpendicular-bisector takeaway")
                 .put("reason", "This closes the explanation.")
                 .put("node_type", "conclusion")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
 
         ObjectNode edges = arguments.putObject("next_edges");
         edges.putArray("symmetry").add("build");
@@ -232,14 +226,12 @@ class ExplorationNodeTest {
                 .put("id", "final_takeaway")
                 .put("step", "Summarize the inscribed-angle conclusion")
                 .put("node_type", "conclusion")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
         nodes.addObject()
                 .put("id", "setup")
                 .put("step", "Mark the intercepted arc and the vertex")
                 .put("node_type", "construction")
-                .put("min_depth", 4)
-                .put("is_foundation", false);
+                .put("min_depth", 4);
 
         ObjectNode edges = arguments.putObject("next_edges");
         edges.putArray("setup").add("final_takeaway");
@@ -254,20 +246,17 @@ class ExplorationNodeTest {
                 .put("id", "intuition")
                 .put("step", "Notice why equal reflected segments preserve distance")
                 .put("node_type", "observation")
-                .put("min_depth", 9)
-                .put("is_foundation", true);
+                .put("min_depth", 9);
         nodes.addObject()
                 .put("id", "bridge")
                 .put("step", "Turn the broken path into a straight path using reflection")
                 .put("node_type", "derivation")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
         nodes.addObject()
                 .put("id", "takeaway")
                 .put("step", "Present the reflection shortcut")
                 .put("node_type", "conclusion")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
 
         ObjectNode edges = arguments.putObject("next_edges");
         edges.putArray("intuition").add("bridge");
@@ -283,26 +272,22 @@ class ExplorationNodeTest {
                 .put("id", "setup")
                 .put("step", "Keep the first setup node")
                 .put("node_type", "construction")
-                .put("min_depth", 1)
-                .put("is_foundation", false);
+                .put("min_depth", 1);
         nodes.addObject()
                 .put("id", "takeaway")
                 .put("step", "Present the midpoint theorem takeaway")
                 .put("node_type", "conclusion")
-                .put("min_depth", 3)
-                .put("is_foundation", false);
+                .put("min_depth", 3);
         nodes.addObject()
                 .put("id", "setup")
                 .put("step", "Drop the duplicate setup node")
                 .put("node_type", "observation")
-                .put("min_depth", 0)
-                .put("is_foundation", true);
+                .put("min_depth", 0);
         nodes.addObject()
                 .put("id", " ")
                 .put("step", "Blank id should disappear")
                 .put("node_type", "concept")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
 
         ObjectNode edges = arguments.putObject("next_edges");
         ArrayNode setupNext = edges.putArray("setup");
@@ -322,20 +307,17 @@ class ExplorationNodeTest {
                 .put("id", "prompt")
                 .put("step", "Restate the shortest-path problem")
                 .put("node_type", "problem")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
         nodes.addObject()
                 .put("id", "observe")
                 .put("step", "Reflect the point across the river line")
                 .put("node_type", "construction")
-                .put("min_depth", 0)
-                .put("is_foundation", false);
+                .put("min_depth", 0);
         nodes.addObject()
                 .put("id", "answer")
                 .put("step", "Conclude the straight reflected route is shortest")
                 .put("node_type", "conclusion")
-                .put("min_depth", 5)
-                .put("is_foundation", false);
+                .put("min_depth", 5);
 
         ObjectNode edges = arguments.putObject("next_edges");
         edges.putArray("prompt").add("observe");
@@ -351,14 +333,12 @@ class ExplorationNodeTest {
                 .put("id", "build")
                 .put("step", "Build the equal-angle construction")
                 .put("node_type", "construction")
-                .put("min_depth", 2)
-                .put("is_foundation", false);
+                .put("min_depth", 2);
         nodes.addObject()
                 .put("id", "takeaway")
                 .put("step", "State the angle-chasing takeaway")
                 .put("node_type", "conclusion")
-                .put("min_depth", 1)
-                .put("is_foundation", false);
+                .put("min_depth", 1);
 
         ObjectNode edges = arguments.putObject("next_edges");
         edges.putArray("build").add("takeaway");
