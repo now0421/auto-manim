@@ -330,27 +330,76 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (object == null) {
             return false;
         }
-        String combined = normalizeForSemanticCheck(String.join(" ",
-                safe(object.getId()),
-                safe(object.getKind()),
-                safe(object.getContent()),
-                String.join(" ", cleanDependencyObjects(object)),
-                safe(object.getDependencyRelation()),
-                safe(object.getConstraintNote())));
-        boolean markerKind = containsAny(combined, " arc ", " angle ", " anglemarker ", " angle_marker ");
-        boolean angleMeaning = containsAny(combined, "theta", " angle ", " perpendicular", " normal", " tangent");
-        return markerKind && angleMeaning;
+        String kind = normalizeForSemanticCheck(object.getKind());
+        String relation = normalizeForSemanticCheck(object.getDependencyRelation());
+
+        if (isTextRenderKind(kind) || isLabelRelation(relation)) {
+            return false;
+        }
+
+        boolean markerKind = isAngleOrArcMarkerKind(kind);
+        boolean markerRelation = isAngleOrArcMarkerRelation(relation);
+        if (markerKind || markerRelation) {
+            return true;
+        }
+
+        if (!kind.isBlank()) {
+            return false;
+        }
+
+        return hasLegacyAngleOrArcMarkerIdFallback(object);
     }
 
     private boolean isArcMarker(StoryboardObject object) {
         if (object == null) {
             return false;
         }
-        String combined = normalizeForSemanticCheck(String.join(" ",
-                safe(object.getId()),
-                safe(object.getKind()),
-                safe(object.getContent())));
-        return containsAny(combined, " arc ");
+        String kind = normalizeForSemanticCheck(object.getKind());
+        String relation = normalizeForSemanticCheck(object.getDependencyRelation());
+        if (isTextRenderKind(kind) || isLabelRelation(relation)) {
+            return false;
+        }
+        if (isArcMarkerKind(kind) || containsAny(relation, " arc_sweep ")) {
+            return true;
+        }
+        return kind.isBlank() && containsAny(normalizeForSemanticCheck(object.getId()), " arc ");
+    }
+
+    private boolean isAngleOrArcMarkerKind(String kind) {
+        return containsAny(kind,
+                " angle_marker ", " anglemarker ", " arc_marker ", " arc ", " right_angle ", " rightangle ");
+    }
+
+    private boolean isAngleOrArcMarkerRelation(String relation) {
+        return containsAny(relation,
+                " angle_between ", " angle_at_vertex ", " directed_angle ", " arc_sweep ",
+                " angle_marker ", " right_angle ");
+    }
+
+    private boolean isArcMarkerKind(String kind) {
+        return containsAny(kind, " arc ", " arc_marker ");
+    }
+
+    private boolean hasLegacyAngleOrArcMarkerIdFallback(StoryboardObject object) {
+        String id = normalizeForSemanticCheck(object.getId());
+        String semanticFields = normalizeForSemanticCheck(String.join(" ",
+                safe(object.getContent()),
+                String.join(" ", cleanDependencyObjects(object)),
+                safe(object.getDependencyRelation()),
+                safe(object.getConstraintNote())));
+        boolean markerId = containsAny(id, " angle ", " arc ", " anglemarker ", " angle_marker ");
+        boolean angleMeaning = containsAny(semanticFields, "theta", " angle ", " perpendicular", " normal", " tangent");
+        return markerId && angleMeaning;
+    }
+
+    private boolean isTextRenderKind(String kind) {
+        return containsAny(kind,
+                " text ", " label ", " text_card ", " equation ", " formula ", " formula_card ",
+                " title ", " caption ");
+    }
+
+    private boolean isLabelRelation(String relation) {
+        return containsAny(relation, " label_for ", " follows_anchor ");
     }
 
     private boolean mentionsAngleVertex(StoryboardObject object, String dependency) {
@@ -1203,15 +1252,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (object == null) {
             return false;
         }
-        String kind = object.getKind();
-        if ("text".equalsIgnoreCase(kind)
-                || "label".equalsIgnoreCase(kind)
-                || "equation".equalsIgnoreCase(kind)
-                || "formula".equalsIgnoreCase(kind)
-                || "title".equalsIgnoreCase(kind)
-                || "caption".equalsIgnoreCase(kind)
-                || "text_card".equalsIgnoreCase(kind)
-                || "formula_card".equalsIgnoreCase(kind)) {
+        if (isTextRenderKind(normalizeForSemanticCheck(object.getKind()))) {
             return true;
         }
         if (object.getStyle() == null) {
@@ -1244,8 +1285,15 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (object == null) {
             return false;
         }
-        if ("label".equalsIgnoreCase(object.getKind())) {
+        String kind = normalizeForSemanticCheck(object.getKind());
+        String relation = normalizeForSemanticCheck(object.getDependencyRelation());
+        if (containsAny(kind, " label ")
+                || isLabelRelation(relation)
+                || !isBlank(object.getAnchorId())) {
             return true;
+        }
+        if (!kind.isBlank()) {
+            return false;
         }
         String objectId = StoryboardPatchResolver.objectId(object);
         if (objectId == null) {
