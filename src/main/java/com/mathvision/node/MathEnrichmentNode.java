@@ -75,7 +75,7 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
 
         int maxInputTokens = TargetDescriptionBuilder.resolveMaxInputTokens(workflowConfig);
         String workflowTarget = graph != null ? graph.getTargetConcept() : "";
-        this.conversationContext = new NodeConversationContext(maxInputTokens);
+        this.conversationContext = new NodeConversationContext(maxInputTokens, 2);
         String solutionChain = TargetDescriptionBuilder.buildSolutionChain(graph, null);
         this.conversationContext.setSystemMessage(EnrichmentPrompts.buildRulesPrompt());
         this.conversationContext.setFixedContextMessage(EnrichmentPrompts.buildFixedContextPrompt(

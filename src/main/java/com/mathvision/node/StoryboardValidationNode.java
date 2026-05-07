@@ -42,7 +42,7 @@ import java.util.concurrent.CompletionException;
 
 /**
  * Stage 1c: Storyboard Validation - static checks on the assembled storyboard
- * followed by an optional LLM fix pass when issues are detected.
+ * followed by an optional LLM cleanup/fix pass.
  *
  * Replaces NarrativeNode in the pipeline. Receives the Narrative already
  * assembled by VisualDesignNode and validates object lifecycle consistency,
@@ -114,15 +114,69 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 "Initial storyboard validation");
         logValidationIssues(issues);
 
-        if (issues.isEmpty()) {
-            log.info("Storyboard validation passed (no issues)");
-            finalizeReport(storyboardValidationReport, true, false, false, List.of(),
-                    "Storyboard validation passed");
-            return current;
-        }
-
         boolean fixApplied = false;
         int attempts = 0;
+        if (issues.isEmpty()) {
+            if (aiClient == null) {
+                log.info("Storyboard validation passed (no issues)");
+                finalizeReport(storyboardValidationReport, true, false, false, List.of(),
+                        "Storyboard validation passed");
+                return current;
+            }
+
+            attempts++;
+            log.info("Storyboard validation passed; attempting LLM storyboard cleanup pass {}/{}",
+                    attempts, MAX_VALIDATION_FIX_ATTEMPTS);
+            Instant cleanupStart = Instant.now();
+            int toolCallsBefore = toolCalls;
+            Narrative fixed = attemptLlmFix(current, issues);
+            int cleanupToolCalls = toolCalls - toolCallsBefore;
+            if (fixed == null || fixed.getStoryboard() == null) {
+                log.warn("LLM storyboard cleanup pass {}/{} did not return a usable storyboard",
+                        attempts, MAX_VALIDATION_FIX_ATTEMPTS);
+                appendValidationTraceEntry(
+                        current.getStoryboard(),
+                        "cleanup_failed",
+                        attempts,
+                        true,
+                        false,
+                        issues,
+                        cleanupToolCalls,
+                        TimeUtils.secondsSince(cleanupStart),
+                        "Storyboard validation passed, but optional LLM cleanup did not return a usable storyboard");
+                finalizeReport(storyboardValidationReport, true, true, false, List.of(),
+                        "Storyboard validation passed; optional LLM cleanup was skipped after an unusable response");
+                return current;
+            }
+
+            current = fixed;
+            fixApplied = true;
+            issues = validate(current.getStoryboard());
+            appendValidationTraceEntry(
+                    current.getStoryboard(),
+                    "post_cleanup_validation",
+                    attempts,
+                    true,
+                    true,
+                    issues,
+                    cleanupToolCalls,
+                    TimeUtils.secondsSince(cleanupStart),
+                    issues.isEmpty()
+                            ? "Optional cleanup pass preserved a valid storyboard"
+                            : "Optional cleanup pass introduced " + issues.size()
+                                    + " storyboard validation issue(s)");
+            if (issues.isEmpty()) {
+                log.info("LLM storyboard cleanup completed successfully after clean validation");
+                finalizeReport(storyboardValidationReport, true, true, true, issues,
+                        "Storyboard validation passed and optional LLM cleanup completed successfully");
+                return current;
+            }
+
+            log.warn("LLM storyboard cleanup pass {}/{} left {} issues",
+                    attempts, MAX_VALIDATION_FIX_ATTEMPTS, issues.size());
+            logValidationIssues(issues);
+        }
+
         while (!issues.isEmpty() && attempts < MAX_VALIDATION_FIX_ATTEMPTS) {
             attempts++;
             log.warn("Attempting LLM storyboard cleanup pass {}/{}",
@@ -1450,7 +1504,10 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                     + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to #000000 when no text background is present.\n"
                     + "- For non-text objects, ensure foreground colors contrast with #000000 at ratio >= 3.0.\n"
                     + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or constraint_note.\n"
-                    + "- Every dependency-driven object must define dependency_objects as object ids and dependency_relation as a concise construction relation; put hard geometric invariants in constraint_note.";
+                    + "- Every dependency-driven object must define dependency_objects as object ids and dependency_relation as a concise construction relation; put hard geometric invariants in constraint_note.\n"
+                    + "- ASCII repair is mandatory: rewrite every JSON string value so it contains only characters with code <= 0x7F.\n"
+                    + "- Apply this normalization map wherever needed: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
+                    + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.";
             conversationContext.setSystemMessage(systemPrompt);
             conversationContext.setFixedContextMessage(NarrativePrompts.buildFixedContextPrompt(
                     narrative.getTargetConcept(),
@@ -1462,6 +1519,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             userPrompt.append("Please clean up this storyboard so it is coherent, and ensure that all coordinate-based elements stay within bounds and do not visibly overlap.\n");
             userPrompt.append("Preserve the original narrative order, object identity, and teaching intent as much as possible; only adjust the layout and wording where necessary.\n");
             userPrompt.append("Replace every non-ASCII text token reported below with an ASCII equivalent across the full storyboard.\n");
+            userPrompt.append("For each reported token, locate every occurrence in the current storyboard and rewrite the surrounding sentence if needed so the whole string is ASCII-only. For example, replace curly apostrophes with straight apostrophes, em/en dashes with ` - ` or `-`, and mathematical comparison glyphs with ASCII operators such as `!=`, `<=`, or `>=`.\n");
+            userPrompt.append("Before returning, perform a final character-by-character pass over every JSON string value and ensure no character code is greater than 0x7F.\n");
             userPrompt.append("If you find issues, fix them directly. If there are no issues, still perform a full cleanup to make the storyboard more stable and readable.\n");
             if (issues != null && !issues.isEmpty()) {
                 userPrompt.append("Static validation findings:\n");
@@ -1481,7 +1540,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                             aiClient,
                             log,
                             "storyboard-fix",
-                            conversationContext,
+                            conversationContext.getPinnedMessages(),
+                            conversationContext.getMaxInputTokens(),
                             SystemPrompts.buildCurrentRequestSection(userPrompt.toString()),
                             ToolSchemas.STORYBOARD,
                             () -> toolCalls++)

@@ -93,5 +93,7 @@ When writing storyboard JSON:
 * Prefer structured properties such as `color`, `fill_color`, `line_style`,
   `fill_opacity`, and `label_visible` over free-form style prose.
 * Use the same color for the same mathematical concept across scenes.
-* `notes_for_codegen` may remind later stages to preserve helper visibility,
-  grid/axes policy, label policy, palette consistency, and emphasis hierarchy.
+* `notes_for_codegen` is a hard downstream constraint field; use it only for
+  helper visibility, grid/axes policy, label policy, palette consistency,
+  emphasis hierarchy, or similar instructions that code generation and repair
+  must preserve.

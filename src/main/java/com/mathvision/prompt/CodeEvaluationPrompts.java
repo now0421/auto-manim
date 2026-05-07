@@ -9,21 +9,23 @@ public final class CodeEvaluationPrompts {
             "Output format:\n"
                     + "Return a JSON object with this shape. Do not score anything:\n"
                     + "{\n"
-                    + "  \"approved_for_render\": \"boolean, true only if every mandatory rule is pass or not_applicable and no blocking issue exists\",\n"
+                    + "  \"approved_for_render\": \"boolean, true only if every mandatory-severity rule is pass or not_applicable and no blocking issue exists\",\n"
                     + "  \"rule_checks\": [\n"
                     + "    {\n"
                     + "      \"rule_id\": \"string, stable snake_case id from the checklist\",\n"
                     + "      \"requirement\": \"string, the concrete rule being checked\",\n"
                     + "      \"status\": \"pass | warn | fail | not_applicable\",\n"
+                    + "      \"severity\": \"mandatory | recommended | advisory — copy the severity shown in the checklist for this rule\",\n"
                     + "      \"evidence\": \"string, cite concrete code evidence and storyboard reference evidence when relevant; say why not_applicable when relevant\"\n"
                     + "    }\n"
                     + "  ],\n"
                     + "  \"summary\": \"string, concise compliance summary against the code, render-readiness rules, and storyboard reference context\",\n"
                     + "  \"strengths\": [\"string, specific strength that should be preserved\"],\n"
-                    + "  \"blocking_issues\": [\"string, only failed mandatory checks that should block render\"],\n"
+                    + "  \"blocking_issues\": [\"string, only failed mandatory-severity checks that should block render\"],\n"
                     + "  \"revision_directives\": [\"string, concrete change request for each fail or warn\"]\n"
                     + "}\n\n"
-                    + "Every fail must have a matching blocking issue and revision directive.\n"
+                    + "Every fail on a mandatory-severity rule must have a matching blocking issue and revision directive.\n"
+                    + "Only mandatory-severity failures block render; recommended and advisory failures generate revision directives but do not block.\n"
                     + "Use warn for non-blocking risk with concrete evidence. Use not_applicable only when the code or storyboard reference context makes the rule irrelevant.\n"
                     + SystemPrompts.TOOL_CALL_HINT
                     + SystemPrompts.JSON_ONLY_OUTPUT;
@@ -40,23 +42,31 @@ public final class CodeEvaluationPrompts {
                     + "Your primary job is rule-compliance inspection before render.\n"
                     + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete code evidence and storyboard semantic context when useful.\n\n"
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
-                    + "Mandatory Manim rule checklist:\n"
-                    + "- `teaching_coherence`: the code presents a coherent teaching animation for the target concept and preserves the storyboard's core teaching goal, scene order, continuity, and semantic intent; storyboard objects remain candidate elements rather than a one-for-one rendering checklist.\n"
-                    + "- `geometry_consistency`: geometry implemented in the code is internally consistent and preserves storyboard hard geometry/dependency requirements when present.\n"
-                    + "- `layout_and_hierarchy`: important visible content maintains one clear focus, uses opacity hierarchy, preserves empty overlay space, and avoids code-evident persistent crowding.\n"
-                    + "- `continuity_and_identity`: persistent code objects remain stable where continuity matters, prefer transforms/restyles over unnecessary redraws, and clean temporary annotations when their beat is done.\n"
-                    + "- `pacing_and_narration`: important reveals have subtitle-ready beats, `self.add_subcaption(...)` or `subcaption=`, and enough `self.wait(...)` breathing room instead of stacked animations.\n"
-                    + "- `text_readability`: `Text(...)`/`MarkupText(...)` use monospace fonts, on-screen text uses `font_size >= 18`, `.to_edge()` uses `buff >= 0.5`, long text width is constrained, and light cards have dark text.\n"
-                    + "- `manim_code_hygiene`: code uses documented Manim APIs, shared color constants, `self.camera.background_color = BG`, no hardcoded hex colors inside scene methods, stable animation targets, and no unsafe empty `always_redraw` animation targets.\n"
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
+                    + "Rule severity levels determine gate impact:\n"
+                    + "- MANDATORY: a fail status blocks render. These rules guard runtime correctness and semantic integrity.\n"
+                    + "- RECOMMENDED: a fail status generates a revision directive but does NOT block render. These rules guard quality and readability.\n"
+                    + "- ADVISORY: a fail status is informational only. These rules guard style and teaching preferences.\n\n"
+                    + "Manim rule checklist:\n"
+                    + "- `storyboard_contract_compliance` [MANDATORY]: the code preserves the storyboard's hard semantic contracts (`geometry_constraints`, `notes_for_codegen`, `dependency_objects`, `dependency_relation`, `constraint_note`, scene order, and continuity); storyboard objects remain candidate elements rather than a one-for-one rendering checklist. Do not re-evaluate overall teaching coherence - that was validated upstream.\n"
+                    + "- `geometry_consistency` [MANDATORY]: geometry implemented in the code is internally consistent and preserves storyboard hard geometry/dependency requirements when present.\n"
+                    + "- For objects with `behavior=derived` or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, independently compute the expected geometry from `dependency_objects`, `constraint_note`, and any concrete `notes_for_codegen`, or verify that a native Manim/API construction does so. Numeric coordinates are acceptable only when they match the derived relationship for fixed source geometry and satisfy concrete storyboard notes; fail `geometry_consistency` when they are inconsistent, stale under moving dependencies, copied from scene placement without preserving the dependency semantics, or ignore explicit motion/range/endpoints in `notes_for_codegen`.\n"
+                    + "- `layout_api_usage` [RECOMMENDED]: the code uses appropriate layout APIs (`.arrange()`, `.next_to()`, `.to_edge()` with `buff >= 0.5`) to maintain one clear focus and avoids code-evident persistent crowding; density counts from static analysis are heuristics, not automatic failures, when the code uses staging, dimming, grouping, cleanup, or pauses that keep the frame readable.\n"
+                    + "- `continuity_and_identity` [MANDATORY]: persistent code objects remain stable where continuity matters, prefer transforms/restyles over unnecessary redraws, and clean temporary annotations when their beat is done.\n"
+                    + "- `pacing_and_narration` [RECOMMENDED]: important reveals have subtitle-ready beats, `self.add_subcaption(...)` or `subcaption=`, and enough `self.wait(...)` breathing room instead of stacked animations.\n"
+                    + "- `text_readability` [RECOMMENDED]: `Text(...)`/`MarkupText(...)` use monospace fonts, on-screen text uses `font_size >= 18`, `.to_edge()` uses `buff >= 0.5`, long text width is constrained, and light cards have dark text.\n"
+                    + "- Do not require `MathTex(...)` or `Tex(...)` to use monospace fonts. Review those LaTeX mobjects for valid math/text constructor choice, font size, color contrast, and layout only.\n"
+                    + "- `manim_code_hygiene` [MANDATORY]: code uses documented Manim APIs, colors originate from 6-digit hex values (`#RRGGBB`) rather than Manim named color constants, `self.camera.background_color = BG`, stable animation targets, and no unsafe empty `always_redraw` animation targets.\n"
                     + "- Imported external libraries and aliases used by the code, such as `import numpy as np`, are allowed; do not flag calls like `np.array(...)` or `np.linalg.norm(...)` when the import is present.\n"
-                    + "- `supported_equivalence`: backend-supported substitutions are acceptable when they preserve the overall teaching intent; fail only when the substitution makes the code incoherent, misleading, or unsupported.\n"
-                    + "- `angle_and_attachment`: angle markers use true shared vertices/rays with explicit quadrant/other_angle when needed, and labels attached to moving objects use an updater or `always_redraw(...)`.\n"
-                    + "- `minimize_helpers`: auxiliary helper mobjects (proxy points on existing lines, duplicate line/ray objects created solely for angle measurement) are replaced with direct Manim constructs when available (e.g. `Angle(line1, line2)` instead of hand-crafted arcs or helper points).\n"
-                    + "- `three_d_readability`: 3D code uses `ThreeDScene`, applies explicit camera plan/orientation, and keeps explanatory overlays fixed in frame or fixed orientation when camera motion would make them rotate away.\n"
+                    + "- `supported_equivalence` [RECOMMENDED]: backend-supported substitutions are acceptable when they preserve the overall teaching intent; fail only when the substitution makes the code incoherent, misleading, or unsupported.\n"
+                    + "- `angle_and_attachment` [MANDATORY]: angle markers use true shared vertices/rays with explicit quadrant/other_angle when needed, and labels attached to moving objects use an updater or `always_redraw(...)`.\n"
+                    + "- `minimize_helpers` [RECOMMENDED]: auxiliary helper mobjects (proxy points on existing lines, duplicate line/ray objects created solely for angle measurement) are replaced with direct Manim constructs when available (e.g. `Angle(line1, line2)` instead of hand-crafted arcs or helper points).\n"
+                    + "- `three_d_scene_required` [MANDATORY]: code that creates 3D objects or whose storyboard requests 3D staging uses `ThreeDScene`.\n"
+                    + "- `three_d_camera_set` [RECOMMENDED]: 3D code applies an explicit camera orientation or view plan.\n"
+                    + "- `three_d_overlay_fixed` [RECOMMENDED]: when camera motion is present in a 3D scene, explanatory text and labels are kept fixed in frame or fixed orientation so they remain readable.\n"
                     + "- Specifically fail semantically wrong placements such as angle arcs on the wrong side, labels attached to the wrong point or segment, braces spanning the wrong expression, or highlights pointing at the wrong target.\n"
                     + "- For 3D scenes, check projected readability, camera clarity, and fixed-in-frame overlays.\n"
-                    + "- A later geometry-based stage will inspect rendered frames for actual overlap/offscreen issues. Here, fail only when the code itself clearly violates runtime readiness, readability, or these rules.\n"
-                    + "- Treat density counts from static analysis as heuristics, not automatic failures, when the code uses staging, dimming, grouping, cleanup, or pauses that keep the frame readable.\n\n"
+                    + "- A later geometry-based stage will inspect rendered frames for actual overlap/offscreen issues. Here, fail only when the code itself clearly violates runtime readiness, readability, or these rules.\n\n"
                     + REVIEW_API_WHITELIST_WARNING_POLICY
                     + REVIEW_OUTPUT_SCHEMA;
 
@@ -66,19 +76,26 @@ public final class CodeEvaluationPrompts {
                     + "Your primary job is rule-compliance inspection for a GeoGebra teaching construction before render.\n"
                     + "Do not assign numeric quality scores. Instead, check each rule below as pass, warn, fail, or not_applicable using concrete code evidence and storyboard semantic context when useful.\n\n"
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
-                    + "Mandatory GeoGebra rule checklist:\n"
-                    + "- `teaching_coherence`: the command script presents a coherent teaching construction for the target concept and preserves the storyboard's core teaching goal, scene order, continuity, and semantic intent; storyboard objects remain candidate elements rather than a one-for-one rendering checklist.\n"
-                    + "- `visibility_progression`: scene-level visibility and highlight progression is coherent in the script and preserves storyboard object-state progression semantically; exact timing or every decorative beat is not a hard blocker.\n"
-                    + "- `geometry_consistency`: geometry implemented in the script is internally consistent, uses documented constructions, and preserves storyboard hard geometry/dependency requirements when present.\n"
-                    + "- `object_identity`: object ids/names remain stable, helpers are not mistaken for storyboard objects, and redundant duplicates on the same endpoints are avoided.\n"
-                    + "- `layout_and_readability`: coordinates, labels, style, contrast, and initial view are readable and coherent.\n"
-                    + "- `viewport_contract`: the initial visible coordinate window is treated as x[-7,7], y[-4,4]; important objects should fit this view without relying on user zooming or panning, and the construction should not be tiny or clustered inside an over-wide view.\n"
-                    + "- `geogebra_syntax`: command names and syntax are documented in the attached GeoGebra manual, one executable command is used per line, and unsupported guessed overloads are not used.\n"
-                    + "- `supported_equivalence`: documented GeoGebra substitutions are acceptable when they preserve the overall teaching intent; fail only when the substitution makes the construction incoherent, misleading, or unsupported.\n"
-                    + "- `minimize_helpers`: auxiliary helper objects (points on existing lines created solely for `Angle(Point, Point, Point)`, duplicate lines, or proxy scaffolding) are replaced with direct syntax when available (e.g. `Angle(Line, Line)`, referencing existing named objects directly).\n"
-                    + "- `teaching_evidence`: result text or labels are supported by matching constructed geometry; no semantically wrong substitution such as drawing a border where a full grid was requested.\n"
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
+                    + "Rule severity levels determine gate impact:\n"
+                    + "- MANDATORY: a fail status blocks render. These rules guard runtime correctness and semantic integrity.\n"
+                    + "- RECOMMENDED: a fail status generates a revision directive but does NOT block render. These rules guard quality and readability.\n"
+                    + "- ADVISORY: a fail status is informational only. These rules guard style and teaching preferences.\n\n"
+                    + "GeoGebra rule checklist:\n"
+                    + "- `storyboard_contract_compliance` [MANDATORY]: the command script preserves the storyboard's hard semantic contracts (`geometry_constraints`, `notes_for_codegen`, `dependency_objects`, `dependency_relation`, `constraint_note`, scene order, and continuity); storyboard objects remain candidate elements rather than a one-for-one rendering checklist. Do not re-evaluate overall teaching coherence - that was validated upstream.\n"
+                    + "- `visibility_progression` [RECOMMENDED]: scene-level visibility and highlight progression is coherent in the script and preserves storyboard object-state progression semantically; exact timing or every decorative beat is not a hard blocker.\n"
+                    + "- `geometry_consistency` [MANDATORY]: geometry implemented in the script is internally consistent, uses documented constructions, and preserves storyboard hard geometry/dependency requirements when present.\n"
+                    + "- For objects with `behavior=derived` or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, independently compute the expected geometry from `dependency_objects`, `constraint_note`, and any concrete `notes_for_codegen`, or verify that native GeoGebra commands do so. Numeric coordinates are acceptable only when they match the derived relationship for fixed source geometry and satisfy concrete storyboard notes; fail `geometry_consistency` when they are inconsistent, stale under moving dependencies, copied from scene placement without preserving the dependency semantics, or ignore explicit range/endpoints/visibility instructions in `notes_for_codegen`.\n"
+                    + "- `object_identity` [MANDATORY]: object ids/names remain stable, helpers are not mistaken for storyboard objects, and redundant duplicates on the same endpoints are avoided.\n"
+                    + "- `layout_and_readability` [RECOMMENDED]: coordinates, labels, style, contrast, and initial view are readable and coherent.\n"
+                    + "- `viewport_contract` [RECOMMENDED]: the initial visible coordinate window is treated as x[-7,7], y[-4,4]; important objects should fit this view without relying on user zooming or panning, and the construction should not be tiny or clustered inside an over-wide view.\n"
+                    + "- `geogebra_syntax` [MANDATORY]: command names and syntax are documented in the attached GeoGebra manual, one executable command is used per line, and unsupported guessed overloads are not used.\n"
+                    + "- `supported_equivalence` [RECOMMENDED]: documented GeoGebra substitutions are acceptable when they preserve the overall teaching intent; fail only when the substitution makes the construction incoherent, misleading, or unsupported.\n"
+                    + "- `minimize_helpers` [RECOMMENDED]: auxiliary helper objects (points on existing lines created solely for `Angle(Point, Point, Point)`, duplicate lines, or proxy scaffolding) are replaced with direct syntax when available (e.g. `Angle(Line, Line)`, referencing existing named objects directly).\n"
+                    + "- `teaching_evidence` [MANDATORY]: result text or labels are supported by matching constructed geometry; no semantically wrong substitution such as drawing a border where a full grid was requested.\n"
+                    + "- `geogebra_3d_viewport` [RECOMMENDED]: when the storyboard requests a 3D view or the construction uses 3D objects, the script should set an appropriate 3D view and camera orientation so the construction is visible and readable in the default rendered state.\n"
                     + "- A later geometry-based stage will inspect rendered geometry for actual overlap/offscreen issues. Do not duplicate that stage.\n"
-                    + "- GeoGebra is interactive, but initial-view readability is mandatory. Focus on the default rendered view and construction coherence.\n\n"
+                    + "- GeoGebra is interactive, but initial-view readability is required. Focus on the default rendered view and construction coherence.\n\n"
                     + REVIEW_API_WHITELIST_WARNING_POLICY
                     + REVIEW_OUTPUT_SCHEMA;
 
@@ -88,6 +105,7 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full code.\n"
                     + "Reduce clutter, preserve continuity with transforms, correct semantically wrong placements, keep 3D camera plans readable, and also fix common Python/Manim runtime mistakes.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
@@ -103,6 +121,7 @@ public final class CodeEvaluationPrompts {
                     + "Rewrite the full command script.\n"
                     + "Preserve runtime validity, construction coherence, object identities where useful, scene visibility progression, and teaching intent.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
+                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
                     + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
@@ -148,21 +167,27 @@ public final class CodeEvaluationPrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return SystemPrompts.buildCurrentRequestSection(String.format(
                     "Figure name: %s\n\n"
-                            + "Compact storyboard JSON (semantic review context):\n```json\n%s\n```\n\n"
+                            + "Compact storyboard JSON (object-registry semantics plus per-scene visual-state patches):\n```json\n%s\n```\n\n"
                             + "Static visual analysis:\n```json\n%s\n```\n\n"
                             + "GeoGebra command script to review:\n```geogebra\n%s\n```\n\n"
-                            + "Check every mandatory GeoGebra rule before render.\n"
-                            + "Focus on whether the actual construction, scene visibility progression, and teaching evidence are coherent, render-ready, and aligned with storyboard hard geometry, dependency, continuity, and teaching semantics.\n"
+                            + "Check every rule before render; only MANDATORY-severity failures block render.\n"
+                            + "When checking storyboard alignment, use object_registry dependency facts as the semantic authority; treat scene placement/style as momentary visual state only.\n"
+                            + "Never call a scene placement coordinate such as `x.value` or `y.value` a storyboard hard constraint unless geometry_constraints, notes_for_codegen, or object-registry constraint_note explicitly says that coordinate is fixed.\n"
+                            + "If an object's coordinates depend on other objects, verify the implementation by calculating the derived coordinates from its dependencies or by recognizing a native dependency-based construction; direct numeric coordinates are acceptable only when they match fixed source geometry and do not break dependency semantics.\n"
+                            + "Focus on whether the actual construction, scene visibility progression, and teaching evidence are coherent, render-ready, and aligned with storyboard hard geometry, notes_for_codegen, dependency, continuity, and teaching semantics.\n"
                             + "Return only the structured rule-compliance output.",
                     sceneName, storyboardJson, staticAnalysisJson, generatedCode));
         }
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Scene class name: %s\n\n"
-                        + "Compact storyboard JSON (semantic review context):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (object-registry semantics plus per-scene visual-state patches):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Manim code to review:\n```python\n%s\n```\n\n"
-                        + "Check every mandatory Manim rule before render.\n"
-                        + "Focus on teaching coherence, internally consistent geometry, continuity, pacing versus narration, 3D readability, fixed-in-frame overlays, correct spatial relationships, text readability, code-evident clutter, and alignment with storyboard hard geometry, dependency, continuity, and teaching semantics.\n"
+                    + "Check every rule before render; only MANDATORY-severity failures block render.\n"
+                            + "When checking storyboard alignment, use object_registry dependency facts as the semantic authority; treat scene placement/style as momentary visual state only.\n"
+                            + "Never call a scene placement coordinate such as `x.value` or `y.value` a storyboard hard constraint unless geometry_constraints, notes_for_codegen, or object-registry constraint_note explicitly says that coordinate is fixed.\n"
+                            + "If an object's coordinates depend on other objects, verify the implementation by calculating the derived coordinates from its dependencies or by recognizing a native dependency-based construction; direct numeric coordinates are acceptable only when they match fixed source geometry and do not break dependency semantics.\n"
+                            + "Focus on internally consistent geometry, continuity, pacing versus narration, 3D readability, fixed-in-frame overlays, correct spatial relationships, text readability, code-evident clutter, and alignment with storyboard hard geometry, notes_for_codegen, dependency, and continuity.\n"
                         + "Return only the structured rule-compliance output.",
                 sceneName, storyboardJson, staticAnalysisJson, generatedCode));
     }
@@ -212,12 +237,13 @@ public final class CodeEvaluationPrompts {
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
             return SystemPrompts.buildCurrentRequestSection(String.format(
                     "Figure name: %s\n\n"
-                            + "Compact storyboard JSON (semantic repair context):\n```json\n%s\n```\n\n"
+                            + "Compact storyboard JSON (object-registry semantics plus per-scene visual-state patches):\n```json\n%s\n```\n\n"
                             + "Static visual analysis:\n```json\n%s\n```\n\n"
                             + "Structured code review:\n```json\n%s\n```\n\n"
                             + "Current GeoGebra command script:\n```geogebra\n%s\n```\n\n"
                             + "Rewrite the FULL command script to be valid, coherent, readable, and aligned with the storyboard's teaching goal, key object identity, scene order, continuity, geometry meaning, and dependency relationships.\n"
-                            + "Keep implemented geometric relationships internally consistent; preserve storyboard hard geometry/dependency semantics, and use documented equivalent constructions when exact details are unsafe or unsupported.\n"
+                            + "Use object_registry dependency facts and scene notes_for_codegen as semantic authority; treat scene placement/style as momentary visual state only, and never force a derived object to a placement coordinate when its dependency relation or notes_for_codegen defines a different construction.\n"
+                            + "Keep implemented geometric relationships internally consistent; preserve storyboard hard geometry, notes_for_codegen, and dependency semantics, and use documented equivalent constructions when exact details are unsafe or unsupported.\n"
                             + "Preserve the initial viewport contract with `SetCoordSystem(-7, 7, -4, 4)`, and fix layout by scaling/spreading/recentering the construction rather than relying on user zoom.\n"
                             + "Use only command names and syntax forms documented in the attached GeoGebra syntax manual. Replace any undocumented command or guessed syntax with a documented equivalent.\n"
                             + "Return ONLY the full GeoGebra code block.",
@@ -225,12 +251,13 @@ public final class CodeEvaluationPrompts {
         }
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Scene class name: %s\n\n"
-                        + "Compact storyboard JSON (semantic repair context):\n```json\n%s\n```\n\n"
+                        + "Compact storyboard JSON (object-registry semantics plus per-scene visual-state patches):\n```json\n%s\n```\n\n"
                         + "Static visual analysis:\n```json\n%s\n```\n\n"
                         + "Structured code review:\n```json\n%s\n```\n\n"
                         + "Current Manim code:\n```python\n%s\n```\n\n"
                         + "Rewrite the FULL code to reduce clutter, preserve continuity, correct semantically wrong placements such as angle arcs or labels attached to the wrong geometry, better match pacing to narration, and keep 3D overlays readable.\n"
-                        + "Keep implemented geometric relationships internally consistent while making layout safer; preserve storyboard hard geometry/dependency semantics, key object identity, scene order, continuity, and teaching intent. Use equivalent documented Manim constructions when exact storyboard details are unsafe or unsupported.\n"
+                        + "Use object_registry dependency facts and scene notes_for_codegen as semantic authority; treat scene placement/style as momentary visual state only, and never force a derived object to a placement coordinate when its dependency relation or notes_for_codegen defines a different construction.\n"
+                        + "Keep implemented geometric relationships internally consistent while making layout safer; preserve storyboard hard geometry, notes_for_codegen, dependency semantics, key object identity, scene order, continuity, and teaching intent. Use equivalent documented Manim constructions when exact storyboard details are unsafe or unsupported.\n"
                         + "Also fix nearby Python/Manim runtime mistakes. Preserve the scene class name and teaching goal.\n"
                         + "Return ONLY the full Python code block.",
                 sceneName, storyboardJson, staticAnalysisJson, reviewJson, generatedCode));

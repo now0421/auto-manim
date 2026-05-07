@@ -46,12 +46,12 @@ public class FileOutputService {
     private static final Pattern SCENE_CLASS_PATTERN =
             Pattern.compile("class\\s+(\\w+)\\s*\\(.*?Scene.*?\\)");
 
-    public static Path createOutputDir(Path baseDir, String concept) {
-        return createOutputDir(baseDir, concept, WorkflowConfig.OUTPUT_TARGET_MANIM);
+    public static Path createOutputDir(Path baseDir, String targetInput) {
+        return createOutputDir(baseDir, targetInput, WorkflowConfig.OUTPUT_TARGET_MANIM);
     }
 
-    public static Path createOutputDir(Path baseDir, String concept, String outputTarget) {
-        String safeName = concept.toLowerCase()
+    public static Path createOutputDir(Path baseDir, String targetInput, String outputTarget) {
+        String safeName = targetInput.toLowerCase()
                 .replaceAll("[^a-z0-9]+", "_")
                 .replaceAll("^_|_$", "");
         if (safeName.length() > 50) {

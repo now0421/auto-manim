@@ -6,6 +6,7 @@ import com.mathvision.model.Narrative;
 import com.mathvision.model.CodeEvaluationResult;
 import com.mathvision.model.WorkflowActions;
 import com.mathvision.model.WorkflowKeys;
+import com.mathvision.prompt.CodeEvaluationPrompts;
 import com.mathvision.service.AiClient;
 import com.mathvision.util.JsonUtils;
 import com.mathvision.util.NodeConversationContext;
@@ -147,7 +148,7 @@ class CodeEvaluationNodeTest {
         CodeEvaluationResult result = node.exec(input);
 
         assertTrue(result.getInitialStaticAnalysis().getFindings().stream()
-                .anyMatch(finding -> "three_d_overlay_unfixed".equals(finding.getRuleId())));
+                .anyMatch(finding -> "three_d_overlay_fixed".equals(finding.getRuleId())));
     }
 
     @Test
@@ -165,12 +166,58 @@ class CodeEvaluationNodeTest {
         node.exec(input);
 
         assertNotNull(aiClient.lastUserMessage);
+        assertEquals(3, aiClient.lastSnapshotSize);
         assertTrue(aiClient.lastUserMessage.contains("\"scenes\""));
         assertTrue(aiClient.lastUserMessage.contains("\"entering_objects\""));
         assertTrue(aiClient.lastUserMessage.contains("\"actions\""));
         assertTrue(aiClient.lastUserMessage.contains("\"safe_area_plan\""));
         assertTrue(aiClient.lastUserMessage.contains("\"goal\""));
         assertTrue(aiClient.lastUserMessage.contains("\"layout_goal\""));
+    }
+
+    @Test
+    void reviewPromptSuppressesDerivedPlacementCoordinates() {
+        QueueAiClient aiClient = new QueueAiClient();
+        aiClient.toolResponses.add(reviewResponse(true, 8, 8, 8, 2, 1,
+                "Looks good.",
+                "None.",
+                "Proceed to render."));
+
+        Map<String, Object> ctx = buildContext(aiClient, initialCode(), buildDerivedPointNarrative());
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        node.exec(input);
+
+        assertNotNull(aiClient.lastUserMessage);
+        assertTrue(aiClient.lastUserMessage.contains("\"id\" : \"Pmin\""));
+        assertTrue(aiClient.lastUserMessage.contains("\"dependency_relation\" : \"intersection\""));
+        assertFalse(aiClient.lastUserMessage.contains("\"value\" : 0.6"));
+        assertFalse(aiClient.lastUserMessage.contains("\"value\" : -1.0"));
+    }
+
+    @Test
+    void fallbackReviewDoesNotStaticallyBlockDerivedObjectNumericCoordinate() {
+        Map<String, Object> ctx = buildContext(
+                new FailingReviewAiClient(),
+                String.join("\n",
+                        "from manim import *",
+                        "import numpy as np",
+                        "",
+                        "class MainScene(Scene):",
+                        "    def construct(self):",
+                        "        self.camera.background_color = \"#000000\"",
+                        "        Pmin = Dot(point=np.array([0.6, -1, 0]), color=\"#F9C74F\")",
+                        "        self.add(Pmin)"),
+                buildDerivedPointNarrative()
+        );
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+
+        assertFalse(result.getInitialStaticAnalysis().getFindings().stream()
+                .anyMatch(finding -> "derived_coordinate_hardcoding".equals(finding.getRuleId())));
     }
 
     @Test
@@ -200,6 +247,43 @@ class CodeEvaluationNodeTest {
     }
 
     @Test
+    void codeEvaluationPromptsDoNotApplyMonospaceRuleToMathTex() {
+        String reviewRules = CodeEvaluationPrompts.buildReviewRulesPrompt("manim");
+        String revisionRules = CodeEvaluationPrompts.buildRevisionRulesPrompt("manim");
+
+        assertTrue(reviewRules.contains("Do not require `MathTex(...)` or `Tex(...)` to use monospace fonts."));
+        assertTrue(revisionRules.contains("Do not apply the monospace-font requirement to `MathTex(...)` or `Tex(...)`"));
+    }
+
+    @Test
+    void codeEvaluationManimRulesIncludeSeverityLevels() {
+        String reviewRules = CodeEvaluationPrompts.buildReviewRulesPrompt("manim");
+        String geoGebraRules = CodeEvaluationPrompts.buildReviewRulesPrompt("geogebra");
+
+        // Verify severity levels are present in the Manim checklist
+        assertTrue(reviewRules.contains("[MANDATORY]"));
+        assertTrue(reviewRules.contains("[RECOMMENDED]"));
+        assertTrue(reviewRules.contains("ADVISORY"));
+        assertTrue(reviewRules.contains("storyboard_contract_compliance` [MANDATORY]"));
+        assertTrue(reviewRules.contains("notes_for_codegen"));
+        assertTrue(reviewRules.contains("layout_api_usage"));
+        assertTrue(reviewRules.contains("three_d_scene_required"));
+        assertTrue(reviewRules.contains("three_d_camera_set"));
+        assertTrue(reviewRules.contains("three_d_overlay_fixed"));
+        assertFalse(reviewRules.contains("`three_d_readability`"));
+
+        // Verify severity levels are present in the GeoGebra checklist
+        assertTrue(geoGebraRules.contains("[MANDATORY]"));
+        assertTrue(geoGebraRules.contains("[RECOMMENDED]"));
+        assertTrue(geoGebraRules.contains("ADVISORY"));
+        assertTrue(geoGebraRules.contains("storyboard_contract_compliance` [MANDATORY]"));
+        assertTrue(geoGebraRules.contains("notes_for_codegen"));
+        assertTrue(geoGebraRules.contains("geogebra_3d_viewport"));
+        assertFalse(geoGebraRules.contains("`teaching_coherence`"));
+        assertFalse(geoGebraRules.contains("`layout_and_hierarchy`"));
+    }
+
+    @Test
     void llmApiWhitelistFailureIsNotDowngradedByCodeEvaluation() {
         String issue = "Static rule warning: undocumented Manim API call `Scene.fake_api`";
         QueueAiClient aiClient = new QueueAiClient();
@@ -223,6 +307,45 @@ class CodeEvaluationNodeTest {
                 (com.mathvision.model.CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
         assertNotNull(request);
         assertTrue(request.getErrorReason().contains(issue));
+    }
+
+    @Test
+    void recommendedSeverityFailureDoesNotBlockRender() {
+        QueueAiClient aiClient = new QueueAiClient();
+        // Review with a RECOMMENDED-severity failure — should not block render
+        aiClient.toolResponses.add(reviewResponseWithSeverity(
+                true, "layout_api_usage", "Layout could be improved", "recommended"));
+
+        Map<String, Object> ctx = buildContext(aiClient, initialCode(), buildCompactReviewNarrative());
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+
+        // RECOMMENDED failure should not block render
+        assertTrue(result.isApprovedForRender());
+        assertEquals("fail", result.getFinalReview().getRuleChecks().get(0).getStatus());
+        assertEquals("recommended", result.getFinalReview().getRuleChecks().get(0).getSeverity());
+        assertTrue(result.getFinalReview().getBlockingIssues().isEmpty());
+    }
+
+    @Test
+    void mandatorySeverityFailureBlocksRender() {
+        QueueAiClient aiClient = new QueueAiClient();
+        // Review with a MANDATORY-severity failure — should block render
+        aiClient.toolResponses.add(reviewResponseWithSeverity(
+                false, "manim_code_hygiene", "Code uses undocumented API", "mandatory"));
+
+        Map<String, Object> ctx = buildContext(aiClient, initialCode(), buildCompactReviewNarrative());
+
+        CodeEvaluationNode node = new CodeEvaluationNode();
+        CodeEvaluationNode.CodeEvaluationInput input = node.prep(ctx);
+        CodeEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertFalse(result.isApprovedForRender());
+        assertEquals("mandatory", result.getFinalReview().getRuleChecks().get(0).getSeverity());
+        assertEquals(WorkflowActions.FIX_CODE, action);
     }
 
     @Test
@@ -295,7 +418,7 @@ class CodeEvaluationNodeTest {
         ctx.put(WorkflowKeys.NARRATIVE, narrative);
         ctx.put(WorkflowKeys.CODE_RESULT, new CodeResult(
                 code,
-                "DemoScene",
+                "MainScene",
                 "demo",
                 "Demo concept",
                 "Test code evaluation"));
@@ -418,12 +541,51 @@ class CodeEvaluationNodeTest {
         return narrative;
     }
 
+    private static Narrative buildDerivedPointNarrative() {
+        Narrative.Storyboard storyboard = new Narrative.Storyboard();
+
+        Narrative.StoryboardObject pmin = object("Pmin", "point", "optimal stop");
+        pmin.setBehavior(Narrative.StoryboardObject.BEHAVIOR_DERIVED);
+        pmin.setDependencyObjects(List.of("ABprime", "l"));
+        pmin.setDependencyRelation("intersection");
+        pmin.setConstraintNote("lies on both ABprime and l");
+        storyboard.getObjectRegistry().add(pmin);
+
+        Narrative.StoryboardScene scene = new Narrative.StoryboardScene();
+        scene.setSceneId("scene_1");
+        scene.setTitle("Shortcut");
+        scene.setGoal("Mark the intersection.");
+        scene.setLayoutGoal("Place Pmin on the crossing of ABprime and l.");
+        Narrative.StoryboardObject pminPatch = idOnly("Pmin");
+        pminPatch.setPlacement(placement(0.6, -1.0));
+        scene.getEnteringObjects().add(pminPatch);
+        storyboard.getScenes().add(scene);
+
+        Narrative narrative = new Narrative();
+        narrative.setTargetConcept("Derived point demo");
+        narrative.setTargetDescription("Review derived coordinate handling");
+        narrative.setStoryboard(storyboard);
+        return narrative;
+    }
+
     private static Narrative.StoryboardObject object(String id, String kind, String content) {
         Narrative.StoryboardObject object = new Narrative.StoryboardObject();
         object.setId(id);
         object.setKind(kind);
         object.setContent(content);
         return object;
+    }
+
+    private static Narrative.StoryboardPlacement placement(double x, double y) {
+        Narrative.StoryboardPlacement placement = new Narrative.StoryboardPlacement();
+        placement.setCoordinateSpace("world");
+        Narrative.StoryboardPlacementAxis xAxis = new Narrative.StoryboardPlacementAxis();
+        xAxis.setValue(x);
+        Narrative.StoryboardPlacementAxis yAxis = new Narrative.StoryboardPlacementAxis();
+        yAxis.setValue(y);
+        placement.setX(xAxis);
+        placement.setY(yAxis);
+        return placement;
     }
 
     private static Narrative.StoryboardObject idOnly(String id) {
@@ -452,7 +614,7 @@ class CodeEvaluationNodeTest {
         arguments.put("approved_for_render", approved);
         ArrayNode ruleChecks = arguments.putArray("rule_checks");
         ObjectNode ruleCheck = ruleChecks.addObject();
-        ruleCheck.put("rule_id", approved ? "storyboard_execution" : "layout_and_hierarchy");
+        ruleCheck.put("rule_id", approved ? "storyboard_contract_compliance" : "manim_code_hygiene");
         ruleCheck.put("requirement", approved
                 ? "Storyboard execution and presentation rules are satisfied."
                 : blockingIssue);
@@ -460,6 +622,7 @@ class CodeEvaluationNodeTest {
         ruleCheck.put("evidence", approved
                 ? "The test response marks the generated code as render-ready."
                 : "The test response provides a blocking issue.");
+        ruleCheck.put("severity", approved ? "advisory" : "mandatory");
         arguments.put("summary", summary);
         arguments.putArray("strengths").add("One clear center anchor.");
         ArrayNode blockingIssues = arguments.putArray("blocking_issues");
@@ -475,11 +638,43 @@ class CodeEvaluationNodeTest {
         return "```python\n" + code + "\n```";
     }
 
+    private static JsonNode reviewResponseWithSeverity(boolean approved,
+                                                       String ruleId,
+                                                       String requirement,
+                                                       String severity) {
+        ObjectNode response = JsonUtils.mapper().createObjectNode();
+        ArrayNode choices = response.putArray("choices");
+        ObjectNode message = choices.addObject().putObject("message");
+        ArrayNode toolCalls = message.putArray("tool_calls");
+        ObjectNode function = toolCalls.addObject().putObject("function");
+        function.put("name", "write_code_review");
+
+        ObjectNode arguments = JsonUtils.mapper().createObjectNode();
+        arguments.put("approved_for_render", approved);
+        ArrayNode ruleChecks = arguments.putArray("rule_checks");
+        ObjectNode ruleCheck = ruleChecks.addObject();
+        ruleCheck.put("rule_id", ruleId);
+        ruleCheck.put("requirement", requirement);
+        ruleCheck.put("status", "fail");
+        ruleCheck.put("evidence", "Test evidence for severity check.");
+        ruleCheck.put("severity", severity);
+        arguments.put("summary", "Review with severity check.");
+        arguments.putArray("strengths").add("One clear center anchor.");
+        if (!approved) {
+            arguments.putArray("blocking_issues").add(requirement);
+        } else {
+            arguments.putArray("blocking_issues");
+        }
+        arguments.putArray("revision_directives").add("Fix the issue.");
+        function.set("arguments", arguments);
+        return response;
+    }
+
     private static String initialCode() {
         return String.join("\n",
                 "from manim import *",
                 "",
-                "class DemoScene(Scene):",
+                "class MainScene(Scene):",
                 "    def construct(self):",
                 "        title = Text(\"Intro\").to_edge(UP)",
                 "        eq_main = MathTex(\"a+b\").to_edge(LEFT)",
@@ -523,9 +718,11 @@ class CodeEvaluationNodeTest {
         private final Deque<String> chatResponses = new ArrayDeque<>();
         private String lastUserMessage;
         private String lastSystemPrompt;
+        private int lastSnapshotSize;
 
         @Override
         public CompletableFuture<String> chatAsync(List<NodeConversationContext.Message> snapshot) {
+            lastSnapshotSize = snapshot.size();
             lastUserMessage = snapshot.get(snapshot.size() - 1).getContent();
             lastSystemPrompt = NodeConversationContext.getSystemContent(snapshot);
             return CompletableFuture.completedFuture(chatResponses.removeFirst());
@@ -534,6 +731,7 @@ class CodeEvaluationNodeTest {
         @Override
         public CompletableFuture<JsonNode> chatWithToolsRawAsync(List<NodeConversationContext.Message> snapshot,
                                                                  String toolsJson) {
+            lastSnapshotSize = snapshot.size();
             lastUserMessage = snapshot.get(snapshot.size() - 1).getContent();
             lastSystemPrompt = NodeConversationContext.getSystemContent(snapshot);
             if (!com.mathvision.prompt.ToolSchemas.CODE_REVIEW.equals(toolsJson)) {

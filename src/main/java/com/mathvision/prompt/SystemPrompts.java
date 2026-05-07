@@ -26,27 +26,27 @@ public final class SystemPrompts {
     //
     // Organized by semantic scope so each pipeline stage includes only the
     // guides it needs:
-    //   OBJECT_SEMANTICS — object identity, kind, content, dependency, style
-    //   SCENE_STRUCTURE  — scene metadata, object lifecycle, actions
-    //   SCENE_LAYOUT     — spatial layout, constraints, camera, and intent
-    //   MANIM            — all three combined (for Manim code generation/evaluation)
-    //   GEOGEBRA         — GeoGebra-specific field interpretations
-    //   MANIM_REPAIR     — Manim field semantics for repair passes
-    //   GEOGEBRA_REPAIR  — GeoGebra-specific repair interpretations
+    //   OBJECT_SEMANTICS - object identity, kind, content, dependency, style
+    //   SCENE_STRUCTURE  - scene metadata, object lifecycle, actions
+    //   SCENE_LAYOUT     - spatial layout, constraints, camera, and intent
+    //   MANIM            - all three combined (for Manim code generation/evaluation)
+    //   GEOGEBRA         - GeoGebra-specific field interpretations
+    //   MANIM_REPAIR     - Manim field semantics for repair passes
+    //   GEOGEBRA_REPAIR  - GeoGebra-specific repair interpretations
     // ========================================================================
 
     /** Object-level fields: identity, kind, content, dependency, style, and placement. */
     public static final String STORYBOARD_FIELD_GUIDE_OBJECT_SEMANTICS =
             "How to interpret the storyboard fields:\n"
                     + "- `id`: unique object identifier used across scenes, registry, and actions.\n"
-                    + "- `kind`: geometric or visual type — point, line, segment, ray, circle, polygon, arc, angle_marker, text, etc. Determines the construction or rendering primitive.\n"
-                    + "- `content`: mathematical description or display text (e.g. \"A(0, 3)\" or \"x² + y² = r²\"). For `text` objects this is the visible string; for geometry objects it is a label or coordinate hint.\n"
-                    + "- `behavior`: dependency semantics — `static` means independently defined, `derived` means defined from other geometry, `follows_anchor` means attached to `anchor_id`, `fixed_overlay` means screen-space overlay.\n"
+                    + "- `kind`: geometric or visual type - point, line, segment, ray, circle, polygon, arc, angle_marker, text, etc. Determines the construction or rendering primitive.\n"
+                    + "- `content`: mathematical description or display text (e.g. \"A(0, 3)\" or \"x^2 + y^2 = r^2\"). For `text` objects this is the visible string; for geometry objects it is a label or coordinate hint.\n"
+                    + "- `behavior`: dependency semantics - `static` means independently defined, `derived` means defined from other geometry, `follows_anchor` means attached to `anchor_id`, `fixed_overlay` means screen-space overlay.\n"
                     + "- `dependency_objects`: ordered ids of source objects this object depends on; use ids only, no prose.\n"
                     + "- `dependency_relation`: concise construction relation such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\n"
                     + "- `constraint_note`: object-level hard geometry that must be preserved; explain the invariant and relationship meaning here.\n"
                     + "- `anchor_id`: id of the object this one should stay attached to.\n"
-                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint — at render time the object will be recomputed from its source objects via `dependency_objects`, `dependency_relation`, and `constraint_note`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
+                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint - at render time the object will be recomputed from its source objects via `dependency_objects`, `dependency_relation`, and `constraint_note`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
                     + "- `style`: array of visual layer entries (color, opacity, thickness, dash, background, etc.) that describe how the object should look. Each entry targets one visual layer or role. Omit for visually plain objects.\n"
                     + "- `source_node`: knowledge-graph node id that produced this object; informational only.\n";
 
@@ -62,7 +62,7 @@ public final class SystemPrompts {
                     + "- `exiting_objects`: id-only entries for objects that should explicitly leave the scene.\n"
                     + "- `actions`: the main execution plan; respect their order, targets, and visible intent.\n"
                     + "- `object_registry`: canonical global object definitions; keep stable identity, kind, content, dependency, and behavior here, not scene-specific placement.\n"
-                    + "- `notes_for_codegen`: implementation hints; follow unless they conflict with correctness.\n"
+                    + "- `notes_for_codegen`: scene-level hard implementation constraints for downstream code generation and repair, including concrete motion ranges, endpoints, lifecycle, visibility, palette, transform, and layout instructions. Follow them exactly unless they conflict with runtime validity, backend support, or stronger geometric constraints; when exact wording is unsupported, preserve the same constraint intent with a documented equivalent.\n"
                     + "- `continuity_plan`, `global_visual_rules`: global constraints that shape the whole file.\n";
 
     /** Scene-layout fields: spatial composition, geometric constraints, camera, and intent. */
@@ -84,7 +84,7 @@ public final class SystemPrompts {
     /** Field guide for GeoGebra code generation. */
     public static final String STORYBOARD_FIELD_GUIDE_GEOGEBRA =
             "How to interpret the storyboard fields:\n"
-                    + "- `kind`: determines the GeoGebra construction primitive (point → named coordinate or path-point, line → Line/Segment/Ray, circle → Circle, text → Text or native label, etc.).\n"
+                    + "- `kind`: determines the GeoGebra construction primitive (point -> named coordinate or path-point, line -> Line/Segment/Ray, circle -> Circle, text -> Text or native label, etc.).\n"
                     + "- `content`: display text or coordinate hint; for text objects this is the visible string, for geometry it is a label or math expression.\n"
                     + "- `style`: visual properties array (color, thickness, dash, opacity, etc.) to apply via SetColor, SetLineThickness, SetLineStyle, etc.\n"
                     + "- `entering_objects`: scene patches for newly entering objects; use `id` plus optional `placement`/`style` changes.\n"
@@ -129,15 +129,19 @@ public final class SystemPrompts {
                     + "- Treat storyboard objects as candidate teaching elements, not a mandatory one-for-one rendering checklist.\n"
                     + "- Create or keep elements that carry core teaching reasoning, hard geometry, dependency relationships, conclusion evidence, or the current narration focus.\n"
                     + "- Omit, merge, dim, or replace elements that are decorative, redundant, clutter-causing, naturally expressed by existing objects, or not helpful for the current teaching beat.\n"
-                    + "- Omitting an object must not break the semantics of `geometry_constraints`, `constraint_note`, `dependency_objects`, `dependency_relation`, `behavior`, `anchor_id`, or `actions.targets`.\n"
+                    + "- Omitting an object must not break the semantics of `geometry_constraints`, `constraint_note`, `notes_for_codegen`, `dependency_objects`, `dependency_relation`, `behavior`, `anchor_id`, or `actions.targets`.\n"
                     + "- If an omitted object is referenced by an action target, preserve that action's teaching intent through an equivalent existing object, style change, label, caption, or dependency-safe construction.\n"
                     + "- If adding a small helper object improves clarity, backend correctness, or replaces an omitted object, keep it semantically consistent and name it clearly.\n";
 
     /** Shared authority model for stages that consume a validated storyboard. */
     public static final String STORYBOARD_AUTHORITY_RULES =
             "Storyboard authority rules:\n"
-                    + "- Treat the validated storyboard as the semantic authority for teaching goal, key object identity, scene order, continuity, geometry meaning, dependency relationships, and layout intent.\n"
-                    + "- Treat `geometry_constraints`, `constraint_note`, `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` as hard semantic requirements.\n"
+                    + "- Treat `object_registry` as the canonical authority for object identity, kind, content, dependency semantics, and hard geometric meaning.\n"
+                    + "- Treat scene `entering_objects`, `persistent_objects`, and `exiting_objects` as per-scene state patches: their `placement`, `style`, and visibility describe the momentary visual state for that scene, not the object's full semantic definition.\n"
+                    + "- Treat `geometry_constraints`, `notes_for_codegen`, object-registry `constraint_note`, `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` as hard semantic requirements.\n"
+                    + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as a hard geometric constraint unless `geometry_constraints`, `notes_for_codegen`, or the object-registry `constraint_note` explicitly says the coordinate itself is fixed.\n"
+                    + "- For `behavior = derived` or dependency-driven objects, compute or attach them from their source objects according to object-registry `dependency_objects`, `dependency_relation`, and `constraint_note`; scene placement is only an initial/preview visual state.\n"
+                    + "- Treat scene order, action order, narration, layout_goal, safe_area_plan, screen_overlay_plan, and camera_plan as planning guidance for presentation, continuity, and readability; adapt them when runtime correctness or a clearer implementation requires it. Do not adapt away explicit `notes_for_codegen` constraints unless they are unsupported or contradictory.\n"
                     + STORYBOARD_ELEMENT_SELECTION_RULES
                     + "- Do not treat backend-specific notes, unsupported API names, undocumented commands, or purely decorative effects as hard requirements when they conflict with the active backend manual or runtime correctness.\n"
                     + "- When a requested effect is unsupported, preserve the same teaching intent with documented backend features; omit only non-essential decoration that cannot be implemented safely.\n"
@@ -154,6 +158,8 @@ public final class SystemPrompts {
     public static final String STORYBOARD_REFERENCE_RULES =
             "Storyboard reference rules:\n"
                     + "- Treat storyboard JSON as helpful reference context for the intended topic, prior scene plan, object names, and possible teaching ideas, not as a strict semantic authority.\n"
+                    + "- When you use storyboard semantics, prefer object_registry dependency facts over scene patch placement/style details. Scene patches are momentary visual states, not canonical object definitions.\n"
+                    + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as hard constraints unless `geometry_constraints`, `notes_for_codegen`, or the object-registry `constraint_note` explicitly says the coordinate itself is fixed.\n"
                     + "- Do not block, rewrite, or over-constrain code solely because it omits, merges, renames, simplifies, or reorders storyboard details when the result is runnable, clear, and aligned with the overall user request.\n"
                     + "- Use storyboard geometry, dependency notes, and placements as hints. Preserve them when they are already implemented consistently or when doing so is low-risk, but runtime correctness, visual clarity, and internally consistent code take precedence.\n"
                     + "- If storyboard details conflict with safer code, rendered evidence, backend limitations, or a clearer implementation, choose a coherent implementation and keep object names, coordinates, dependencies, and layout internally consistent.\n";
@@ -228,12 +234,12 @@ public final class SystemPrompts {
     public static final String COMPOSITION_RULES =
             "Composition rules:\n"
                     + "- Maintain one clear focus per frame or view using size, color, brightness, or placement.\n"
-                    + "- Apply the three-tier opacity hierarchy: primary focus at 1.0, contextual elements at 0.3–0.4, structural scaffolding (axes, grids) at 0.15.\n"
+                    + "- Apply the three-tier opacity hierarchy: primary focus at 1.0, contextual elements at 0.3-0.4, structural scaffolding (axes, grids) at 0.15.\n"
                     + "- Keep visual weight balanced across the frame instead of clustering everything on one side.\n"
                     + "- Preserve intentional empty space and a safe overlay zone; do not solve layout problems by piling overlays or opaque objects over the active geometry.\n"
                     + "- If the view becomes crowded, split the content, dim the old context, or remove temporary annotations instead of squeezing everything tighter.\n"
                     + "- When correcting out-of-bounds elements, reposition them with adequate clearance from every frame edge (minimum 0.5 units on all sides); never fix a boundary violation by placing objects flush against the edge.\n"
-                    + "- When a derived object (reflection, projection, intersection, etc.) extends outside the frame, do NOT change its placement directly — it is computed from its source objects at render time. Instead, trace the dependency chain in object_registry (`dependency_objects`, `dependency_relation`, `constraint_note`) to identify the upstream source object(s) and adjust their coordinates so the derived result lands inside the frame. For example, if a reflected point B' is offscreen because it mirrors B across line l, move B closer to l or shift l itself; never override B' with an arbitrary coordinate that contradicts its geometric definition.\n";
+                    + "- When a derived object (reflection, projection, intersection, etc.) extends outside the frame, do NOT change its placement directly - it is computed from its source objects at render time. Instead, trace the dependency chain in object_registry (`dependency_objects`, `dependency_relation`, `constraint_note`) to identify the upstream source object(s) and adjust their coordinates so the derived result lands inside the frame. For example, if a reflected point B' is offscreen because it mirrors B across line l, move B closer to l or shift l itself; never override B' with an arbitrary coordinate that contradicts its geometric definition.\n";
 
     /** High-contrast color rules to avoid pale-on-pale combinations. */
     public static final String HIGH_CONTRAST_COLOR_RULES =
@@ -269,14 +275,17 @@ public final class SystemPrompts {
             "ASCII text rules:\n"
                     + "- Use ASCII characters only in generated JSON text fields, math symbols, labels, ids, equations, notes, and narration.\n"
                     + "- Do not use Chinese punctuation, curly quotes, em dashes, en dashes, arrows, prime/star glyphs, checkmarks, circled numbers, full-width spaces, or Unicode math operators.\n"
-                    + "- Replace Unicode symbols with ASCII equivalents: `A->P->B` not `A→P→B`; `B'` not `B′`; `Pstar` or `P_star` not `P⋆`; `>=` or `\\geq` not `≥`; `<=` or `\\leq` not `≤`; `\"` or `'` not curly quotes; `-` not `—`; `1.` not `①`; `done` not `✓`.\n"
+                    + "- Replace Unicode symbols with ASCII equivalents: use `A->P->B` instead of Unicode arrow glyphs; use `B'` instead of a Unicode prime glyph; use `Pstar` or `P_star` instead of a Unicode star glyph; use `>=` or `\\geq` instead of a Unicode greater-than-or-equal glyph; use `<=` or `\\leq` instead of a Unicode less-than-or-equal glyph; use `\"` or `'` instead of curly quotes; use `-` instead of em dashes or en dashes; use `1.` instead of circled-number glyphs; use `done` instead of checkmark glyphs.\n"
+                    + "- Normalize common non-ASCII punctuation by code point before returning JSON: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
+                    + "- Example ASCII rewrites: `hiker` + U+2019 + `s` -> `hiker's`; `PB'` + U+2014 + `a` -> `PB' - a`; `right` + U+2014 + `the` -> `right - the`; `P_test ` + U+2260 + ` P_min` -> `P_test != P_min`.\n"
+                    + "- Before final output, scan every string value character by character; if any character code is greater than 0x7F, rewrite that string until it is ASCII-only.\n"
                     + "- If the user input contains non-ASCII symbols, normalize them to ASCII before placing them in workflow outputs.\n";
 
     /** Opacity hierarchy for visual layering, applicable to all output targets. */
     public static final String OPACITY_LEVELS =
             "Opacity hierarchy:\n"
                     + "- Primary focus elements: opacity 1.0\n"
-                    + "- Contextual / previously-introduced elements: opacity 0.3–0.4\n"
+                    + "- Contextual / previously-introduced elements: opacity 0.3-0.4\n"
                     + "- Structural scaffolding (axes, grids, construction lines): opacity 0.15\n"
                     + "- Never show everything at full brightness simultaneously.\n";
 
@@ -317,6 +326,7 @@ public final class SystemPrompts {
     public static final String MANIM_TEXT_AND_READABILITY_RULES =
             "Manim text and readability rules:\n"
                     + "- Use monospace fonts (e.g. Menlo, Courier New, DejaVu Sans Mono) for all `Text(...)` and `MarkupText(...)` content. Manim's Pango renderer produces broken kerning with proportional fonts.\n"
+                    + "- Do not apply the monospace-font requirement to `MathTex(...)` or `Tex(...)`; those are LaTeX-rendered mobjects. Check their constructor choice, LaTeX validity, font size, color contrast, and layout instead.\n"
                     + "- Hard minimum `font_size=18` for any on-screen text.\n"
                     + "- Keep supporting text comfortably readable; avoid tiny labels and long edge-to-edge strings.\n"
                     + "- Use `buff=0.5` or larger on every `.to_edge()` call; values below 0.5 risk clipping.\n"
@@ -343,7 +353,7 @@ public final class SystemPrompts {
                     + "- Use raw strings for LaTeX and keep `MathTex(...)` segments stable when matching transforms will be needed later.\n"
                     + "- Prefer helper builders, shared style constants, and stable layout helpers over scattered ad hoc coordinates.\n"
                     + "- Keep background color, palette meaning, and typography consistent across the full file.\n"
-                    + "- Define shared color constants (BG, PRIMARY, SECONDARY, ACCENT) at the top of the file; never hardcode hex color strings inside scene methods.\n"
+                    + "- Define shared color constants (BG, PRIMARY, SECONDARY, ACCENT) at the top of the file from 6-digit hex values such as `ManimColor(\"#000000\")` or `\"#3498DB\"`; do not use Manim named color constants for storyboard colors.\n"
                     + "- Set `self.camera.background_color = BG` in every scene's `construct` method.\n"
                     + "- Use `ReplacementTransform(old, new)` when replacing visible text or mobjects; do not `Write` new content on top of old content without removing the old first.\n"
                     + "- After `Transform(A, B)`, variable `A` references the on-screen object while `B` is NOT on screen. Use `ReplacementTransform` when you need to reference `B` afterward.\n"
@@ -417,7 +427,7 @@ public final class SystemPrompts {
                     + "- Body / explanatory text: font_size=30\n"
                     + "- Label / annotation: font_size=24\n"
                     + "- Caption / fine print: font_size=20\n"
-                    + "- Hard minimum: font_size=18 — anything smaller blurs at draft quality and is barely legible at production quality.\n";
+                    + "- Hard minimum: font_size=18 - anything smaller blurs at draft quality and is barely legible at production quality.\n";
 
     /** Manim animation timing reference table. */
     public static final String MANIM_TIMING_REFERENCE =
@@ -529,7 +539,7 @@ public final class SystemPrompts {
 
     /** Storyboard codegen preamble for Manim output. */
     public static final String STORYBOARD_CODEGEN_INTRO_MANIM =
-            "Use the following compact storyboard JSON as the semantic authority for staging, object identity, continuity, and scene execution.\n"
+            "Use the following compact storyboard JSON as the execution plan for staging, object identity, continuity, and scene execution.\n"
                     + STORYBOARD_AUTHORITY_RULES
                     + "- Treat every object id as a stable visual identity.\n"
                     + "- Treat storyboard objects as candidate visual elements; create only the elements that are necessary or helpful for the teaching beat.\n"
@@ -541,15 +551,15 @@ public final class SystemPrompts {
                     + "- Read `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` literally: if an object follows a moving anchor, implement it with `always_redraw(...)` or an updater.\n"
                     + "- Preserve scene beats, scene exits, and overlay zones from the storyboard instead of compressing everything into one crowded final frame.\n"
                     + MANIM_MANUAL_ONLY_RULES
-                    + "- Treat `geometry_constraints` and `constraint_note` as hard invariants. If the frame is tight, preserve the construction and recenter/scale the whole constrained group instead of breaking the math.\n";
+                    + "- Treat `geometry_constraints`, `constraint_note`, and `notes_for_codegen` as hard invariants. If the frame is tight, preserve the construction and recenter/scale the whole constrained group instead of breaking the math or the stated implementation constraint.\n";
 
     /** Storyboard codegen preamble for GeoGebra output. */
     public static final String STORYBOARD_CODEGEN_INTRO_GEOGEBRA =
-            "Use the following compact storyboard JSON as the semantic authority for GeoGebra construction order, object identity, continuity, and teaching progression.\n"
+            "Use the following compact storyboard JSON as the execution plan for GeoGebra construction order, object identity, continuity, and teaching progression.\n"
                     + STORYBOARD_AUTHORITY_RULES
                     + "- Keep the same object identities stable across steps.\n"
                     + "- Convert `actions` into construction order, visibility changes, highlights, or helper toggles rather than literal animation.\n"
-                    + "- Preserve `geometry_constraints`, `behavior`, `anchor_id`, `dependency_objects`, `dependency_relation`, and `constraint_note` through dependency-safe GeoGebra commands.\n"
+                    + "- Preserve `geometry_constraints`, `notes_for_codegen`, `behavior`, `anchor_id`, `dependency_objects`, `dependency_relation`, and `constraint_note` through dependency-safe GeoGebra commands.\n"
                     + "- Interpret `behavior` by dependency semantics, not by whether the object can move: `static` means independently defined base object, not automatically a free point.\n"
                     + "- If a point is described as movable/draggable and also constrained to a line, segment, ray, circle, polygon edge, or other object, generate it as a point on that object or with an equivalent dependency-safe parameterization, never as an unconstrained coordinate point.\n"
                     + "- If a point is fixed and no dependency is stated, define it as an independent anchor and keep it fixed unless the storyboard explicitly asks for dragging.\n"

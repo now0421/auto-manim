@@ -127,5 +127,6 @@ When writing storyboard JSON:
 * Use `opacity`, `fill_opacity`, and `stroke_opacity` deliberately to encode
   hierarchy.
 * Use `font_size` to separate title, body, label, and caption roles.
-* `notes_for_codegen` may remind later stages to preserve palette consistency,
-  emphasis hierarchy, overlay safety, and text readability.
+* `notes_for_codegen` is a hard downstream constraint field; use it only for
+  palette consistency, emphasis hierarchy, overlay safety, text readability, or
+  similar instructions that code generation and repair must preserve.

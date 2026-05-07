@@ -7,6 +7,7 @@ import com.mathvision.model.Narrative.StoryboardAction;
 import com.mathvision.model.Narrative.StoryboardPlacement;
 import com.mathvision.model.Narrative.StoryboardPlacementAxis;
 import com.mathvision.model.Narrative.StoryboardStyle;
+import com.mathvision.util.StoryboardCodegenSemantics;
 import com.mathvision.util.JsonUtils;
 import com.mathvision.util.StoryboardPatchResolver;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -25,9 +26,12 @@ public final class StoryboardJsonBuilder {
 
     private static final class BuildOptions {
         private final boolean includeSceneFixFields;
+        private final boolean suppressCodegenDerivedPlacement;
 
-        private BuildOptions(boolean includeSceneFixFields) {
+        private BuildOptions(boolean includeSceneFixFields,
+                             boolean suppressCodegenDerivedPlacement) {
             this.includeSceneFixFields = includeSceneFixFields;
+            this.suppressCodegenDerivedPlacement = suppressCodegenDerivedPlacement;
         }
     }
 
@@ -37,7 +41,7 @@ public final class StoryboardJsonBuilder {
      * Builds a compact storyboard JSON string optimized for code generation.
      */
     public static String buildForCodegen(Storyboard storyboard) {
-        return build(storyboard, new BuildOptions(true));
+        return build(storyboard, new BuildOptions(true, true));
     }
 
     /**
@@ -46,7 +50,7 @@ public final class StoryboardJsonBuilder {
      * so the fixer can recover layout without breaking geometric constraints.
      */
     public static String buildForSceneEvaluationFix(Storyboard storyboard) {
-        return build(storyboard, new BuildOptions(true));
+        return build(storyboard, new BuildOptions(true, false));
     }
 
     private static String build(Storyboard storyboard, BuildOptions options) {
@@ -73,7 +77,7 @@ public final class StoryboardJsonBuilder {
 
         // Serialize object registry if present
         if (source.getObjectRegistry() != null && !source.getObjectRegistry().isEmpty()) {
-            addObjectArray(root, "object_registry", source.getObjectRegistry());
+            addObjectArray(root, "object_registry", source.getObjectRegistry(), options);
         }
 
         return JsonUtils.toPrettyJson(root);
@@ -104,14 +108,17 @@ public final class StoryboardJsonBuilder {
         putTrimmedStringArray(sceneNode, "geometry_constraints", scene.getGeometryConstraints());
         putTrimmedStringArray(sceneNode, "step_refs", scene.getStepRefs());
 
-        addObjectArray(sceneNode, "entering_objects", scene.getEnteringObjects());
-        addObjectArray(sceneNode, "persistent_objects", scene.getPersistentObjects());
-        addObjectArray(sceneNode, "exiting_objects", scene.getExitingObjects());
+        addObjectArray(sceneNode, "entering_objects", scene.getEnteringObjects(), options);
+        addObjectArray(sceneNode, "persistent_objects", scene.getPersistentObjects(), options);
+        addObjectArray(sceneNode, "exiting_objects", scene.getExitingObjects(), options);
         addActions(sceneNode, scene.getActions());
         putTrimmedStringArray(sceneNode, "notes_for_codegen", scene.getNotesForCodegen());
     }
 
-    private static void addObjectArray(ObjectNode parent, String fieldName, List<StoryboardObject> objects) {
+    private static void addObjectArray(ObjectNode parent,
+                                       String fieldName,
+                                       List<StoryboardObject> objects,
+                                       BuildOptions options) {
         ArrayNode arrayNode = parent.putArray(fieldName);
         if (objects == null) {
             return;
@@ -125,7 +132,10 @@ public final class StoryboardJsonBuilder {
             putNonBlank(objectNode, "id", object.getId());
             putNonBlank(objectNode, "kind", object.getKind());
             putNonBlank(objectNode, "content", object.getContent());
-            addPlacement(objectNode, object.getPlacement());
+            if (!options.suppressCodegenDerivedPlacement
+                    || !StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
+                addPlacement(objectNode, object.getPlacement());
+            }
             addStyles(objectNode, object.getStyle());
             putNonBlank(objectNode, "source_node", object.getSourceNode());
             putNonBlank(objectNode, "behavior", object.getBehavior());

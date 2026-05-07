@@ -10,18 +10,20 @@ public final class CodeGenerationPrompts {
     private static final String MANIM_CODE_GENERATION_SYSTEM =
             "You are an expert Manim Community engineer and Python programmer.\n"
                     + "Generate complete, runnable, maintainable Python code that implements the storyboard.\n"
-                    + "Treat the provided storyboard JSON as an execution specification, not loose inspiration.\n\n"
+                    + "Treat the provided storyboard JSON as an execution specification, but distinguish canonical object semantics from per-scene visual-state patches.\n\n"
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory rules:\n"
                     + "- Use `from manim import *`.\n"
                     + "- Do not invent extra learner-visible objects unless they are necessary for clarity, backend implementation, or an equivalent replacement for an omitted storyboard object.\n"
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
-                    + "- Treat storyboard `geometry_constraints` and object `constraint_note` fields as hard mathematical invariants.\n"
+                    + "- Treat storyboard `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants.\n"
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + "Additional code generation rules:\n"
                     + "- `entering_objects[].content` describes candidate visible content; implement only the objects that are necessary or helpful for the teaching beat.\n"
                     + "- When `content`, `dependency_objects`, or related fields mention another object, treat those mentions as object ids only rather than as repeated type declarations.\n"
-                    + "- If a storyboard object uses `behavior = follows_anchor`, `derived`, or an equivalent dependency note, implement that relationship continuously with the appropriate Manim mechanism.\n\n"
+                    + "- If a storyboard object uses `behavior = follows_anchor`, `derived`, or an equivalent dependency note, implement that relationship continuously with the appropriate Manim mechanism.\n"
+                    + "- If an object's actual coordinates depend on other objects, recompute its coordinates from those source objects or use native backend/API construction helpers; never hardcode a coordinate copied from placement for that object.\n\n"
+                    + "- Apply every `notes_for_codegen` item as a mandatory scene-level implementation constraint. If a note gives a concrete range, endpoint, duration, visibility, lifecycle, transform, color, or layout instruction, encode that exact constraint in code rather than replacing it with a similar-looking free movement or ad hoc placement.\n\n"
                     + "Continuity and object-management rules:\n"
                     + "- Build a stable object registry in local variables or dictionaries when useful so ids can be reused across beats.\n"
                     + "- Prefer transforming existing mobjects over fading out and redrawing the same concept.\n"
@@ -96,13 +98,13 @@ public final class CodeGenerationPrompts {
     private static final String GEOGEBRA_CODE_GENERATION_SYSTEM =
             "You are an expert GeoGebra Classic engineer.\n"
                     + "Generate complete, dependency-safe GeoGebra command code that implements the storyboard for teaching.\n"
-                    + "Treat the storyboard as the semantic authority for object identity, geometry meaning, layout intent, and teaching order.\n\n"
+                    + "Treat object_registry as the semantic authority for object identity, geometry meaning, and dependency relationships; treat scene placement/style as momentary visual-state guidance.\n\n"
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory rules:\n"
                     + "- Return GeoGebra commands, not Python and not JavaScript.\n"
                     + "- Build from base objects to derived objects in a clear dependency chain.\n"
                     + "- Preserve geometric meaning: intersections, reflections, midpoints, perpendiculars, parallels, equal-radius points, and similar constructions must stay dependency-driven.\n"
-                    + "- Treat storyboard `geometry_constraints` and object `constraint_note` fields as hard mathematical invariants.\n"
+                    + "- Treat storyboard `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants.\n"
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
@@ -114,6 +116,8 @@ public final class CodeGenerationPrompts {
                     + "- If a point is described as fixed and no dependency is stated, define it as an independent anchor and keep it fixed unless the storyboard explicitly asks for dragging.\n"
                     + "- If a point is described as moving or draggable while constrained, preserve both facts at once: keep the dependency and allow the motion within that dependency.\n"
                     + "- If the storyboard implies a bounded range, encode the bound in the construction itself with a segment, ray, restricted path, or slider domain rather than leaving the object unconstrained.\n"
+                    + "- Apply every `notes_for_codegen` item as a mandatory scene-level implementation constraint. If a note gives a concrete range, endpoint, visibility, lifecycle, style, or layout instruction, encode that exact constraint in the command script.\n"
+                    + "- If an object's actual coordinates depend on other objects, recompute its coordinates from those source objects or use native GeoGebra construction commands; never hardcode a coordinate copied from placement for that object.\n"
                     + "- Do not invent unsupported convenience syntax such as `Point(line, x, y)` or similar guessed overloads.\n"
                     + "- When initial structured placement is requested for a constrained point, choose a dependency-safe construction that starts near that location or inside the requested range; never break the constraint just to match the coordinates.\n"
                     + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
@@ -214,6 +218,7 @@ public final class CodeGenerationPrompts {
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL code so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
+                        + "Treat `notes_for_codegen` as hard scene-level constraints; preserve every concrete range, endpoint, lifecycle, visibility, transform, color, and layout instruction unless it is unsupported, in which case preserve the same intent with a documented equivalent.\n"
                         + "Apply text constructor mapping consistently across the file: `math_text -> MathTex`, `plain_text -> Text`, and avoid `Tex` except for explicit non-math LaTeX text.\n"
                         + "Keep `%s` as the exact scene class name.\n"
                         + "Return ONLY the full Python code block.",
@@ -240,6 +245,7 @@ public final class CodeGenerationPrompts {
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL command script so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
+                        + "Treat `notes_for_codegen` as hard scene-level constraints; preserve every concrete range, endpoint, lifecycle, visibility, style, and layout instruction unless it is unsupported, in which case preserve the same intent with a documented equivalent.\n"
                         + "Use English GeoGebra command names and preserve the figure naming intent around `%s`.\n"
                         + "Return ONLY the full GeoGebra code block.",
                 storyboardBlock, figureName, geoGebraCode, problemList, figureName));
@@ -280,6 +286,8 @@ public final class CodeGenerationPrompts {
                         + "- Include the full `def %s(self):` signature and all code inside.\n"
                         + "- Use variables and objects established in earlier scene methods via `self` if needed.\n"
                         + "- Follow the storyboard's semantic intent; select and create useful objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
+                        + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, durations, visibility/lifecycle instructions, transforms, palette notes, and layout constraints exactly when present.\n"
+                        + "- For any object with `behavior=derived` or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, compute it from `dependency_objects` or use native Manim/API geometry helpers. Do not instantiate it from hardcoded placement coordinates.\n"
                         + "- Respect storyboard text semantics strictly: `math_text` means `MathTex(...)`, `plain_text` means `Text(...)`, and avoid `Tex(...)` unless the scene explicitly needs non-math LaTeX text.\n"
                         + "- Return the method code via the write_scene_code tool.",
                 methodName, sceneIndex + 1, totalScenes,
@@ -317,6 +325,8 @@ public final class CodeGenerationPrompts {
                         + "Generate the COMPLETE GeoGebra command block for this scene:\n"
                         + "- Start with a comment line: # %s\n"
                         + "- Create necessary entering objects for this scene; merge or omit non-essential helpers, duplicate labels, and decorative elements when they do not improve teaching clarity\n"
+                        + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, visibility/lifecycle instructions, styles, and layout constraints exactly when present\n"
+                        + "- For derived objects such as intersections, reflections, midpoints, projections, connecting segments, and angle markers, construct them from their dependency objects with native GeoGebra commands instead of hardcoded placement coordinates\n"
                         + "- Apply styles and visibility settings\n"
                         + "- Reference shared objects from the skeleton by their established names\n"
                         + "- Return the scene code via the write_scene_code tool.",

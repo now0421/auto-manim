@@ -15,11 +15,12 @@ public final class WorkflowKeys {
     public static final String CONFIG = "config";
     public static final String AI_CLIENT = "aiClient";
     public static final String OUTPUT_DIR = "outputDir";
-    public static final String CONCEPT = "concept";
+    public static final String TARGET_INPUT = "targetInput";
 
     // ---- Stage 0: Exploration output ----
     public static final String KNOWLEDGE_GRAPH = "knowledgeGraph";
     public static final String EXPLORATION_API_CALLS = "explorationApiCalls";
+    public static final String RESOLVED_INPUT_MODE = "resolvedInputMode";
 
     // ---- Stage 1: Enrichment output ----
     public static final String ENRICHED_TREE = "enrichedTree";

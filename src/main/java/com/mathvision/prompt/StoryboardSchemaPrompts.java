@@ -98,7 +98,7 @@ public final class StoryboardSchemaPrompts {
 
     /** Schema for the notes_for_codegen array entries within a scene. */
     public static final String NOTES_FOR_CODEGEN_SCHEMA =
-            "        \"string, implementation hint that helps downstream generation preserve intent\"";
+            "        \"string, hard scene-level implementation constraint that downstream generation and repair must preserve\"";
 
     /** Full scene-field block (scene_id through notes_for_codegen) excluding the wrapping braces. */
     public static final String SCENE_FIELDS_SCHEMA =

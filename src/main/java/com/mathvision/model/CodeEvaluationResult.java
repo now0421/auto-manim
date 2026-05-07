@@ -373,6 +373,8 @@ public class CodeEvaluationResult {
     }
 
     public static class RuleCheck {
+        /** Gate-impact severity: "mandatory", "recommended", or "advisory". */
+        private String severity;
         private String ruleId;
         private String requirement;
         private String status;
@@ -381,11 +383,19 @@ public class CodeEvaluationResult {
         public RuleCheck() {}
 
         public RuleCheck(String ruleId, String requirement, String status, String evidence) {
+            this(ruleId, requirement, status, evidence, null);
+        }
+
+        public RuleCheck(String ruleId, String requirement, String status, String evidence, String severity) {
             this.ruleId = ruleId;
             this.requirement = requirement;
             this.status = status;
             this.evidence = evidence;
+            this.severity = severity;
         }
+
+        public String getSeverity() { return severity; }
+        public void setSeverity(String severity) { this.severity = severity; }
 
         public String getRuleId() { return ruleId; }
         public void setRuleId(String ruleId) { this.ruleId = ruleId; }

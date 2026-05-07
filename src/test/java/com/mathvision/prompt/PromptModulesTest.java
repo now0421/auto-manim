@@ -1,6 +1,7 @@
 package com.mathvision.prompt;
 
 import com.mathvision.util.TargetDescriptionBuilder;
+import com.mathvision.util.TextHealthDiagnostics;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,6 +42,23 @@ class PromptModulesTest {
     }
 
     @Test
+    void stageZeroAsciiRulesDoNotPolluteTheirOwnPrompts() {
+        String conceptPrompt = ExplorationPrompts.buildConceptGraphRulesPrompt(4, 1);
+        String problemPrompt = ExplorationPrompts.buildProblemGraphRulesPrompt(4, 1);
+
+        assertTrue(isAscii(SystemPrompts.ASCII_TEXT_RULES));
+        assertTrue(SystemPrompts.ASCII_TEXT_RULES.contains("U+2019 -> `'`"));
+        assertTrue(SystemPrompts.ASCII_TEXT_RULES.contains("U+2014 -> `-`"));
+        assertTrue(SystemPrompts.ASCII_TEXT_RULES.contains("U+2260 -> `!=`"));
+        assertTrue(SystemPrompts.ASCII_TEXT_RULES.contains("`PB' - a`"));
+        assertTrue(SystemPrompts.ASCII_TEXT_RULES.contains("`P_test != P_min`"));
+        assertTrue(isAscii(conceptPrompt));
+        assertTrue(isAscii(problemPrompt));
+        assertFalse(TextHealthDiagnostics.inspect(conceptPrompt).suspicious());
+        assertFalse(TextHealthDiagnostics.inspect(problemPrompt).suspicious());
+    }
+
+    @Test
     void codeReviewAndRevisionPromptsMentionPlacementCorrectness() {
         String reviewPrompt = CodeEvaluationPrompts.reviewUserPrompt(
                 "DemoScene",
@@ -57,6 +75,53 @@ class PromptModulesTest {
         assertTrue(reviewPrompt.contains("correct spatial relationships"));
         assertTrue(revisionPrompt.contains("angle arcs"));
         assertTrue(revisionPrompt.contains("wrong geometry"));
+    }
+
+    @Test
+    void storyboardRulesPreferObjectRegistryOverScenePatchCoordinates() {
+        String authorityRules = SystemPrompts.STORYBOARD_AUTHORITY_RULES;
+        String referenceRules = SystemPrompts.STORYBOARD_REFERENCE_RULES;
+        String manimCodegenPrompt = codeGenerationSystemPrompt("Shortest path", "Demo", "manim");
+        String manimScenePrompt = CodeGenerationPrompts.manimSceneCodeUserPrompt(
+                "{\"scene_id\":\"scene_1\"}", "scene_1", 0, 1);
+
+        assertTrue(authorityRules.contains("`object_registry` as the canonical authority"));
+        assertTrue(authorityRules.contains("scene `entering_objects`, `persistent_objects`, and `exiting_objects` as per-scene state patches"));
+        assertTrue(authorityRules.contains("`notes_for_codegen`"));
+        assertTrue(authorityRules.contains("hard semantic requirements"));
+        assertTrue(authorityRules.contains("Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as a hard geometric constraint"));
+        assertTrue(referenceRules.contains("prefer object_registry dependency facts over scene patch placement/style details"));
+        assertTrue(manimCodegenPrompt.contains("never hardcode a coordinate copied from placement"));
+        assertTrue(manimCodegenPrompt.contains("scene `notes_for_codegen`"));
+        assertTrue(manimCodegenPrompt.contains("mandatory scene-level implementation constraint"));
+        assertTrue(manimScenePrompt.contains("Do not instantiate it from hardcoded placement coordinates"));
+        assertTrue(manimScenePrompt.contains("Treat `notes_for_codegen` as mandatory"));
+    }
+
+    @Test
+    void codeEvaluationPromptsForbidTreatingScenePlacementAsHardConstraint() {
+        String manimReviewPrompt = CodeEvaluationPrompts.reviewUserPrompt(
+                "DemoScene",
+                "{\"scenes\":[]}",
+                "{}",
+                "from manim import *");
+        String geogebraReviewPrompt = CodeEvaluationPrompts.reviewUserPrompt(
+                "DemoFigure",
+                "{\"scenes\":[]}",
+                "{}",
+                "A=(0,0)",
+                "geogebra");
+
+        assertTrue(manimReviewPrompt.contains("use object_registry dependency facts as the semantic authority"));
+        assertTrue(manimReviewPrompt.contains("Never call a scene placement coordinate such as `x.value` or `y.value` a storyboard hard constraint"));
+        assertTrue(manimReviewPrompt.contains("verify the implementation by calculating the derived coordinates from its dependencies"));
+        assertTrue(manimReviewPrompt.contains("direct numeric coordinates are acceptable only when they match fixed source geometry"));
+        assertTrue(manimReviewPrompt.contains("notes_for_codegen"));
+        assertTrue(geogebraReviewPrompt.contains("use object_registry dependency facts as the semantic authority"));
+        assertTrue(geogebraReviewPrompt.contains("Never call a scene placement coordinate such as `x.value` or `y.value` a storyboard hard constraint"));
+        assertTrue(geogebraReviewPrompt.contains("verify the implementation by calculating the derived coordinates from its dependencies"));
+        assertTrue(geogebraReviewPrompt.contains("direct numeric coordinates are acceptable only when they match fixed source geometry"));
+        assertTrue(geogebraReviewPrompt.contains("notes_for_codegen"));
     }
 
     @Test
@@ -259,5 +324,14 @@ class PromptModulesTest {
     private String codeEvaluationSystemPrompt(String targetConcept, String targetDescription, String outputTarget) {
         return CodeEvaluationPrompts.buildReviewFixedContextPrompt(targetConcept, targetDescription, outputTarget)
                 + CodeEvaluationPrompts.buildReviewRulesPrompt(outputTarget);
+    }
+
+    private boolean isAscii(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) > 127) {
+                return false;
+            }
+        }
+        return true;
     }
 }

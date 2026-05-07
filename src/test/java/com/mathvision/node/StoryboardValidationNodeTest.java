@@ -212,6 +212,56 @@ class StoryboardValidationNodeTest {
     }
 
     @Test
+    void cleansUpStoryboardEvenWhenStaticValidationPasses() throws IOException {
+        StoryboardValidationNode node = new StoryboardValidationNode();
+        WorkflowConfig config = new WorkflowConfig();
+        config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_MANIM);
+
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(
+                        registryObject("title", "text", "Main title", null),
+                        registryObject("diagram", "region", "Main diagram", null)
+                ),
+                List.of(
+                        scenePatch("title", boxPlacement("screen", -1.5, 1.5, 2.1, 2.8)),
+                        scenePatch("diagram", boxPlacement("world", -1.2, 1.2, -1.0, 1.0))
+                ));
+        Storyboard cleanedStoryboard = buildSingleSceneStoryboard(
+                List.of(
+                        registryObject("title", "text", "Main title", null),
+                        registryObject("diagram", "region", "Main diagram", null)
+                ),
+                List.of(
+                        scenePatch("title", boxPlacement("screen", -1.5, 1.5, 2.1, 2.8)),
+                        scenePatch("diagram", boxPlacement("world", -1.2, 1.2, -1.0, 1.0))
+                ));
+        cleanedStoryboard.setContinuityPlan("Cleaned ids remain stable.");
+        RepeatingStoryboardAiClient aiClient = new RepeatingStoryboardAiClient(cleanedStoryboard);
+
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        ctx.put(WorkflowKeys.CONFIG, config);
+        ctx.put(WorkflowKeys.NARRATIVE, new Narrative("Demo concept", "Demo description", storyboard));
+        ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
+        ctx.put(WorkflowKeys.OUTPUT_DIR, tempDir);
+
+        Narrative prepNarrative = node.prep(ctx);
+        Narrative resultNarrative = node.exec(prepNarrative);
+        node.post(ctx, prepNarrative, resultNarrative);
+
+        assertEquals(1, aiClient.toolCalls.get());
+        assertEquals(3, aiClient.lastSnapshotSize);
+        assertEquals("Cleaned ids remain stable.", resultNarrative.getStoryboard().getContinuityPlan());
+
+        JsonNode report = JsonUtils.mapper().readTree(tempDir.resolve("3_storyboard_validation.json").toFile());
+        assertEquals(2, report.get("total_validation_events").asInt());
+        assertEquals("initial_validation", report.get("entries").get(0).get("phase").asText());
+        assertEquals("post_cleanup_validation", report.get("entries").get(1).get("phase").asText());
+        assertEquals(1, report.get("entries").get(1).get("cleanup_attempt").asInt());
+        assertTrue(report.get("fix_attempted").asBoolean());
+        assertTrue(report.get("fix_applied").asBoolean());
+    }
+
+    @Test
     void postWritesStoryboardValidationArtifactWithIssues() throws IOException {
         StoryboardValidationNode node = new StoryboardValidationNode();
         WorkflowConfig config = new WorkflowConfig();
@@ -273,6 +323,34 @@ class StoryboardValidationNodeTest {
         assertEquals("initial_validation", report.get("entries").get(0).get("phase").asText());
         assertEquals("post_cleanup_validation", report.get("entries").get(3).get("phase").asText());
         assertEquals(3, report.get("entries").get(3).get("cleanup_attempt").asInt());
+    }
+
+    @Test
+    void cleanupPromptIncludesAsciiNormalizationMap() {
+        StoryboardValidationNode node = new StoryboardValidationNode();
+        WorkflowConfig config = new WorkflowConfig();
+        config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_MANIM);
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(registryObject("title", "text", "Main title", null)),
+                List.of(scenePatch("title", boxPlacement("screen", 6.9, 7.5, 2.0, 2.7))));
+        RepeatingStoryboardAiClient aiClient = new RepeatingStoryboardAiClient(storyboard);
+
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        ctx.put(WorkflowKeys.CONFIG, config);
+        ctx.put(WorkflowKeys.NARRATIVE, new Narrative("Demo concept", "Demo description", storyboard));
+        ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
+
+        Narrative prepNarrative = node.prep(ctx);
+        node.exec(prepNarrative);
+
+        String prompt = aiClient.lastSnapshotText;
+        assertTrue(prompt.contains("ASCII repair is mandatory"));
+        assertTrue(prompt.contains("U+2019 -> `'`"));
+        assertTrue(prompt.contains("U+2014 -> `-`"));
+        assertTrue(prompt.contains("U+2260 -> `!=`"));
+        assertTrue(prompt.contains("becomes `PB' - a`"));
+        assertTrue(prompt.contains("becomes `P_test != P_min`"));
+        assertTrue(prompt.contains("no character code is greater than 0x7F"));
     }
 
     private StoryboardValidationNode prepareNode(String outputTarget) {
@@ -365,6 +443,8 @@ class StoryboardValidationNodeTest {
     private static final class RepeatingStoryboardAiClient implements AiClient {
         private final Storyboard storyboard;
         private final AtomicInteger toolCalls = new AtomicInteger();
+        private int lastSnapshotSize;
+        private String lastSnapshotText = "";
 
         private RepeatingStoryboardAiClient(Storyboard storyboard) {
             this.storyboard = storyboard;
@@ -379,6 +459,10 @@ class StoryboardValidationNodeTest {
         public CompletableFuture<JsonNode> chatWithToolsRawAsync(List<NodeConversationContext.Message> snapshot,
                                                                  String toolsJson) {
             toolCalls.incrementAndGet();
+            lastSnapshotSize = snapshot.size();
+            lastSnapshotText = snapshot.stream()
+                    .map(NodeConversationContext.Message::getContent)
+                    .reduce("", (left, right) -> left + "\n" + right);
             ObjectNode arguments = JsonUtils.mapper().createObjectNode();
             arguments.set("storyboard", JsonUtils.mapper().valueToTree(storyboard));
             return CompletableFuture.completedFuture(wrapToolResponse(arguments));

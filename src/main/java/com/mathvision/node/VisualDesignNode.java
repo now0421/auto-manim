@@ -106,7 +106,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
 
         int maxInputTokens = TargetDescriptionBuilder.resolveMaxInputTokens(workflowConfig);
         String workflowTarget = graph != null ? graph.getTargetConcept() : "";
-        this.conversationContext = new NodeConversationContext(maxInputTokens);
+        this.conversationContext = new NodeConversationContext(maxInputTokens, 2);
         String solutionChain = TargetDescriptionBuilder.buildSolutionChain(graph, null);
         this.conversationContext.setSystemMessage(VisualDesignPrompts.buildRulesPrompt(outputTarget));
         this.conversationContext.setFixedContextMessage(VisualDesignPrompts.buildFixedContextPrompt(

@@ -6,6 +6,8 @@ import com.mathvision.model.Narrative;
 import com.mathvision.model.Narrative.Storyboard;
 import com.mathvision.model.Narrative.StoryboardAction;
 import com.mathvision.model.Narrative.StoryboardObject;
+import com.mathvision.model.Narrative.StoryboardPlacement;
+import com.mathvision.model.Narrative.StoryboardPlacementAxis;
 import com.mathvision.model.Narrative.StoryboardScene;
 import com.mathvision.model.WorkflowActions;
 import com.mathvision.model.WorkflowKeys;
@@ -235,6 +237,37 @@ class CodeGenerationNodeRoutingTest {
         assertTrue(aiClient.lastSystemPrompt.contains("GeoGebra"));
     }
 
+    @Test
+    void enrichedRegistrySummaryDoesNotExposePlacementForDerivedObjects() {
+        StoryboardObject fixedPoint = new StoryboardObject();
+        fixedPoint.setId("A");
+        fixedPoint.setKind("point");
+        fixedPoint.setBehavior("static");
+        fixedPoint.setDependencyRelation("independent");
+        fixedPoint.setPlacement(placement(-3.0, 1.0));
+
+        StoryboardObject pmin = new StoryboardObject();
+        pmin.setId("Pmin");
+        pmin.setKind("point");
+        pmin.setBehavior("derived");
+        pmin.setDependencyRelation("intersection");
+        pmin.setDependencyObjects(List.of("ABprime", "l"));
+        pmin.setPlacement(placement(0.6, -1.0));
+
+        Map<String, StoryboardObject> registry = new LinkedHashMap<>();
+        registry.put(fixedPoint.getId(), fixedPoint);
+        registry.put(pmin.getId(), pmin);
+
+        String summary = CodeGenerationNode.formatRegistrySummary(registry, 4);
+
+        assertTrue(summary.contains("id=A"));
+        assertTrue(summary.contains("id=A, kind=point, content=, behavior=static, dependency_relation=independent, placement=world x=-3.0 y=1.0"));
+        assertTrue(summary.contains("id=Pmin"));
+        assertTrue(summary.contains("dependency_relation=intersection"));
+        assertFalse(summary.contains("id=Pmin, kind=point, content=, behavior=derived, dependency_objects=[ABprime, l], dependency_relation=intersection, placement="));
+        assertFalse(summary.contains("x=0.6 y=-1.0"));
+    }
+
     private static Narrative buildNarrative() {
         Narrative narrative = new Narrative();
         narrative.setTargetConcept("Demo concept");
@@ -305,6 +338,18 @@ class CodeGenerationNodeRoutingTest {
 
         storyboard.setScenes(List.of(scene));
         return storyboard;
+    }
+
+    private static StoryboardPlacement placement(double x, double y) {
+        StoryboardPlacement placement = new StoryboardPlacement();
+        placement.setCoordinateSpace("world");
+        StoryboardPlacementAxis xAxis = new StoryboardPlacementAxis();
+        xAxis.setValue(x);
+        StoryboardPlacementAxis yAxis = new StoryboardPlacementAxis();
+        yAxis.setValue(y);
+        placement.setX(xAxis);
+        placement.setY(yAxis);
+        return placement;
     }
 
     private static JsonNode codegenResponse(String code) {

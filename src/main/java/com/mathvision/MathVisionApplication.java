@@ -36,13 +36,13 @@ import java.util.Map;
  * CLI entry point for the MathVision workflow.
  *
  * Usage:
- *   java -jar mathvision.jar <concept> [options]
+ *   java -jar mathvision.jar <target-input> [options]
  *   java -jar mathvision.jar --problem-file <file> [options]
  *
  * Options:
  *   --workflow-config FILE     Workflow JSON config path
  *   --model-config FILE        Model JSON config path
- *   --output DIR               Output directory (default: ./output/<target>/<concept>)
+ *   --output DIR               Output directory (default: ./output/<target>/<target_input>)
  */
 public class MathVisionApplication {
 
@@ -55,11 +55,11 @@ public class MathVisionApplication {
             return;
         }
 
-        // If first arg doesn't start with '-', treat it as the concept
-        String concept = null;
+        // If first arg doesn't start with '-', treat it as the target input
+        String targetInput = null;
         int startIndex = 0;
         if (!args[0].startsWith("-")) {
-            concept = args[0];
+            targetInput = args[0];
             startIndex = 1;
         }
 
@@ -97,15 +97,15 @@ public class MathVisionApplication {
             }
         }
 
-        if (concept != null && problemFilePath != null) {
-            log.error("Provide either a concept argument or --problem-file, not both.");
+        if (targetInput != null && problemFilePath != null) {
+            log.error("Provide either a target input argument or --problem-file, not both.");
             printUsage();
             System.exit(1);
             return;
         }
 
         if (problemFilePath != null) {
-            concept = loadProblemFromFile(problemFilePath);
+            targetInput = loadProblemFromFile(problemFilePath);
         }
 
         if (fromGraphPath != null && fromCodePath != null) {
@@ -127,8 +127,8 @@ public class MathVisionApplication {
             }
             preloadedGraph = FileOutputService.loadKnowledgeGraph(graphFile);
             graphOutputDir = graphFile.toAbsolutePath().getParent();
-            if (concept == null) {
-                concept = preloadedGraph.getTargetConcept();
+            if (targetInput == null) {
+                targetInput = preloadedGraph.getTargetConcept();
             }
         }
 
@@ -143,15 +143,15 @@ public class MathVisionApplication {
             }
             preloadedCodeResult = FileOutputService.loadCodeResult(codeFile);
             codeOutputDir = codeFile.toAbsolutePath().getParent();
-            if (concept == null) {
-                concept = TextUtils.firstNonBlank(
+            if (targetInput == null) {
+                targetInput = TextUtils.firstNonBlank(
                         preloadedCodeResult.getTargetConcept(),
                         preloadedCodeResult.getSceneName());
             }
         }
 
-        if (concept == null) {
-            log.error("No concept provided. Specify a concept, use --problem-file, or use --from-graph/--from-code.");
+        if (targetInput == null) {
+            log.error("No target input provided. Specify a target input, use --problem-file, or use --from-graph/--from-code.");
             printUsage();
             System.exit(1);
             return;
@@ -175,18 +175,18 @@ public class MathVisionApplication {
         } else {
             outputDir = FileOutputService.createOutputDir(
                     Path.of("output"),
-                    concept,
+                    targetInput,
                     config.getOutputTarget());
         }
 
         log.info("============================================================");
         log.info("  MathVision Workflow");
-        log.info("  Concept:  {}", summarizeConceptForLog(concept));
+        log.info("  Input:    {}", summarizeTargetInputForLog(targetInput));
         if (problemFilePath != null) {
             log.info("  Source:   {}", Path.of(problemFilePath).toAbsolutePath().normalize());
         }
         if (preloadedGraph != null) {
-            log.info("  Stage 0:  [skipped – loaded from {}]", fromGraphPath);
+            log.info("  Stage 0:  [skipped - loaded from {}]", fromGraphPath);
         }
         if (preloadedCodeResult != null) {
             log.info("  Stage 0-2: [skipped - loaded from {}]", fromCodePath);
@@ -201,7 +201,7 @@ public class MathVisionApplication {
 
         // Build shared context
         Map<String, Object> ctx = new HashMap<>();
-        ctx.put(WorkflowKeys.CONCEPT, concept);
+        ctx.put(WorkflowKeys.TARGET_INPUT, targetInput);
         ctx.put(WorkflowKeys.CONFIG, config);
         ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
         ctx.put(WorkflowKeys.OUTPUT_DIR, outputDir);
@@ -294,8 +294,9 @@ public class MathVisionApplication {
                 + sceneEvaluationCalls;
 
         WorkflowConfig workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
-        summary.put("concept", ctx.get(WorkflowKeys.CONCEPT));
-        summary.put("input_mode", workflowConfig.getInputMode());
+        summary.put("target_input", ctx.get(WorkflowKeys.TARGET_INPUT));
+        summary.put("input_mode_configured", workflowConfig.getInputMode());
+        summary.put("input_mode_resolved", resolveSummaryInputMode(ctx, workflowConfig, graph));
         summary.put("output_target", workflowConfig.getOutputTarget());
         summary.put("model", workflowConfig.getModel());
         summary.put("provider", workflowConfig.getModelConfig().resolveProvider());
@@ -548,11 +549,26 @@ public class MathVisionApplication {
         }
     }
 
-    private static String summarizeConceptForLog(String concept) {
-        if (concept == null) {
+    private static String resolveSummaryInputMode(Map<String, Object> ctx,
+                                                  WorkflowConfig workflowConfig,
+                                                  KnowledgeGraph graph) {
+        Object resolvedMode = ctx.get(WorkflowKeys.RESOLVED_INPUT_MODE);
+        if (resolvedMode instanceof String && !((String) resolvedMode).isBlank()) {
+            return WorkflowConfig.normalizeInputMode((String) resolvedMode);
+        }
+        if (graph != null) {
+            return graph.isProblemMode()
+                    ? WorkflowConfig.INPUT_MODE_PROBLEM
+                    : WorkflowConfig.INPUT_MODE_CONCEPT;
+        }
+        return WorkflowConfig.normalizeInputMode(workflowConfig.getInputMode());
+    }
+
+    private static String summarizeTargetInputForLog(String targetInput) {
+        if (targetInput == null) {
             return "";
         }
-        String normalized = concept.replaceAll("\\s+", " ").trim();
+        String normalized = targetInput.replaceAll("\\s+", " ").trim();
         if (normalized.length() <= 120) {
             return normalized;
         }
@@ -561,11 +577,11 @@ public class MathVisionApplication {
 
     private static void printUsage() {
         System.out.println(
-                "Usage: mathvision [concept] [options]\n"
+                "Usage: mathvision [target-input] [options]\n"
                 + "   or: mathvision --problem-file FILE [options]\n"
                 + "\n"
                 + "Arguments:\n"
-                + "  concept                    Concept or problem to animate"
+                + "  target-input               Concept or problem to animate"
                 + " (required unless --problem-file/--from-graph/--from-code is used)\n"
                 + "\n"
                 + "Options:\n"
@@ -581,7 +597,7 @@ public class MathVisionApplication {
                 + "  --model-config FILE        Model JSON config path\n"
                 + "  --output DIR               Output directory"
                 + " (ignored when --from-graph/--from-code is used)\n"
-                + "                             default: ./output/<target>/<concept_timestamp>\n"
+                + "                             default: ./output/<target>/<target_input_timestamp>\n"
                 + "  -h, --help                 Show this help\n"
                 + "\n"
                 + "Environment variables:\n"

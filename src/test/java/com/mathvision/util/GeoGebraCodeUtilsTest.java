@@ -92,6 +92,27 @@ class GeoGebraCodeUtilsTest {
     }
 
     @Test
+    void validateGeoGebraRules_allowsSixDigitHexStyleColors() {
+        List<String> violations = GeoGebraCodeUtils.validateGeoGebraRules(
+                "SetColor(L, \"#1D4ED8\")");
+        assertTrue(violations.isEmpty());
+    }
+
+    @Test
+    void validateGeoGebraRules_rejectsNamedStyleColors() {
+        List<String> violations = GeoGebraCodeUtils.validateGeoGebraRules(
+                "SetColor(L, \"gray\")");
+        assertTrue(violations.stream().anyMatch(v -> v.contains("#RRGGBB")));
+    }
+
+    @Test
+    void validateGeoGebraRules_rejectsNumericStyleColors() {
+        List<String> violations = GeoGebraCodeUtils.validateGeoGebraRules(
+                "SetColor(L, 255, 0, 0)");
+        assertTrue(violations.stream().anyMatch(v -> v.contains("#RRGGBB")));
+    }
+
+    @Test
     void looksLikeCommandBlock_requiresMostlyCommandLikeLines() {
         assertTrue(GeoGebraCodeUtils.looksLikeCommandBlock(String.join("\n",
                 "A = (0, 0)",

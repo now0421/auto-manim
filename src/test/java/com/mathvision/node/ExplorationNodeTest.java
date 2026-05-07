@@ -159,7 +159,7 @@ class ExplorationNodeTest {
         Map<String, Object> ctx = new LinkedHashMap<>();
         ctx.put(WorkflowKeys.AI_CLIENT, aiClient);
         ctx.put(WorkflowKeys.CONFIG, config);
-        ctx.put(WorkflowKeys.CONCEPT, concept);
+        ctx.put(WorkflowKeys.TARGET_INPUT, concept);
         return ctx;
     }
 

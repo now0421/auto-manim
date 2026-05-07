@@ -152,11 +152,36 @@ class ManimCodeUtilsTest {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        dot = Dot()\n"
                 + "        dot.move_to(UP)\n"
-                + "        dot.set_color(RED)\n"
+                + "        dot.set_color(\"#EF4444\")\n"
                 + "        dot.next_to(other, RIGHT)\n"
                 + "        dot.add_updater(lambda m: m.move_to(UP))";
         List<String> violations = ManimCodeUtils.validateManimRules(code);
         assertTrue(violations.stream().noneMatch(v -> v.contains("Static rule violation")));
+    }
+
+    @Test
+    void validateManimRules_rejectsNamedColorConstants() {
+        String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
+                + "        dot = Dot(color=YELLOW)\n"
+                + "        dot.set_color(RED)";
+        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        assertTrue(violations.stream().anyMatch(v -> v.contains("named color constants")));
+    }
+
+    @Test
+    void validateManimRules_rejectsNamedSharedColorConstants() {
+        String code = "from manim import *\n\nBG = BLACK\nPRIMARY = BLUE\n\nclass MainScene(Scene):\n    def construct(self):\n"
+                + "        self.camera.background_color = BG";
+        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        assertTrue(violations.stream().anyMatch(v -> v.contains("named color constants")));
+    }
+
+    @Test
+    void validateManimRules_rejectsNonSixDigitHexColors() {
+        String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
+                + "        dot = Dot(color=\"#AAFFCCDD\")";
+        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        assertTrue(violations.stream().anyMatch(v -> v.contains("exactly 6 digits")));
     }
 
     @Test
@@ -207,9 +232,9 @@ class ManimCodeUtilsTest {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        label = Tex(r\"B^\\\\prime\")";
 
-        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        List<String> warnings = ManimCodeUtils.validateFullWarnings(code);
 
-        assertTrue(violations.stream().anyMatch(v -> v.contains("Tex constructor mismatch")));
+        assertTrue(warnings.stream().anyMatch(v -> v.contains("Tex constructor with math-mode content")));
     }
 
     @Test
@@ -217,9 +242,9 @@ class ManimCodeUtilsTest {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        label = Text(r\"\\\\theta\")";
 
-        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        List<String> warnings = ManimCodeUtils.validateFullWarnings(code);
 
-        assertTrue(violations.stream().anyMatch(v -> v.contains("Text constructor mismatch")));
+        assertTrue(warnings.stream().anyMatch(v -> v.contains("Text constructor with math-like content")));
     }
 
     @Test
@@ -227,8 +252,8 @@ class ManimCodeUtilsTest {
         String code = "from manim import *\n\nclass MainScene(Scene):\n    def construct(self):\n"
                 + "        label = MathTex(\"minimum distance equals segment AB\")";
 
-        List<String> violations = ManimCodeUtils.validateManimRules(code);
+        List<String> warnings = ManimCodeUtils.validateFullWarnings(code);
 
-        assertTrue(violations.stream().anyMatch(v -> v.contains("MathTex constructor mismatch")));
+        assertTrue(warnings.stream().anyMatch(v -> v.contains("MathTex constructor with plain-language content")));
     }
 }

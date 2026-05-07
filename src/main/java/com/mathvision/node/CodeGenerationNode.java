@@ -26,6 +26,7 @@ import com.mathvision.util.JsonUtils;
 import com.mathvision.util.TimeUtils;
 import com.mathvision.util.ManimCodeUtils;
 import com.mathvision.util.NodeConversationContext;
+import com.mathvision.util.StoryboardCodegenSemantics;
 import com.mathvision.util.StoryboardPatchResolver;
 import com.mathvision.util.TargetDescriptionBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -103,7 +104,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
         if (this.conversationContext == null) {
             int maxInputTokens = TargetDescriptionBuilder.resolveMaxInputTokens(workflowConfig);
-            this.conversationContext = new NodeConversationContext(maxInputTokens);
+            this.conversationContext = new NodeConversationContext(maxInputTokens, 3);
         }
 
         Narrative narrative = input.narrative();
@@ -456,7 +457,8 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             if (obj.getConstraintNote() != null && !obj.getConstraintNote().isBlank()) {
                 sb.append(", constraint_note=").append(truncate(obj.getConstraintNote(), 80));
             }
-            if (obj.getPlacement() != null && obj.getPlacement().hasData()) {
+            if (!StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(obj)
+                    && obj.getPlacement() != null && obj.getPlacement().hasData()) {
                 sb.append(", placement=").append(formatPlacementSummary(obj.getPlacement()));
             }
             if (obj.getStyle() != null && !obj.getStyle().isEmpty()) {

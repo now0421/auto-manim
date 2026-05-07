@@ -20,7 +20,7 @@ import java.util.TreeMap;
  *   <li><b>pinnedMessages</b> — system rules and fixed context that are never trimmed.
  *       Always prepended to snapshots in the order: rules first, fixed context second.</li>
  *   <li><b>rollingMessages</b> — dynamic conversation turns that are trimmed from the
- *       front when the token budget is exceeded.</li>
+ *       front when either the round limit or the token budget is exceeded.</li>
  * </ul>
  *
  * Snapshot assembly order: pinnedMessages → rollingMessages → current user message.
@@ -35,6 +35,7 @@ public class NodeConversationContext {
     private static final double SAFETY_MARGIN = 0.9;
 
     private final int maxInputTokens;
+    private final int maxRollingRounds;
     private final List<Message> pinnedMessages = new ArrayList<>();
     private final List<Message> rollingMessages = new ArrayList<>();
     private final Map<Long, PendingTurn> pendingTurns = new TreeMap<>();
@@ -42,7 +43,17 @@ public class NodeConversationContext {
     private long nextCommittedTurnSequence = 0L;
 
     public NodeConversationContext(int maxInputTokens) {
+        this(maxInputTokens, 0);
+    }
+
+    /**
+     * @param maxInputTokens   token budget for the combined message list
+     * @param maxRollingRounds maximum number of conversation rounds (user+assistant pairs)
+     *                         to retain in rollingMessages. 0 = unlimited (budget-only trimming).
+     */
+    public NodeConversationContext(int maxInputTokens, int maxRollingRounds) {
         this.maxInputTokens = maxInputTokens;
+        this.maxRollingRounds = maxRollingRounds;
     }
 
     // ---- Pinned message management ----
@@ -193,12 +204,65 @@ public class NodeConversationContext {
     /**
      * Trims the oldest rolling turns until the total fits within
      * {@code maxInputTokens * SAFETY_MARGIN}. Pinned messages are never removed.
+     * Round-limit trimming is applied first, then budget trimming as a safety net.
      */
     public synchronized void trimToFitBudget() {
         trimRollingToFitBudgetLocked();
     }
 
+    /**
+     * Removes the oldest rolling turns until the number of conversation rounds
+     * (user+assistant pairs) does not exceed {@code maxRollingRounds}.
+     * No-op when {@code maxRollingRounds} is 0 (unlimited).
+     */
+    private void trimRollingToMaxRoundsLocked() {
+        if (maxRollingRounds <= 0) {
+            return;
+        }
+
+        int currentRounds = countRoundsLocked();
+        if (currentRounds <= maxRollingRounds) {
+            return;
+        }
+
+        int removedMessages = 0;
+        int roundsToRemove = currentRounds - maxRollingRounds;
+        for (int i = 0; i < roundsToRemove && !rollingMessages.isEmpty(); i++) {
+            rollingMessages.remove(0);
+            removedMessages++;
+
+            if (!rollingMessages.isEmpty()
+                    && "assistant".equals(rollingMessages.get(0).role)) {
+                rollingMessages.remove(0);
+                removedMessages++;
+            }
+        }
+
+        if (removedMessages > 0) {
+            log.info("Rolling context trimmed by round limit: {} messages removed, "
+                            + "rounds {} -> {} (maxRollingRounds={})",
+                    removedMessages, currentRounds, countRoundsLocked(), maxRollingRounds);
+        }
+    }
+
+    /**
+     * Counts the number of complete conversation rounds (user+assistant pairs)
+     * in the rolling messages list.
+     */
+    private int countRoundsLocked() {
+        int rounds = 0;
+        for (Message m : rollingMessages) {
+            if ("user".equals(m.role)) {
+                rounds++;
+            }
+        }
+        return rounds;
+    }
+
     private void trimRollingToFitBudgetLocked() {
+        // Apply round-limit trimming first, then budget trimming as a safety net.
+        trimRollingToMaxRoundsLocked();
+
         int effectiveBudget = (int) (maxInputTokens * SAFETY_MARGIN);
         int pinnedTokens = 0;
         for (Message m : pinnedMessages) {

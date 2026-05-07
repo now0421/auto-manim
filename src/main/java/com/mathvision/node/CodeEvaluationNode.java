@@ -182,7 +182,16 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         initializeConversationContexts(codeResult, sceneName);
 
         StaticAnalysis initialStatic = analyzeStaticQuality(narrative, codeResult, currentCode);
-        ReviewSnapshot initialReview = requestCodeReview(narrative, codeResult, sceneName, currentCode, initialStatic);
+
+        // Static pre-screen: if blocking findings exist, skip AI review and use fallback
+        // to save tokens and avoid redundant review of code that cannot render.
+        ReviewSnapshot initialReview;
+        if (initialStatic.hasBlockingFindings()) {
+            log.info("Static analysis found blocking issues for scene {}, skipping AI review", sceneName);
+            initialReview = fallbackReviewFromStaticAnalysis(initialStatic);
+        } else {
+            initialReview = requestCodeReview(narrative, codeResult, sceneName, currentCode, initialStatic);
+        }
 
         result.setInitialStaticAnalysis(initialStatic);
         result.setInitialReview(initialReview);
@@ -319,7 +328,8 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                     aiClient,
                     log,
                     sceneName,
-                    reviewConversationContext,
+                    reviewConversationContext.getPinnedMessages(),
+                    reviewConversationContext.getMaxInputTokens(),
                     userPrompt,
                     ToolSchemas.CODE_REVIEW,
                     () -> toolCalls++
@@ -450,7 +460,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             return false;
         }
         return review.isApprovedForRender()
-                && !hasFailedRuleChecks(review)
+                && !hasMandatoryFailedRuleChecks(review)
                 && review.getBlockingIssues().isEmpty();
     }
 
@@ -464,8 +474,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         List<String> reasons = new ArrayList<>();
         if (analysis != null) {
             for (StaticFinding finding : analysis.getFindings()) {
-                if ("fail".equalsIgnoreCase(finding.getSeverity())
-                        || "warn".equalsIgnoreCase(finding.getSeverity())) {
+                if ("fail".equalsIgnoreCase(finding.getSeverity())) {
                     addReason(reasons, finding.getSummary());
                 }
             }
@@ -474,7 +483,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         if (review != null) {
             if (review.getRuleChecks() != null) {
                 for (RuleCheck check : review.getRuleChecks()) {
-                    if (check == null || !isFailedRuleCheck(check)) {
+                    if (check == null || !isFailedRuleCheck(check) || !isMandatorySeverity(check)) {
                         continue;
                     }
                     String summary = check.getRequirement();
@@ -645,8 +654,28 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 .anyMatch(this::isFailedRuleCheck);
     }
 
+    private boolean hasMandatoryFailedRuleChecks(ReviewSnapshot review) {
+        if (review == null || review.getRuleChecks() == null) {
+            return false;
+        }
+        return review.getRuleChecks().stream()
+                .anyMatch(check -> isFailedRuleCheck(check) && isMandatorySeverity(check));
+    }
+
     private boolean isFailedRuleCheck(RuleCheck check) {
         return check != null && "fail".equalsIgnoreCase(check.getStatus());
+    }
+
+    private boolean isMandatorySeverity(RuleCheck check) {
+        if (check == null) {
+            return false;
+        }
+        String severity = check.getSeverity();
+        if (severity == null || severity.isBlank()) {
+            // Legacy rules without severity default to mandatory for backward compatibility
+            return true;
+        }
+        return "mandatory".equalsIgnoreCase(severity.trim());
     }
 
     private int resolveMaxCodeFixAttempts(WorkflowConfig config) {
@@ -719,6 +748,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                     check.setRequirement(readText(item, "requirement"));
                     check.setStatus(readText(item, "status"));
                     check.setEvidence(readText(item, "evidence"));
+                    check.setSeverity(normalizeSeverityText(readText(item, "severity")));
                     if (!check.getRuleId().isBlank()
                             || !check.getRequirement().isBlank()
                             || !check.getStatus().isBlank()) {
@@ -744,10 +774,11 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
             String requirement = normalizeRuleText(check.getRequirement());
             String status = normalizeRuleStatus(check.getStatus());
             String evidence = normalizeRuleText(check.getEvidence());
+            String severity = normalizeSeverityText(check.getSeverity());
             if (ruleId.isBlank() && requirement.isBlank()) {
                 continue;
             }
-            normalized.add(new RuleCheck(ruleId, requirement, status, evidence));
+            normalized.add(new RuleCheck(ruleId, requirement, status, evidence, severity));
         }
         return normalized;
     }
@@ -785,6 +816,18 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
     private String normalizeRuleText(String text) {
         return text != null ? text.trim() : "";
+    }
+
+    private String normalizeSeverityText(String severity) {
+        if (severity == null || severity.isBlank()) {
+            return "";
+        }
+        String normalized = severity.trim().toLowerCase(Locale.ROOT);
+        if ("mandatory".equals(normalized) || "recommended".equals(normalized) || "advisory".equals(normalized)) {
+            return normalized;
+        }
+        // Fallback: leave as-is for unrecognized values
+        return severity.trim();
     }
 
     private ReviewSnapshot parseReviewSnapshot(JsonNode toolData) {
@@ -848,7 +891,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         if (snapshot.getRevisionDirectives() == null) {
             snapshot.setRevisionDirectives(new ArrayList<>());
         }
-        if (hasFailedRuleChecks(snapshot) || !snapshot.getBlockingIssues().isEmpty()) {
+        if (hasMandatoryFailedRuleChecks(snapshot) || !snapshot.getBlockingIssues().isEmpty()) {
             snapshot.setApprovedForRender(false);
         }
         return snapshot;
@@ -862,14 +905,15 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
         for (StaticFinding finding : analysis.getFindings()) {
             boolean blocking = "fail".equalsIgnoreCase(finding.getSeverity())
-                    || "three_d_scene_required".equalsIgnoreCase(finding.getRuleId())
-                    || "three_d_overlay_unfixed".equalsIgnoreCase(finding.getRuleId());
+                    || "three_d_scene_required".equalsIgnoreCase(finding.getRuleId());
             String status = blocking ? "fail" : "warn";
+            String severity = isMandatoryStaticFinding(finding) ? "mandatory" : "recommended";
             ruleChecks.add(new RuleCheck(
                     finding.getRuleId(),
                     finding.getSummary(),
                     status,
-                    finding.getEvidence()));
+                    finding.getEvidence(),
+                    severity));
             if (blocking) {
                 blockingIssues.add(finding.getSummary());
             }
@@ -881,7 +925,8 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                     "static_review",
                     "No static validation or 3D-readability findings were produced.",
                     "pass",
-                    "Static analysis completed without findings."));
+                    "Static analysis completed without findings.",
+                    "mandatory"));
         }
 
         review.setRuleChecks(ruleChecks);
@@ -890,6 +935,18 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         review.setSummary("Fallback Stage 3 rule-compliance review synthesized from static validation and 3D-readability heuristics.");
         review.setApprovedForRender(blockingIssues.isEmpty());
         return review;
+    }
+
+    private boolean isMandatoryStaticFinding(StaticFinding finding) {
+        if (finding == null) {
+            return false;
+        }
+        if ("fail".equalsIgnoreCase(finding.getSeverity())) {
+            return true;
+        }
+        String ruleId = finding.getRuleId();
+        return "three_d_scene_required".equalsIgnoreCase(ruleId)
+                || "static_validation".equalsIgnoreCase(ruleId);
     }
 
     private void addStoryboardDrivenFindings(StaticAnalysis analysis, Storyboard storyboard) {
@@ -905,14 +962,14 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         }
 
         if (analysis.getThreeDStoryboardSceneCount() > 0 && !analysis.isThreeDScene()) {
-            addFinding(analysis, "three_d_scene_required", "warn",
+            addFinding(analysis, "three_d_scene_required", "fail",
                     "The storyboard requests 3D staging, but the code does not use `ThreeDScene`.",
                     String.format(Locale.ROOT,
                             "storyboard_3d_scenes=%d, code_uses_threedscene=%s",
                             analysis.getThreeDStoryboardSceneCount(), analysis.isThreeDScene()));
         } else if (analysis.getThreeDStoryboardSceneCount() > 0
                 && analysis.getCameraOrientationCount() == 0) {
-            addFinding(analysis, "three_d_camera_plan_missing", "warn",
+            addFinding(analysis, "three_d_camera_set", "warn",
                     "The storyboard includes 3D scenes, but the code never sets an explicit camera view.",
                     String.format(Locale.ROOT,
                             "storyboard_3d_scenes=%d, camera_orientation_calls=%d",
@@ -922,7 +979,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         if (dynamicThreeDCameraRequested
                 && analysis.getCameraOrientationCount() == 0
                 && analysis.getCameraMotionCount() == 0) {
-            addFinding(analysis, "three_d_camera_motion_missing", "warn",
+            addFinding(analysis, "three_d_camera_set", "warn",
                     "The storyboard requests 3D camera control, but the code shows no matching camera calls.",
                     String.format(Locale.ROOT,
                             "camera_orientation_calls=%d, camera_motion_calls=%d",
@@ -933,7 +990,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 && analysis.getMathTexCount() + analysis.getTextCount() > 0
                 && analysis.getFixedInFrameCount() == 0
                 && analysis.getFixedOrientationCount() == 0) {
-            addFinding(analysis, dynamicThreeDCameraRequested ? "three_d_overlay_unfixed" : "three_d_overlay_missing",
+            addFinding(analysis, dynamicThreeDCameraRequested ? "three_d_overlay_fixed" : "three_d_overlay_fixed",
                     "warn",
                     dynamicThreeDCameraRequested
                             ? "3D scenes with camera motion should keep explanatory text fixed in frame."
@@ -972,7 +1029,7 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
 
         if (analysis.getThreeDObjectCount() > 0 && !analysis.isThreeDScene()
                 && !hasRule(analysis, "three_d_scene_required")) {
-            addFinding(analysis, "three_d_scene_required", "warn",
+            addFinding(analysis, "three_d_scene_required", "fail",
                     "The code creates 3D objects but does not declare a `ThreeDScene`.",
                     String.format(Locale.ROOT,
                             "three_d_objects=%d, code_uses_threedscene=%s",
@@ -980,8 +1037,8 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
         } else if (analysis.isThreeDScene()
                 && analysis.getThreeDObjectCount() > 0
                 && analysis.getCameraOrientationCount() == 0
-                && !hasRule(analysis, "three_d_camera_plan_missing")) {
-            addFinding(analysis, "three_d_camera_plan_missing", "warn",
+                && !hasRule(analysis, "three_d_camera_set")) {
+            addFinding(analysis, "three_d_camera_set", "warn",
                     "The code uses 3D objects but never sets an explicit camera orientation.",
                     String.format(Locale.ROOT,
                             "three_d_objects=%d, camera_orientation_calls=%d",
@@ -993,8 +1050,8 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 && analysis.getCameraMotionCount() > 0
                 && analysis.getFixedInFrameCount() == 0
                 && analysis.getFixedOrientationCount() == 0
-                && !hasRule(analysis, "three_d_overlay_unfixed")) {
-            addFinding(analysis, "three_d_overlay_unfixed", "warn",
+                && !hasRule(analysis, "three_d_overlay_fixed")) {
+            addFinding(analysis, "three_d_overlay_fixed", "warn",
                     "Camera motion in a 3D scene should not leave explanatory text rotating with the world.",
                     String.format(Locale.ROOT,
                             "camera_motion_calls=%d, fixed_in_frame=%d, fixed_orientation=%d, text_like=%d",
@@ -1006,9 +1063,8 @@ public class CodeEvaluationNode extends PocketFlow.Node<CodeEvaluationNode.CodeE
                 && analysis.getMathTexCount() + analysis.getTextCount() > 0
                 && analysis.getFixedInFrameCount() == 0
                 && analysis.getFixedOrientationCount() == 0
-                && !hasRule(analysis, "three_d_overlay_missing")
-                && !hasRule(analysis, "three_d_overlay_unfixed")) {
-            addFinding(analysis, "three_d_overlay_missing", "warn",
+                && !hasRule(analysis, "three_d_overlay_fixed")) {
+            addFinding(analysis, "three_d_overlay_fixed", "warn",
                     "3D explanatory text is easier to read when it is fixed in frame or fixed in orientation.",
                     String.format(Locale.ROOT,
                             "fixed_in_frame=%d, fixed_orientation=%d, text_like=%d",
