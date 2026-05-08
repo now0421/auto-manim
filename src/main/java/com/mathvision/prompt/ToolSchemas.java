@@ -651,7 +651,7 @@ public final class ToolSchemas {
             + "    \"parameters\": {"
             + "      \"type\": \"object\","
             + "      \"properties\": {"
-            + "        \"sceneCode\": { \"type\": \"string\", \"description\": \"Complete method code for this scene\" },"
+            + "        \"sceneCode\": { \"type\": \"string\", \"description\": \"Method body or section code for this scene\" },"
             + "        \"sceneMethodName\": { \"type\": \"string\", \"description\": \"Method name for this scene\" }"
             + "      },"
             + "      \"required\": [\"sceneCode\"]"

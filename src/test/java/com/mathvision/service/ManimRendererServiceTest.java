@@ -4,9 +4,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -141,5 +146,94 @@ class ManimRendererServiceTest {
         assertFalse(result.success());
         assertTrue(result.stderr().contains("stop after inspection"));
         assertFalse(Files.exists(tempDir.resolve("scene_render.py")));
+    }
+
+    @Test
+    void fatalTracebackOnStderrTerminatesRenderBeforeTimeout() {
+        BlockingProcess process = new BlockingProcess(String.join("\n",
+                "Animation 7: FadeIn(Text('AP + PB = 0.0 km')):   0%|          | 0/12 [00:00<?, ?it/s]",
+                "Traceback (most recent call last):",
+                "  File \"scene_render.py\", line 114, in scene_2_drag_p_and_watch_the_path",
+                "ValueError: zip() argument 2 is longer than argument 1"));
+
+        ManimRendererService service = new ManimRendererService() {
+            @Override
+            protected Process startProcess(List<String> cmd, Path workingDir, Path geometryOutputPath) {
+                return process;
+            }
+        };
+
+        long startedAt = System.nanoTime();
+        ManimRendererService.RenderAttemptResult result = service.render(
+                "from manim import *\n\nclass DemoScene(Scene):\n    def construct(self):\n        pass\n",
+                "DemoScene",
+                "low",
+                tempDir
+        );
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+        assertFalse(result.success());
+        assertFalse(result.timedOut());
+        assertTrue(process.destroyed);
+        assertTrue(elapsedMillis < 2_000, "fatal stderr should not wait for the render timeout");
+        assertTrue(result.stderr().contains("ValueError: zip() argument 2 is longer than argument 1"));
+        assertTrue(result.stderr().contains("Fatal Manim traceback detected in stderr"));
+    }
+
+    private static final class BlockingProcess extends Process {
+        private final InputStream stdout = new ByteArrayInputStream(new byte[0]);
+        private final InputStream stderr;
+        private final CountDownLatch destroyedLatch = new CountDownLatch(1);
+        private volatile boolean destroyed;
+
+        private BlockingProcess(String stderr) {
+            this.stderr = new ByteArrayInputStream(stderr.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        @Override
+        public OutputStream getOutputStream() {
+            return OutputStream.nullOutputStream();
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return stdout;
+        }
+
+        @Override
+        public InputStream getErrorStream() {
+            return stderr;
+        }
+
+        @Override
+        public int waitFor() throws InterruptedException {
+            destroyedLatch.await();
+            return 1;
+        }
+
+        @Override
+        public boolean waitFor(long timeout, TimeUnit unit) throws InterruptedException {
+            return destroyedLatch.await(timeout, unit);
+        }
+
+        @Override
+        public int exitValue() {
+            if (!destroyed) {
+                throw new IllegalThreadStateException("process still running");
+            }
+            return 1;
+        }
+
+        @Override
+        public void destroy() {
+            destroyed = true;
+            destroyedLatch.countDown();
+        }
+
+        @Override
+        public Process destroyForcibly() {
+            destroy();
+            return this;
+        }
     }
 }

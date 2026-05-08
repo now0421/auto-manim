@@ -50,6 +50,7 @@ import java.util.concurrent.CompletionException;
 public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeGenerationInput, CodeResult, String> {
 
     private static final Logger log = LoggerFactory.getLogger(CodeGenerationNode.class);
+    static final String MANIM_SCENE_METHODS_MARKER = "# __SCENE_METHODS__";
 
     private AiClient aiClient;
     private WorkflowConfig workflowConfig;
@@ -290,10 +291,16 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             String sceneCode = sceneResult != null ? sceneResult.getExtractedText() : "";
             JsonNode scenePayload = sceneResult != null ? sceneResult.getPayload() : null;
             if (scenePayload != null && !isGeoGebra && scenePayload.has("sceneMethodName")) {
-                    String returnedName = scenePayload.get("sceneMethodName").asText("");
-                    if (!returnedName.isBlank()) {
-                        sceneName = returnedName;
-                    }
+                String returnedName = scenePayload.get("sceneMethodName").asText("");
+                if (!returnedName.isBlank() && !returnedName.equals(sceneName)) {
+                    log.debug("  Ignoring returned Manim scene method name '{}' for skeleton method '{}'",
+                            returnedName, sceneName);
+                }
+            } else if (scenePayload != null && isGeoGebra && scenePayload.has("sceneMethodName")) {
+                String returnedName = scenePayload.get("sceneMethodName").asText("");
+                if (!returnedName.isBlank()) {
+                    sceneName = returnedName;
+                }
             }
 
             entries.add(new SceneCodeEntry(i, scene.getSceneId(), sceneName, sceneCode, false));
@@ -304,10 +311,162 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         CodeResult result = new CodeResult();
         result.setHeaderCode(headerCode);
         result.setSceneEntries(entries);
-        result.rebuildGeneratedCode();
+        if (isGeoGebra) {
+            result.rebuildGeneratedCode();
+        } else {
+            result.setGeneratedCode(assembleManimPerSceneCode(headerCode, entries));
+        }
 
         log.info("  Per-scene assembly complete: {} total lines", result.codeLineCount());
         return result;
+    }
+
+    static String assembleManimPerSceneCode(String headerCode, List<SceneCodeEntry> entries) {
+        String skeleton = ManimCodeUtils.extractCode(headerCode);
+        String methods = buildManimSceneMethods(entries);
+        if (skeleton == null || skeleton.isBlank()) {
+            return methods;
+        }
+
+        String normalizedSkeleton = trimTrailingWhitespaceLines(skeleton);
+        if (normalizedSkeleton.contains(MANIM_SCENE_METHODS_MARKER)) {
+            return normalizedSkeleton.replace(MANIM_SCENE_METHODS_MARKER, methods.trim());
+        }
+
+        if (methods.isBlank()) {
+            return normalizedSkeleton;
+        }
+        return normalizedSkeleton + "\n\n" + methods;
+    }
+
+    private static String buildManimSceneMethods(List<SceneCodeEntry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (SceneCodeEntry entry : entries) {
+            if (entry == null || entry.getSceneMethodName() == null || entry.getSceneMethodName().isBlank()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            String methodName = sanitizeManimMethodName(entry.getSceneMethodName());
+            String body = normalizeManimSceneMethodBody(methodName, entry.getSceneCode());
+            sb.append("    def ").append(methodName).append("(self):\n")
+                    .append(indentMethodBody(body));
+        }
+        return sb.toString();
+    }
+
+    private static String sanitizeManimMethodName(String methodName) {
+        String normalized = methodName != null ? methodName.trim() : "";
+        if (normalized.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            return normalized;
+        }
+        String sanitized = normalized.replaceAll("[^A-Za-z0-9_]", "_")
+                .replaceAll("^[^A-Za-z_]+", "")
+                .replaceAll("_+", "_");
+        return sanitized.isBlank() ? "scene_method" : sanitized;
+    }
+
+    private static String normalizeManimSceneMethodBody(String methodName, String sceneCode) {
+        String code = ManimCodeUtils.extractCode(sceneCode);
+        if (code == null || code.isBlank()) {
+            return "pass";
+        }
+        String normalized = code.replace("\r\n", "\n").replace('\r', '\n').replace("\t", "    ").trim();
+        String[] lines = normalized.split("\n", -1);
+        int defLine = findFirstMethodDefinitionLine(lines);
+        if (defLine >= 0) {
+            StringBuilder body = new StringBuilder();
+            for (int i = defLine + 1; i < lines.length; i++) {
+                body.append(lines[i]);
+                if (i < lines.length - 1) {
+                    body.append('\n');
+                }
+            }
+            normalized = dedentBlock(body.toString()).trim();
+        } else {
+            normalized = dedentBlock(normalized).trim();
+        }
+        return normalized.isBlank() ? "pass" : normalized;
+    }
+
+    private static int findFirstMethodDefinitionLine(String[] lines) {
+        if (lines == null) {
+            return -1;
+        }
+        for (int i = 0; i < lines.length; i++) {
+            String trimmed = lines[i] != null ? lines[i].trim() : "";
+            if (trimmed.matches("def\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\(\\s*self\\s*\\)\\s*:")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String dedentBlock(String block) {
+        if (block == null || block.isBlank()) {
+            return "";
+        }
+        String normalized = block.replace("\r\n", "\n").replace('\r', '\n');
+        String[] lines = normalized.split("\n", -1);
+        int minIndent = Integer.MAX_VALUE;
+        for (String line : lines) {
+            if (line == null || line.isBlank()) {
+                continue;
+            }
+            int indent = countLeadingSpaces(line);
+            minIndent = Math.min(minIndent, indent);
+        }
+        if (minIndent == Integer.MAX_VALUE || minIndent == 0) {
+            return normalized;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (line != null && line.length() >= minIndent) {
+                sb.append(line.substring(minIndent));
+            } else if (line != null) {
+                sb.append(line.trim());
+            }
+            if (i < lines.length - 1) {
+                sb.append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String indentMethodBody(String body) {
+        String normalized = body == null || body.isBlank() ? "pass" : body;
+        String[] lines = normalized.split("\n", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            sb.append("        ");
+            if (lines[i] != null) {
+                sb.append(lines[i]);
+            }
+            if (i < lines.length - 1) {
+                sb.append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    private static int countLeadingSpaces(String line) {
+        int count = 0;
+        while (count < line.length() && line.charAt(count) == ' ') {
+            count++;
+        }
+        return count;
+    }
+
+    private static String trimTrailingWhitespaceLines(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replaceAll("[\\s&&[^\\n]]+$", "").replaceAll("(\\R\\s*)+$", "");
     }
 
     @Override

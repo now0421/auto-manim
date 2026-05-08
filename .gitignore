@@ -49,10 +49,12 @@ tmp/
 temp/
 
 # Manim-generated artifacts
+media/
 **/media/
 **/partial_movie_files/
 **/giffolder/
 **/scene_render.py
+tmp_manim*/
 *.mp4
 *.gif
 *.png
@@ -62,4 +64,13 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.venv/
+venv/
+*.egg-info/
+
+# CodeBuddy project data
+.codebuddy/
+
+# Maven wrapper jar (downloaded at build time)
+.mvn/wrapper/maven-wrapper.jar
 

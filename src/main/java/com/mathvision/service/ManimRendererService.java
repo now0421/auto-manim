@@ -18,6 +18,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 /**
  * Executes the Manim CLI to render Manim Python code into video.
@@ -34,6 +37,10 @@ public class ManimRendererService {
     private static final String GEOMETRY_EXPORT_OUTPUT_FILE = "5_mobject_geometry.json";
     private static final String GEOMETRY_EXPORT_HELPER_RESOURCE = "/render/mathvision_geometry_export.py";
     private static final String GEOMETRY_EXPORT_ENV = "MATHVISION_GEOMETRY_PATH";
+    private static final String FATAL_STDERR_MESSAGE = "Fatal Manim traceback detected in stderr";
+    private static final Pattern PYTHON_EXCEPTION_LINE = Pattern.compile(
+            "^\\s*[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception):\\s+.+"
+    );
 
     /**
      * Result of a single Manim render attempt.
@@ -111,13 +118,16 @@ public class ManimRendererService {
 
             Process process = startProcess(cmd, normalizedOutputDir,
                     geometryHelperFile != null ? geometryOutputFile : null);
+            AtomicBoolean fatalStderrDetected = new AtomicBoolean(false);
+            AtomicReference<String> fatalStderrLine = new AtomicReference<>();
 
             ExecutorService streamReaders = Executors.newFixedThreadPool(2);
             Future<String> stdoutFuture = streamReaders.submit(
                     () -> readStream(process.getInputStream(), "stdout", false)
             );
             Future<String> stderrFuture = streamReaders.submit(
-                    () -> readStream(process.getErrorStream(), "stderr", true)
+                    () -> readStream(process.getErrorStream(), "stderr", true,
+                            process, fatalStderrDetected, fatalStderrLine)
             );
 
             boolean finished = process.waitFor(RENDER_TIMEOUT_MINUTES, TimeUnit.MINUTES);
@@ -131,6 +141,13 @@ public class ManimRendererService {
             String stderr = awaitCapturedOutput(stderrFuture, "stderr");
             streamReaders.shutdown();
             String geometryPath = readGeneratedGeometryPath(geometryOutputFile);
+
+            if (fatalStderrDetected.get()) {
+                String failureMessage = appendMessage(stderr,
+                        FATAL_STDERR_MESSAGE + ": " + fatalStderrLine.get());
+                log.warn("Manim render failed after fatal stderr: {}", fatalStderrLine.get());
+                return new RenderAttemptResult(false, stdout, failureMessage, null, geometryPath);
+            }
 
             if (!finished) {
                 process.destroyForcibly();
@@ -333,19 +350,69 @@ public class ManimRendererService {
     }
 
     private String readStream(java.io.InputStream is, String streamName, boolean errorStream) throws IOException {
+        return readStream(is, streamName, errorStream, null, null, null);
+    }
+
+    private String readStream(java.io.InputStream is, String streamName, boolean errorStream,
+                              Process process, AtomicBoolean fatalStderrDetected,
+                              AtomicReference<String> fatalStderrLine) throws IOException {
         StringBuilder sb = new StringBuilder();
         try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
+            boolean tracebackSeen = false;
             while ((line = br.readLine()) != null) {
                 sb.append(line).append("\n");
                 if (errorStream) {
                     log.warn("[manim:{}] {}", streamName, line);
+                    if (line.contains("Traceback (most recent call last)")) {
+                        tracebackSeen = true;
+                    } else if (tracebackSeen && isPythonExceptionLine(line)
+                            && fatalStderrDetected != null
+                            && fatalStderrDetected.compareAndSet(false, true)) {
+                        fatalStderrLine.set(line.strip());
+                        terminateProcessTree(process, FATAL_STDERR_MESSAGE);
+                    }
                 } else {
                     log.info("[manim:{}] {}", streamName, line);
                 }
             }
         }
         return sb.toString();
+    }
+
+    private boolean isPythonExceptionLine(String line) {
+        return PYTHON_EXCEPTION_LINE.matcher(stripRichConsoleLine(line)).matches();
+    }
+
+    private String stripRichConsoleLine(String line) {
+        if (line == null) {
+            return "";
+        }
+        String stripped = line.strip();
+        if (stripped.startsWith("│") && stripped.endsWith("│") && stripped.length() > 2) {
+            stripped = stripped.substring(1, stripped.length() - 1).strip();
+        }
+        return stripped;
+    }
+
+    private void terminateProcessTree(Process process, String reason) {
+        if (process == null) {
+            return;
+        }
+
+        log.warn("Terminating Manim render process: {}", reason);
+        try {
+            process.toHandle().descendants().forEach(handle -> {
+                try {
+                    handle.destroyForcibly();
+                } catch (UnsupportedOperationException | SecurityException e) {
+                    log.debug("Could not terminate descendant process {}: {}", handle.pid(), e.getMessage());
+                }
+            });
+        } catch (UnsupportedOperationException | SecurityException e) {
+            log.debug("Could not enumerate Manim descendant processes: {}", e.getMessage());
+        }
+        process.destroyForcibly();
     }
 
     private String awaitCapturedOutput(Future<String> future, String streamName) {

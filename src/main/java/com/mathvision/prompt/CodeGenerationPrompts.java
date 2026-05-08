@@ -268,11 +268,11 @@ public final class CodeGenerationPrompts {
                         + "- Constants and shared helper functions if needed\n"
                         + "- `class MainScene(Scene):` (or ThreeDScene if any scene uses 3d)\n"
                         + "- `def construct(self):` that calls these scene methods in order: %s\n"
-                        + "- Empty method stubs `def %s(self): pass` for each scene method\n\n"
-                        + "Do NOT implement the scene methods yet — just provide the skeleton with `pass` stubs.\n"
+                        + "- A single indented placeholder line `# __SCENE_METHODS__` inside `MainScene`, after `construct()`\n\n"
+                        + "Do NOT implement the scene methods yet and do not create `pass` stubs for them.\n"
+                        + "The workflow will insert generated methods at `# __SCENE_METHODS__`.\n"
                         + "Return the skeleton code via the write_code_skeleton tool.",
-                storyboardJson, methodList,
-                sceneMethodNames.get(0) + "`, `def " + sceneMethodNames.get(sceneMethodNames.size() - 1)));
+                storyboardJson, methodList));
     }
 
     /**
@@ -285,15 +285,16 @@ public final class CodeGenerationPrompts {
         return SystemPrompts.buildCurrentRequestSection(String.format(
                 "Now implement scene method `%s` (scene %d of %d).\n\n"
                         + "Scene specification:\n```json\n%s\n```\n\n"
-                        + "Generate the COMPLETE method body for `def %s(self):`.\n"
-                        + "- Include the full `def %s(self):` signature and all code inside.\n"
+                        + "Generate ONLY the method body for `def %s(self):`.\n"
+                        + "- Do not include the `def %s(self):` signature; return only the indented or unindented body statements.\n"
+                        + "- If no implementation is possible, return `pass` as the body.\n"
                         + "- Use variables and objects established in earlier scene methods via `self` if needed.\n"
                         + "- Follow the storyboard's semantic intent; select from storyboard-declared objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
                         + "- Do not create learner-visible elements outside the storyboard. Backend-only invisible helpers are allowed only when required for calculation or documented API usage.\n"
                         + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, durations, visibility/lifecycle instructions, transforms, palette notes, and layout constraints exactly when present.\n"
                         + "- For any object with `behavior=derived`, structured `constraints`, or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, compute it from `dependency_objects`/`constraints` or use native Manim/API geometry helpers. Do not instantiate it from hardcoded placement coordinates.\n"
                         + "- Respect storyboard text semantics strictly: `kind=equation` means `MathTex(...)`; `kind=text` and `kind=text_card` mean `Text(...)` unless the content clearly requires math rendering; avoid `Tex(...)` unless the scene explicitly needs non-math LaTeX text.\n"
-                        + "- Return the method code via the write_scene_code tool.",
+                        + "- Return the method body via the write_scene_code tool.",
                 methodName, sceneIndex + 1, totalScenes,
                 sceneJson, methodName, methodName));
     }
