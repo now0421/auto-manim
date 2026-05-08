@@ -1,12 +1,11 @@
 package com.mathvision.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Narrative composition result from the enrichment stage.
@@ -234,7 +233,8 @@ public class Narrative {
         @JsonProperty("placement")
         private StoryboardPlacement placement;
 
-        private List<StoryboardStyle> style = new ArrayList<>();
+        @JsonProperty("style")
+        private StoryboardStyle style;
 
         @JsonProperty("source_node")
         private String sourceNode;
@@ -268,12 +268,9 @@ public class Narrative {
         public StoryboardPlacement getPlacement() { return placement; }
         public void setPlacement(StoryboardPlacement placement) { this.placement = placement; }
 
-        @JsonProperty("style")
-        public List<StoryboardStyle> getStyle() { return style; }
+        public StoryboardStyle getStyle() { return style; }
 
-        public void setStyle(List<StoryboardStyle> style) {
-            this.style = style != null ? style : new ArrayList<>();
-        }
+        public void setStyle(StoryboardStyle style) { this.style = style; }
 
         public String getSourceNode() { return sourceNode; }
         public void setSourceNode(String sourceNode) { this.sourceNode = sourceNode; }
@@ -366,28 +363,194 @@ public class Narrative {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class StoryboardStyle {
 
-        @JsonProperty("role")
-        private String role;
+        @JsonProperty("color")
+        private String color;
 
-        @JsonProperty("type")
-        private String type;
+        @JsonProperty("text_color")
+        private String textColor;
 
-        @JsonProperty("properties")
-        private Map<String, Object> properties = new LinkedHashMap<>();
+        @JsonProperty("fill_color")
+        private String fillColor;
+
+        @JsonProperty("stroke_color")
+        private String strokeColor;
+
+        @JsonProperty("background_fill_color")
+        private String backgroundFillColor;
+
+        @JsonProperty("background_stroke_color")
+        private String backgroundStrokeColor;
+
+        @JsonProperty("highlight_color")
+        private String highlightColor;
+
+        @JsonProperty("font_family")
+        private String fontFamily;
+
+        @JsonProperty("font_weight")
+        private String fontWeight;
+
+        @JsonProperty("font_style")
+        private String fontStyle;
+
+        @JsonProperty("line_style")
+        private String lineStyle;
+
+        @JsonProperty("opacity")
+        private Double opacity;
+
+        @JsonProperty("fill_opacity")
+        private Double fillOpacity;
+
+        @JsonProperty("stroke_opacity")
+        private Double strokeOpacity;
+
+        @JsonProperty("background_fill_opacity")
+        private Double backgroundFillOpacity;
+
+        @JsonProperty("background_stroke_opacity")
+        private Double backgroundStrokeOpacity;
+
+        @JsonProperty("highlight_opacity")
+        private Double highlightOpacity;
+
+        @JsonProperty("stroke_width")
+        private Double strokeWidth;
+
+        @JsonProperty("font_size")
+        private Double fontSize;
+
+        @JsonProperty("padding")
+        private Double padding;
+
+        @JsonProperty("corner_radius")
+        private Double cornerRadius;
+
+        @JsonProperty("z_index")
+        private Double zIndex;
+
+        @JsonProperty("point_size")
+        private Double pointSize;
+
+        @JsonProperty("radius")
+        private Double radius;
+
+        @JsonProperty("marker_size")
+        private Double markerSize;
+
+        @JsonProperty("label_visible")
+        private Boolean labelVisible;
 
         public StoryboardStyle() {}
 
-        public String getRole() { return role; }
-        public void setRole(String role) { this.role = role; }
+        public String getColor() { return color; }
+        public void setColor(String color) { this.color = color; }
 
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
+        public String getTextColor() { return textColor; }
+        public void setTextColor(String textColor) { this.textColor = textColor; }
 
-        public Map<String, Object> getProperties() { return properties; }
-        public void setProperties(Map<String, Object> properties) {
-            this.properties = properties != null ? properties : new LinkedHashMap<>();
+        public String getFillColor() { return fillColor; }
+        public void setFillColor(String fillColor) { this.fillColor = fillColor; }
+
+        public String getStrokeColor() { return strokeColor; }
+        public void setStrokeColor(String strokeColor) { this.strokeColor = strokeColor; }
+
+        public String getBackgroundFillColor() { return backgroundFillColor; }
+        public void setBackgroundFillColor(String backgroundFillColor) { this.backgroundFillColor = backgroundFillColor; }
+
+        public String getBackgroundStrokeColor() { return backgroundStrokeColor; }
+        public void setBackgroundStrokeColor(String backgroundStrokeColor) { this.backgroundStrokeColor = backgroundStrokeColor; }
+
+        public String getHighlightColor() { return highlightColor; }
+        public void setHighlightColor(String highlightColor) { this.highlightColor = highlightColor; }
+
+        public String getFontFamily() { return fontFamily; }
+        public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; }
+
+        public String getFontWeight() { return fontWeight; }
+        public void setFontWeight(String fontWeight) { this.fontWeight = fontWeight; }
+
+        public String getFontStyle() { return fontStyle; }
+        public void setFontStyle(String fontStyle) { this.fontStyle = fontStyle; }
+
+        public String getLineStyle() { return lineStyle; }
+        public void setLineStyle(String lineStyle) { this.lineStyle = lineStyle; }
+
+        public Double getOpacity() { return opacity; }
+        public void setOpacity(Double opacity) { this.opacity = opacity; }
+
+        public Double getFillOpacity() { return fillOpacity; }
+        public void setFillOpacity(Double fillOpacity) { this.fillOpacity = fillOpacity; }
+
+        public Double getStrokeOpacity() { return strokeOpacity; }
+        public void setStrokeOpacity(Double strokeOpacity) { this.strokeOpacity = strokeOpacity; }
+
+        public Double getBackgroundFillOpacity() { return backgroundFillOpacity; }
+        public void setBackgroundFillOpacity(Double backgroundFillOpacity) { this.backgroundFillOpacity = backgroundFillOpacity; }
+
+        public Double getBackgroundStrokeOpacity() { return backgroundStrokeOpacity; }
+        public void setBackgroundStrokeOpacity(Double backgroundStrokeOpacity) { this.backgroundStrokeOpacity = backgroundStrokeOpacity; }
+
+        public Double getHighlightOpacity() { return highlightOpacity; }
+        public void setHighlightOpacity(Double highlightOpacity) { this.highlightOpacity = highlightOpacity; }
+
+        public Double getStrokeWidth() { return strokeWidth; }
+        public void setStrokeWidth(Double strokeWidth) { this.strokeWidth = strokeWidth; }
+
+        public Double getFontSize() { return fontSize; }
+        public void setFontSize(Double fontSize) { this.fontSize = fontSize; }
+
+        public Double getPadding() { return padding; }
+        public void setPadding(Double padding) { this.padding = padding; }
+
+        public Double getCornerRadius() { return cornerRadius; }
+        public void setCornerRadius(Double cornerRadius) { this.cornerRadius = cornerRadius; }
+
+        public Double getZIndex() { return zIndex; }
+        public void setZIndex(Double zIndex) { this.zIndex = zIndex; }
+
+        public Double getPointSize() { return pointSize; }
+        public void setPointSize(Double pointSize) { this.pointSize = pointSize; }
+
+        public Double getRadius() { return radius; }
+        public void setRadius(Double radius) { this.radius = radius; }
+
+        public Double getMarkerSize() { return markerSize; }
+        public void setMarkerSize(Double markerSize) { this.markerSize = markerSize; }
+
+        public Boolean getLabelVisible() { return labelVisible; }
+        public void setLabelVisible(Boolean labelVisible) { this.labelVisible = labelVisible; }
+
+        public boolean hasData() {
+            return color != null
+                    || textColor != null
+                    || fillColor != null
+                    || strokeColor != null
+                    || backgroundFillColor != null
+                    || backgroundStrokeColor != null
+                    || highlightColor != null
+                    || fontFamily != null
+                    || fontWeight != null
+                    || fontStyle != null
+                    || lineStyle != null
+                    || opacity != null
+                    || fillOpacity != null
+                    || strokeOpacity != null
+                    || backgroundFillOpacity != null
+                    || backgroundStrokeOpacity != null
+                    || highlightOpacity != null
+                    || strokeWidth != null
+                    || fontSize != null
+                    || padding != null
+                    || cornerRadius != null
+                    || zIndex != null
+                    || pointSize != null
+                    || radius != null
+                    || markerSize != null
+                    || labelVisible != null;
         }
     }
 

@@ -27,7 +27,7 @@ public final class StoryboardSchemaPrompts {
     /** Lexical contract reinforcing quote discipline and forbidding bare identifiers. */
     public static final String JSON_LEXICAL_CONTRACT =
             "JSON lexical contract:\n"
-                    + "- Use double quotes for all JSON keys and all string values, including categorical fields such as kind, behavior, scene_mode, action type, style role/type, hex colors, and label content.\n"
+                    + "- Use double quotes for all JSON keys and all string values, including categorical fields such as kind, behavior, scene_mode, action type, line_style, hex colors, and label content.\n"
                     + "- Do not output markdown fences, comments, trailing commas, or single-quoted strings.\n"
                     + "- Do not output bare identifiers as JSON values. Invalid: \"type\": create. Valid: \"type\": \"create\".\n";
 
@@ -36,11 +36,11 @@ public final class StoryboardSchemaPrompts {
             "Invalid examples to avoid:\n"
                     + "- {\"type\": create}\n"
                     + "- {\"behavior\": static}\n"
-                    + "- {\"properties\": {\"color\": #FACC15}}\n"
+                    + "- {\"style\": {\"color\": #FACC15}}\n"
                     + "Valid equivalents:\n"
                     + "- {\"type\": \"create\"}\n"
                     + "- {\"behavior\": \"static\"}\n"
-                    + "- {\"properties\": {\"color\": \"#FACC15\"}}\n";
+                    + "- {\"style\": {\"color\": \"#FACC15\"}}\n";
 
     // ── Field-level schemas ────────────────────────────────────────────
 
@@ -53,17 +53,35 @@ public final class StoryboardSchemaPrompts {
                     + "            \"z\": { \"value\": \"number or null\", \"min\": \"number or null\", \"max\": \"number or null\" }\n"
                     + "          }";
 
-    /** The style array schema used in entering_objects and persistent_objects patches. */
+    /** The typed style object schema used in entering_objects and persistent_objects patches. */
     public static final String STYLE_SCHEMA =
-            "          \"style\": [\n"
-                    + "            {\n"
-                    + "              \"role\": \"string, visual role such as text|background|border|glow|badge|emphasis\",\n"
-                    + "              \"type\": \"string, backend-neutral implementation hint such as math_text|plain_text|background_box|border_box|highlight_ring\",\n"
-                    + "              \"properties\": {\n"
-                    + "                \"key\": \"value, backend-relevant style property such as color, font_size, fill_opacity, padding, corner_radius, stroke_width, line_style, or label_visible\"\n"
-                    + "              }\n"
-                    + "            }\n"
-                    + "          ]";
+            "          \"style\": {\n"
+                    + "            \"color\": \"#RRGGBB primary foreground color\",\n"
+                    + "            \"text_color\": \"#RRGGBB text foreground color\",\n"
+                    + "            \"fill_color\": \"#RRGGBB shape fill color\",\n"
+                    + "            \"stroke_color\": \"#RRGGBB line or border color\",\n"
+                    + "            \"background_fill_color\": \"#RRGGBB text-card background fill color\",\n"
+                    + "            \"background_stroke_color\": \"#RRGGBB text-card border color\",\n"
+                    + "            \"highlight_color\": \"#RRGGBB emphasis color\",\n"
+                    + "            \"font_family\": \"string\",\n"
+                    + "            \"font_weight\": \"string\",\n"
+                    + "            \"font_style\": \"string\",\n"
+                    + "            \"line_style\": \"solid|dashed|dotted\",\n"
+                    + "            \"opacity\": \"number 0..1\",\n"
+                    + "            \"fill_opacity\": \"number 0..1\",\n"
+                    + "            \"stroke_opacity\": \"number 0..1\",\n"
+                    + "            \"background_fill_opacity\": \"number 0..1\",\n"
+                    + "            \"background_stroke_opacity\": \"number 0..1\",\n"
+                    + "            \"highlight_opacity\": \"number 0..1\",\n"
+                    + "            \"stroke_width\": \"number\",\n"
+                    + "            \"font_size\": \"number\",\n"
+                    + "            \"padding\": \"number\",\n"
+                    + "            \"corner_radius\": \"number\",\n"
+                    + "            \"z_index\": \"number\",\n"
+                    + "            \"point_size\": \"number\",\n"
+                    + "            \"radius\": \"number\",\n"
+                    + "            \"marker_size\": \"number\"\n"
+                    + "          }";
 
     /** Schema for an entering_objects entry: id + optional placement + optional style. */
     public static final String ENTERING_OBJECT_SCHEMA =
@@ -78,7 +96,7 @@ public final class StoryboardSchemaPrompts {
             "        {\n"
                     + "          \"id\": \"string, id of an object that remains visible from previous scenes\",\n"
                     + "          \"placement\": { ...optional, only if position changes... },\n"
-                    + "          \"style\": [ ...optional, only if style changes... ]\n"
+                    + "          \"style\": { ...optional typed style object, only if style changes... }\n"
                     + "        }";
 
     /** Schema for an exiting_objects entry: id only. */
@@ -175,6 +193,39 @@ public final class StoryboardSchemaPrompts {
                     + "      \"constraint_note\": \"lies on numberLine\"\n"
                     + "    }";
 
+    private static final String EXAMPLE_POINT_P_LABEL_BODY =
+            "    {\n"
+                    + "      \"id\": \"labelP\",\n"
+                    + "      \"kind\": \"text\",\n"
+                    + "      \"content\": \"P\",\n"
+                    + "      \"source_node\": \"problem_setup\",\n"
+                    + "      \"behavior\": \"follows_anchor\",\n"
+                    + "      \"anchor_id\": \"P\",\n"
+                    + "      \"dependency_objects\": [\"P\"],\n"
+                    + "      \"dependency_relation\": \"label_for\",\n"
+                    + "      \"constraint_note\": \"small readable label offset from P\"\n"
+                    + "    }";
+
+    /** Backend-specific example snippet: a companion text label attached to a point. */
+    public static final String MANIM_COMPANION_LABEL_EXAMPLE =
+            "Companion label example:\n"
+                    + "Add the label as its own registry object:\n"
+                    + EXAMPLE_POINT_P_LABEL_BODY
+                    + "\n"
+                    + "Then include it as a scene patch beside its parent:\n"
+                    + "{\n"
+                    + "  \"id\": \"labelP\",\n"
+                    + "  \"placement\": {\n"
+                    + "    \"coordinate_space\": \"anchor\",\n"
+                    + "    \"x\": { \"value\": 0.25 },\n"
+                    + "    \"y\": { \"value\": 0.25 }\n"
+                    + "  },\n"
+                    + "  \"style\": {\n"
+                    + "    \"text_color\": \"#FFFFFF\",\n"
+                    + "    \"font_size\": 24\n"
+                    + "  }\n"
+                    + "}\n";
+
     /** Example object-registry entry: a fixed-overlay formula card. */
     public static final String EXAMPLE_FORMULA_CARD =
             "    {\n"
@@ -229,29 +280,17 @@ public final class StoryboardSchemaPrompts {
                     + "          \"x\": { \"value\": 0 },\n"
                     + "          \"y\": { \"value\": 2 }\n"
                     + "        },\n"
-                    + "        \"style\": [\n"
-                    + "          {\n"
-                    + "            \"role\": \"text\",\n"
-                    + "            \"type\": \"math_text\",\n"
-                    + "            \"properties\": {\n"
-                    + "              \"color\": \"#111827\",\n"
-                    + "              \"font_size\": 30,\n"
-                    + "              \"z_index\": 2\n"
-                    + "            }\n"
-                    + "          },\n"
-                    + "          {\n"
-                    + "            \"role\": \"background\",\n"
-                    + "            \"type\": \"background_box\",\n"
-                    + "            \"properties\": {\n"
-                    + "              \"fill_color\": \"#FFFFFF\",\n"
-                    + "              \"fill_opacity\": 1,\n"
-                    + "              \"stroke_color\": \"#FFFFFF\",\n"
-                    + "              \"stroke_width\": 1,\n"
-                    + "              \"corner_radius\": 0.2,\n"
-                    + "              \"padding\": 0.2\n"
-                    + "            }\n"
-                    + "          }\n"
-                    + "        ]\n"
+                    + "        \"style\": {\n"
+                    + "          \"text_color\": \"#111827\",\n"
+                    + "          \"font_size\": 30,\n"
+                    + "          \"z_index\": 2,\n"
+                    + "          \"background_fill_color\": \"#FFFFFF\",\n"
+                    + "          \"background_fill_opacity\": 1,\n"
+                    + "          \"background_stroke_color\": \"#FFFFFF\",\n"
+                    + "          \"stroke_width\": 1,\n"
+                    + "          \"corner_radius\": 0.2,\n"
+                    + "          \"padding\": 0.2\n"
+                    + "        }\n"
                     + "      }\n"
                     + "    ]";
 
@@ -296,13 +335,7 @@ public final class StoryboardSchemaPrompts {
                     + "          \"x\": { \"value\": 1 },\n"
                     + "          \"y\": { \"value\": 2 }\n"
                     + "        },\n"
-                    + "        \"style\": [\n"
-                    + "          {\n"
-                    + "            \"role\": \"emphasis\",\n"
-                    + "            \"type\": \"highlight_ring\",\n"
-                    + "            \"properties\": { \"color\": \"#FACC15\", \"stroke_width\": 3 }\n"
-                    + "          }\n"
-                    + "        ]\n"
+                    + "        \"style\": { \"highlight_color\": \"#FACC15\", \"stroke_width\": 3 }\n"
                     + "      }\n"
                     + "    ]";
 
@@ -351,10 +384,10 @@ public final class StoryboardSchemaPrompts {
 
     /** Text style semantics rules shared by both output formats. */
     public static final String TEXT_STYLE_SEMANTICS =
-            "Text style semantics are strict:\n"
-                    + "- Use `math_text` for formulas, symbolic labels, Greek letters, angle notation, superscripts, subscripts, and any content that should render with `MathTex(...)` downstream.\n"
-                    + "- Use `plain_text` for ordinary letters, names, short prose labels, and any content that should render with `Text(...)` downstream.\n"
-                    + "- Do not leave mathematical text unlabeled if its rendering choice matters.\n";
+            "Text object semantics are strict:\n"
+                    + "- Use `kind = equation` for formulas, symbolic labels, Greek letters, angle notation, superscripts, subscripts, and any content that should render with `MathTex(...)` downstream.\n"
+                    + "- Use `kind = text` or `kind = text_card` for ordinary letters, names, short prose labels, and any content that should render with `Text(...)` downstream.\n"
+                    + "- Do not encode text constructor choice in `style`; `style` only contains typed rendering properties.\n";
 
     private StoryboardSchemaPrompts() {}
 }

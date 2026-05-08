@@ -117,7 +117,7 @@ public final class StoryboardPatchResolver {
         copy.setKind(source.getKind());
         copy.setContent(source.getContent());
         copy.setPlacement(copyPlacement(source.getPlacement()));
-        copy.setStyle(copyStyles(source.getStyle()));
+        copy.setStyle(copyStyle(source.getStyle()));
         copy.setSourceNode(source.getSourceNode());
         copy.setBehavior(source.getBehavior());
         copy.setAnchorId(source.getAnchorId());
@@ -190,10 +190,8 @@ public final class StoryboardPatchResolver {
         if (patch.getPlacement() != null && patch.getPlacement().hasData()) {
             target.setPlacement(copyPlacement(patch.getPlacement()));
         }
-        if (patch.getStyle() != null && !patch.getStyle().isEmpty()) {
-            target.setStyle(copyStyles(patch.getStyle()));
-        } else if (target.getStyle() == null) {
-            target.setStyle(new ArrayList<>());
+        if (patch.getStyle() != null && patch.getStyle().hasData()) {
+            target.setStyle(copyStyle(patch.getStyle()));
         }
         if (!isBlank(patch.getSourceNode())) {
             target.setSourceNode(patch.getSourceNode());
@@ -263,24 +261,38 @@ public final class StoryboardPatchResolver {
         return copies;
     }
 
-    private static List<StoryboardStyle> copyStyles(List<StoryboardStyle> styles) {
-        List<StoryboardStyle> copies = new ArrayList<>();
-        if (styles == null) {
-            return copies;
+    private static StoryboardStyle copyStyle(StoryboardStyle style) {
+        if (style == null) {
+            return null;
         }
-        for (StoryboardStyle style : styles) {
-            if (style == null) {
-                continue;
-            }
-            StoryboardStyle copy = new StoryboardStyle();
-            copy.setRole(style.getRole());
-            copy.setType(style.getType());
-            copy.setProperties(style.getProperties() != null
-                    ? new LinkedHashMap<>(style.getProperties())
-                    : new LinkedHashMap<>());
-            copies.add(copy);
-        }
-        return copies;
+        StoryboardStyle copy = new StoryboardStyle();
+        copy.setColor(style.getColor());
+        copy.setTextColor(style.getTextColor());
+        copy.setFillColor(style.getFillColor());
+        copy.setStrokeColor(style.getStrokeColor());
+        copy.setBackgroundFillColor(style.getBackgroundFillColor());
+        copy.setBackgroundStrokeColor(style.getBackgroundStrokeColor());
+        copy.setHighlightColor(style.getHighlightColor());
+        copy.setFontFamily(style.getFontFamily());
+        copy.setFontWeight(style.getFontWeight());
+        copy.setFontStyle(style.getFontStyle());
+        copy.setLineStyle(style.getLineStyle());
+        copy.setOpacity(style.getOpacity());
+        copy.setFillOpacity(style.getFillOpacity());
+        copy.setStrokeOpacity(style.getStrokeOpacity());
+        copy.setBackgroundFillOpacity(style.getBackgroundFillOpacity());
+        copy.setBackgroundStrokeOpacity(style.getBackgroundStrokeOpacity());
+        copy.setHighlightOpacity(style.getHighlightOpacity());
+        copy.setStrokeWidth(style.getStrokeWidth());
+        copy.setFontSize(style.getFontSize());
+        copy.setPadding(style.getPadding());
+        copy.setCornerRadius(style.getCornerRadius());
+        copy.setZIndex(style.getZIndex());
+        copy.setPointSize(style.getPointSize());
+        copy.setRadius(style.getRadius());
+        copy.setMarkerSize(style.getMarkerSize());
+        copy.setLabelVisible(style.getLabelVisible());
+        return copy.hasData() ? copy : null;
     }
 
     private static StoryboardPlacement copyPlacement(StoryboardPlacement source) {

@@ -696,7 +696,8 @@ Useful text commands include `Text`, `FormulaText`, `FractionText`,
 
 ### Text Card with Background Box
 
-When the storyboard specifies a `text_card` with `background_box` styling,
+When the storyboard specifies a `text_card` with `background_fill_color` or
+`background_stroke_color` styling,
 GeoGebra has no single command for a bordered text card. Build it by combining
 documented objects: a `Polygon` (or `RigidPolygon`) rectangle for the
 background, `SetFilling` for the fill, `SetColor` for the border, and a `Text`

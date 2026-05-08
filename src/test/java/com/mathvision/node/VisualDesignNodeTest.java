@@ -309,11 +309,7 @@ class VisualDesignNodeTest {
         enteringObject.put("kind", "point");
         enteringObject.put("content", objectId);
         enteringObject.put("placement", "center");
-        ArrayNode styles = enteringObject.putArray("style");
-        ObjectNode style = styles.addObject();
-        style.put("role", "text");
-        style.put("type", "plain_text");
-        style.putObject("properties").put("color", color);
+        enteringObject.putObject("style").put("color", color);
         scene.putArray("actions");
 
         ArrayNode newObjects = arguments.putArray("new_objects");

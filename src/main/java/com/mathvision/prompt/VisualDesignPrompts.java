@@ -18,7 +18,7 @@ public final class VisualDesignPrompts {
                     + "Return a JSON object with two top-level keys: `scene` and `new_objects`.\n"
                     + "`scene.entering_objects` and `scene.persistent_objects` are scene-level patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, or constraint_note here — those belong in `new_objects`.\n"
                     + "`new_objects` entries represent the canonical registry definition of each object introduced in this scene. They carry identity, content, dependency, and behavior but not scene-specific placement or style.\n"
-                    + "Only add `new_objects` that are teaching-essential, clarify the current beat, or carry distinct geometry/dependency semantics. Reuse existing registry ids instead of creating duplicate labels, repeated formulas, redundant highlights, or decorative helper objects.\n"
+                    + "Only add `new_objects` that are teaching-essential, clarify the current beat, or carry distinct geometry/dependency semantics. Required labels or callouts with their own attachment behavior are not duplicates. Reuse existing registry ids instead of creating repeated formulas, redundant highlights, or decorative helper objects.\n"
                     + "{\n"
                     + "  \"scene\": {\n"
                     + StoryboardSchemaPrompts.SCENE_FIELDS_SCHEMA
@@ -92,9 +92,9 @@ public final class VisualDesignPrompts {
                     + "- Once a color is assigned to a concept, it keeps that meaning across the entire storyboard. Record non-obvious color-to-concept assignments in `notes_for_codegen` only when they must be enforced downstream.\n"
                     + "- Assign colors to concepts, not to individual objects. Once a color is assigned to a concept, it keeps that meaning across the entire presentation.\n"
                     + "- Plan per-scene variation: vary the dominant color, spatial layout, animation entry style, and visual density across scenes. Never use identical visual config for every scene.\n"
-                    + "- Prefer structured `style` arrays over vague prose. Each style entry should describe one visual layer or role, such as text, background, border, glow, or emphasis.\n"
-                    + "- Do not use a free-text `instructions` field inside style entries. Encode visual intent directly in `properties` using concrete keys and values.\n"
-                    + "- For text cards, formulas with badges, boxed labels, counters, or callouts, encode separate text and background layers as separate entries inside `style`.\n"
+                    + "- Use a single typed `style` object per storyboard object, never a style array and never custom style keys.\n"
+                    + "- Style describes the object itself only. Create separate storyboard objects for labels, badges, helper outlines, cards, or callouts that have their own identity.\n"
+                    + "- For text cards, put text/background fields on that text_card object's single `style`, such as `text_color`, `background_fill_color`, and `background_stroke_color`.\n"
                     + "- Only include `style` when it adds meaningful rendering properties; omit it for visually plain objects.\n";
 
     private static final String MANIM_SYSTEM =
@@ -106,10 +106,13 @@ public final class VisualDesignPrompts {
                     + SCENE_AUTHORING_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
                     + "Manim object and label rules:\n"
-                    + "- Every planned teaching-essential Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; avoid adding temporary decoration, redundant labels, or unhelpful helper objects to the storyboard.\n"
+                    + "- Every planned teaching-essential Manim object must be explicitly represented in `entering_objects` or `persistent_objects`; avoid adding temporary decoration, duplicate labels, or unhelpful helper objects to the storyboard.\n"
+                    + "- For named teaching-essential points, lines, intersections, and other geometry whose id or value must be read by the learner, the visible label is mandatory unless the current beat explicitly hides it.\n"
                     + "- If a point, marker, label, counter, or helper must visibly follow another object, create a separate object and describe the attachment with `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation`.\n"
                     + "- For moving points or markers, create a separate label object with `behavior = follows_anchor` so the label tracks the moving object.\n"
                     + "- Manim does not auto-label objects. When an object's name or value helps the learner understand the current beat, explicitly declare a companion `kind: text` label in the same scene's `entering_objects`; attach it with `behavior = follows_anchor` and `anchor_id` pointing to the parent object's id. Omit labels that are redundant or do not improve understanding.\n"
+                    + "- Do not use `style.label_visible` to request a visible label; labels must be explicit `kind: text` or `kind: equation` companion objects with `dependency_relation = label_for`.\n"
+                    + StoryboardSchemaPrompts.MANIM_COMPANION_LABEL_EXAMPLE
                     + "- Use `screen_overlay_plan` only for true viewport-fixed explanatory overlays, not as a vague place to hide layout conflicts.\n"
                     + SCENE_STYLE_LAYOUT_RULES
                     + SystemPrompts.VISUAL_PLANNING_RULES

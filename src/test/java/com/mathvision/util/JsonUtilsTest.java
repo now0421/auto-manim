@@ -109,7 +109,7 @@ class JsonUtilsTest {
     @Test
     void extractJsonObjectRepairsBareIdentifiersAcrossFields() {
         String malformed = "{\"scene_mode\":2d,\"behavior\":static,\"type\":create,\"kind\":text,"
-                + "\"style\":[{\"role\":text,\"type\":plain_text,\"properties\":{\"color\":YELLOW}}]}";
+                + "\"style\":{\"color\":YELLOW,\"line_style\":dashed}}";
 
         String extracted = JsonUtils.extractJsonObject(malformed);
 
@@ -119,7 +119,8 @@ class JsonUtilsTest {
         assertEquals("static", node.get("behavior").asText());
         assertEquals("create", node.get("type").asText());
         assertEquals("text", node.get("kind").asText());
-        assertEquals("YELLOW", node.get("style").get(0).get("properties").get("color").asText());
+        assertEquals("YELLOW", node.get("style").get("color").asText());
+        assertEquals("dashed", node.get("style").get("line_style").asText());
     }
 
     @Test

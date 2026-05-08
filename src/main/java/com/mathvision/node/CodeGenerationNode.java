@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 import java.util.concurrent.CompletionException;
 
 /**
@@ -423,7 +422,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             if (so.getId() == null) continue;
             StoryboardObject target = enriched.get(so.getId());
             if (target == null) continue;
-            if (so.getStyle() != null && !so.getStyle().isEmpty()) {
+            if (so.getStyle() != null && so.getStyle().hasData()) {
                 target.setStyle(so.getStyle());
             }
             if (so.getPlacement() != null && so.getPlacement().hasData()) {
@@ -461,7 +460,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                     && obj.getPlacement() != null && obj.getPlacement().hasData()) {
                 sb.append(", placement=").append(formatPlacementSummary(obj.getPlacement()));
             }
-            if (obj.getStyle() != null && !obj.getStyle().isEmpty()) {
+            if (obj.getStyle() != null && obj.getStyle().hasData()) {
                 sb.append(", style=").append(formatStyleSummary(obj.getStyle()));
             }
             sb.append("\n");
@@ -496,27 +495,44 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         }
     }
 
-    private static String formatStyleSummary(List<StoryboardStyle> styles) {
-        return styles.stream()
-                .map(s -> {
-                    StringBuilder sb = new StringBuilder();
-                    if (s.getRole() != null) sb.append(s.getRole());
-                    if (s.getType() != null && !s.getType().isBlank()) {
-                        if (sb.length() > 0) {
-                            sb.append(":");
-                        }
-                        sb.append(s.getType());
-                    }
-                    if (s.getProperties() != null && !s.getProperties().isEmpty()) {
-                        sb.append("{");
-                        sb.append(s.getProperties().entrySet().stream()
-                                .map(e -> e.getKey() + "=" + e.getValue())
-                                .collect(Collectors.joining(", ")));
-                        sb.append("}");
-                    }
-                    return sb.toString();
-                })
-                .collect(Collectors.joining("; "));
+    private static String formatStyleSummary(StoryboardStyle style) {
+        List<String> parts = new ArrayList<>();
+        appendStylePart(parts, "color", style.getColor());
+        appendStylePart(parts, "text_color", style.getTextColor());
+        appendStylePart(parts, "fill_color", style.getFillColor());
+        appendStylePart(parts, "stroke_color", style.getStrokeColor());
+        appendStylePart(parts, "background_fill_color", style.getBackgroundFillColor());
+        appendStylePart(parts, "background_stroke_color", style.getBackgroundStrokeColor());
+        appendStylePart(parts, "highlight_color", style.getHighlightColor());
+        appendStylePart(parts, "font_family", style.getFontFamily());
+        appendStylePart(parts, "font_weight", style.getFontWeight());
+        appendStylePart(parts, "font_style", style.getFontStyle());
+        appendStylePart(parts, "line_style", style.getLineStyle());
+        appendStylePart(parts, "opacity", style.getOpacity());
+        appendStylePart(parts, "fill_opacity", style.getFillOpacity());
+        appendStylePart(parts, "stroke_opacity", style.getStrokeOpacity());
+        appendStylePart(parts, "background_fill_opacity", style.getBackgroundFillOpacity());
+        appendStylePart(parts, "background_stroke_opacity", style.getBackgroundStrokeOpacity());
+        appendStylePart(parts, "highlight_opacity", style.getHighlightOpacity());
+        appendStylePart(parts, "stroke_width", style.getStrokeWidth());
+        appendStylePart(parts, "font_size", style.getFontSize());
+        appendStylePart(parts, "padding", style.getPadding());
+        appendStylePart(parts, "corner_radius", style.getCornerRadius());
+        appendStylePart(parts, "z_index", style.getZIndex());
+        appendStylePart(parts, "point_size", style.getPointSize());
+        appendStylePart(parts, "radius", style.getRadius());
+        appendStylePart(parts, "marker_size", style.getMarkerSize());
+        appendStylePart(parts, "label_visible", style.getLabelVisible());
+        return "{" + String.join(", ", parts) + "}";
+    }
+
+    private static void appendStylePart(List<String> parts, String key, Object value) {
+        if (value instanceof String && ((String) value).isBlank()) {
+            return;
+        }
+        if (value != null) {
+            parts.add(key + "=" + value);
+        }
     }
 
     private static String truncate(String text, int maxLen) {

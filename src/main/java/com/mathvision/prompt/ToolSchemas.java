@@ -9,6 +9,63 @@ public final class ToolSchemas {
 
     private ToolSchemas() {}
 
+    private static final String STORYBOARD_STYLE_FIELD =
+            "\"style\": {"
+                    + "  \"type\": \"object\","
+                    + "  \"description\": \"Optional typed style properties for this object only. Do not invent keys; create separate storyboard objects for labels, cards, helpers, or other visual sidecars.\","
+                    + "  \"properties\": {"
+                    + "    \"color\": { \"type\": \"string\", \"description\": \"Primary foreground color as #RRGGBB\" },"
+                    + "    \"text_color\": { \"type\": \"string\", \"description\": \"Text foreground color as #RRGGBB\" },"
+                    + "    \"fill_color\": { \"type\": \"string\", \"description\": \"Shape fill color as #RRGGBB\" },"
+                    + "    \"stroke_color\": { \"type\": \"string\", \"description\": \"Line or border color as #RRGGBB\" },"
+                    + "    \"background_fill_color\": { \"type\": \"string\", \"description\": \"Text-card or label background fill as #RRGGBB\" },"
+                    + "    \"background_stroke_color\": { \"type\": \"string\", \"description\": \"Text-card or label background border as #RRGGBB\" },"
+                    + "    \"highlight_color\": { \"type\": \"string\", \"description\": \"Emphasis or glow color as #RRGGBB\" },"
+                    + "    \"font_family\": { \"type\": \"string\" },"
+                    + "    \"font_weight\": { \"type\": \"string\" },"
+                    + "    \"font_style\": { \"type\": \"string\" },"
+                    + "    \"line_style\": { \"type\": \"string\", \"enum\": [\"solid\", \"dashed\", \"dotted\"] },"
+                    + "    \"opacity\": { \"type\": \"number\" },"
+                    + "    \"fill_opacity\": { \"type\": \"number\" },"
+                    + "    \"stroke_opacity\": { \"type\": \"number\" },"
+                    + "    \"background_fill_opacity\": { \"type\": \"number\" },"
+                    + "    \"background_stroke_opacity\": { \"type\": \"number\" },"
+                    + "    \"highlight_opacity\": { \"type\": \"number\" },"
+                    + "    \"stroke_width\": { \"type\": \"number\" },"
+                    + "    \"font_size\": { \"type\": \"number\" },"
+                    + "    \"padding\": { \"type\": \"number\" },"
+                    + "    \"corner_radius\": { \"type\": \"number\" },"
+                    + "    \"z_index\": { \"type\": \"number\" },"
+                    + "    \"point_size\": { \"type\": \"number\" },"
+                    + "    \"radius\": { \"type\": \"number\" },"
+                    + "    \"marker_size\": { \"type\": \"number\" },"
+                    + "    \"label_visible\": { \"type\": \"boolean\" }"
+                    + "  },"
+                    + "  \"additionalProperties\": false"
+                    + "}";
+
+    public static String storyboard(String outputTarget) {
+        return isManim(outputTarget) ? withoutLabelVisible(STORYBOARD) : STORYBOARD;
+    }
+
+    public static String sceneDesign(String outputTarget) {
+        return isManim(outputTarget) ? withoutLabelVisible(SCENE_DESIGN) : SCENE_DESIGN;
+    }
+
+    private static boolean isManim(String outputTarget) {
+        return outputTarget == null || "manim".equalsIgnoreCase(outputTarget);
+    }
+
+    private static String withoutLabelVisible(String schema) {
+        if (schema == null || schema.isBlank()) {
+            return schema;
+        }
+        return schema.replace(
+                "\"marker_size\": { \"type\": \"number\" },"
+                        + "    \"label_visible\": { \"type\": \"boolean\" }",
+                "\"marker_size\": { \"type\": \"number\" }");
+    }
+
     // ========================================================================
     // Stage 0: Exploration
     // ========================================================================
@@ -283,52 +340,7 @@ public final class ToolSchemas {
             + "                      },"
             + "                      \"additionalProperties\": false"
             + "                    },"
-            + "                    \"style\": {"
-            + "                      \"type\": \"array\","
-            + "                      \"description\": \"Structured visual style layers. Use this only when non-default rendering guidance is needed.\","
-            + "                      \"items\": {"
-            + "                        \"type\": \"object\","
-            + "                        \"properties\": {"
-            + "                          \"role\": {"
-            + "                            \"type\": \"string\","
-            + "                            \"enum\": [\"text\", \"background\", \"border\", \"glow\", \"badge\", \"emphasis\", \"helper\"],"
-            + "                            \"description\": \"Visual role such as text, background, border, glow, badge, or emphasis\""
-            + "                          },"
-            + "                          \"type\": {"
-            + "                            \"type\": \"string\","
-            + "                            \"enum\": [\"math_text\", \"plain_text\", \"background_box\", \"border_box\", \"highlight_ring\"],"
-            + "                            \"description\": \"Implementation hint for the visual layer, preferably backend-neutral names such as math_text, plain_text, background_box, border_box, or highlight_ring\""
-            + "                          },"
-            + "                          \"properties\": {"
-            + "                            \"type\": \"object\","
-            + "                            \"description\": \"Backend-relevant style properties such as color, font_size, fill_opacity, stroke_width, padding, corner_radius, line_style, label_visible, or z_index. Encode concrete rendering intent here instead of prose.\","
-            + "                            \"properties\": {"
-            + "                              \"color\": { \"type\": \"string\" },"
-            + "                              \"fill_color\": { \"type\": \"string\" },"
-            + "                              \"stroke_color\": { \"type\": \"string\" },"
-            + "                              \"line_style\": { \"type\": \"string\" },"
-            + "                              \"font_size\": { \"type\": \"number\" },"
-            + "                              \"stroke_width\": { \"type\": \"number\" },"
-            + "                              \"padding\": { \"type\": \"number\" },"
-            + "                              \"corner_radius\": { \"type\": \"number\" },"
-            + "                              \"z_index\": { \"type\": \"number\" },"
-            + "                              \"opacity\": { \"type\": \"number\" },"
-            + "                              \"fill_opacity\": { \"type\": \"number\" },"
-            + "                              \"stroke_opacity\": { \"type\": \"number\" },"
-            + "                              \"label_visible\": { \"type\": \"boolean\" }"
-            + "                            },"
-            + "                            \"patternProperties\": {"
-            + "                              \"^.*_color$\": { \"type\": \"string\" }"
-            + "                            },"
-            + "                            \"additionalProperties\": {"
-            + "                              \"type\": [\"string\", \"number\", \"boolean\", \"array\", \"object\", \"null\"]"
-            + "                            }"
-            + "                          }"
-            + "                        },"
-            + "                        \"additionalProperties\": false,"
-            + "                        \"required\": [\"role\", \"type\", \"properties\"]"
-            + "                      }"
-            + "                    }"
+            + "                    " + STORYBOARD_STYLE_FIELD
             + "                  },"
             + "                  \"additionalProperties\": false,"
             + "                  \"required\": [\"id\"]"
@@ -342,7 +354,7 @@ public final class ToolSchemas {
             + "                  \"properties\": {"
             + "                    \"id\": { \"type\": \"string\" },"
             + "                    \"placement\": { \"type\": \"object\" },"
-            + "                    \"style\": { \"type\": \"array\", \"items\": { \"type\": \"object\" } }"
+            + "                    " + STORYBOARD_STYLE_FIELD
             + "                  },"
             + "                  \"additionalProperties\": false,"
             + "                  \"required\": [\"id\"]"
@@ -501,7 +513,7 @@ public final class ToolSchemas {
             + "                    },"
             + "                    \"additionalProperties\": false"
             + "                  },"
-            + "                  \"style\": { \"type\": \"array\", \"items\": { \"type\": \"object\" } }"
+            + "                  " + STORYBOARD_STYLE_FIELD
             + "                },"
             + "                \"additionalProperties\": false,"
             + "                \"required\": [\"id\"]"
@@ -524,7 +536,7 @@ public final class ToolSchemas {
             + "                    },"
             + "                    \"additionalProperties\": false"
             + "                  },"
-            + "                  \"style\": { \"type\": \"array\", \"items\": { \"type\": \"object\" } }"
+            + "                  " + STORYBOARD_STYLE_FIELD
             + "                },"
             + "                \"additionalProperties\": false,"
             + "                \"required\": [\"id\"]"

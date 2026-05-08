@@ -606,63 +606,30 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (object == null || object.getStyle() == null) {
             return colors;
         }
-        for (Narrative.StoryboardStyle style : object.getStyle()) {
-            if (style == null || style.getProperties() == null) {
-                continue;
-            }
-            String role = style.getRole();
-            String type = style.getType();
-            collectColorProperties(style.getProperties(), "", role, type, colors);
-        }
+        Narrative.StoryboardStyle style = object.getStyle();
+        collectColorValue("color", style.getColor(), false, false, colors);
+        collectColorValue("text_color", style.getTextColor(), true, false, colors);
+        collectColorValue("fill_color", style.getFillColor(), false, false, colors);
+        collectColorValue("stroke_color", style.getStrokeColor(), false, false, colors);
+        collectColorValue("background_fill_color", style.getBackgroundFillColor(), false, true, colors);
+        collectColorValue("background_stroke_color", style.getBackgroundStrokeColor(), false, true, colors);
+        collectColorValue("highlight_color", style.getHighlightColor(), false, false, colors);
         return colors;
-    }
-
-    private void collectColorProperties(Map<String, Object> properties,
-                                        String path,
-                                        String styleRole,
-                                        String styleType,
-                                        List<ColorReference> colors) {
-        for (Map.Entry<String, Object> entry : properties.entrySet()) {
-            if (entry == null || entry.getKey() == null) {
-                continue;
-            }
-            String key = entry.getKey();
-            String childPath = path.isBlank() ? key : path + "." + key;
-            Object value = entry.getValue();
-            if (value instanceof Map<?, ?>) {
-                Map<?, ?> nestedMap = (Map<?, ?>) value;
-                Map<String, Object> stringKeyed = new LinkedHashMap<>();
-                for (Map.Entry<?, ?> nestedEntry : nestedMap.entrySet()) {
-                    if (nestedEntry.getKey() != null) {
-                        stringKeyed.put(String.valueOf(nestedEntry.getKey()), nestedEntry.getValue());
-                    }
-                }
-                collectColorProperties(stringKeyed, childPath, styleRole, styleType, colors);
-            } else if (value instanceof List<?>) {
-                List<?> values = (List<?>) value;
-                for (int i = 0; i < values.size(); i++) {
-                    collectColorValue(childPath + "[" + i + "]", values.get(i), styleRole, styleType, colors);
-                }
-            } else {
-                collectColorValue(childPath, value, styleRole, styleType, colors);
-            }
-        }
     }
 
     private void collectColorValue(String propertyPath,
                                    Object rawValue,
-                                   String styleRole,
-                                   String styleType,
+                                   boolean textLayer,
+                                   boolean explicitBackground,
                                    List<ColorReference> colors) {
-        if (rawValue == null || propertyPath == null
-                || !propertyPath.toLowerCase(Locale.ROOT).contains("color")) {
+        if (rawValue == null || propertyPath == null) {
             return;
         }
         String color = String.valueOf(rawValue).trim();
         if (color.isBlank()) {
             return;
         }
-        colors.add(new ColorReference(propertyPath, color, styleRole, styleType));
+        colors.add(new ColorReference(propertyPath, color, textLayer, explicitBackground));
     }
 
     private void validateObjectColorContrast(String context,
@@ -769,11 +736,6 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
     private ColorReference selectTextBackground(List<ColorReference> colors) {
         for (ColorReference color : colors) {
             if (color.isTextBackgroundFill()) {
-                return color;
-            }
-        }
-        for (ColorReference color : colors) {
-            if (color.isExplicitBackground()) {
                 return color;
             }
         }
@@ -1312,10 +1274,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (object.getStyle() == null) {
             return false;
         }
-        return object.getStyle().stream()
-                .anyMatch(style -> style != null
-                        && !isBlank(style.getType())
-                        && style.getType().toLowerCase(Locale.ROOT).contains("text"));
+        Narrative.StoryboardStyle style = object.getStyle();
+        return !isBlank(style.getTextColor()) || style.getFontSize() != null || !isBlank(style.getFontFamily());
     }
 
     private boolean isAttachedLabelPair(StoryboardObject textObject,
@@ -1499,6 +1459,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             String systemPrompt = NarrativePrompts.buildRulesPrompt(outputTarget)
                     + "\n\nStoryboard validation repair rules:\n"
                     + "- Use dependency_objects as the authoritative dependency graph.\n"
+                    + "- Use a single typed `style` object only. Do not return style arrays, nested `properties`, role/type layer entries, or custom style keys.\n"
                     + "- Rewrite storyboard colors as 6-digit hex strings (`#RRGGBB`) only; do not use named colors or 8-digit hex.\n"
                     + "- Keep opacity in separate `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
                     + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to #000000 when no text background is present.\n"
@@ -1543,7 +1504,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                             conversationContext.getPinnedMessages(),
                             conversationContext.getMaxInputTokens(),
                             SystemPrompts.buildCurrentRequestSection(userPrompt.toString()),
-                            ToolSchemas.STORYBOARD,
+                            ToolSchemas.storyboard(outputTarget),
                             () -> toolCalls++)
                     .join();
 
@@ -1718,52 +1679,29 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
     private static final class ColorReference {
         private final String propertyPath;
         private final String value;
-        private final String styleRole;
-        private final String styleType;
+        private final boolean textLayer;
+        private final boolean explicitBackground;
 
         private ColorReference(String propertyPath,
                                String value,
-                               String styleRole,
-                               String styleType) {
+                               boolean textLayer,
+                               boolean explicitBackground) {
             this.propertyPath = propertyPath == null ? "" : propertyPath;
             this.value = value == null ? "" : value.trim();
-            this.styleRole = styleRole == null ? "" : styleRole;
-            this.styleType = styleType == null ? "" : styleType;
+            this.textLayer = textLayer;
+            this.explicitBackground = explicitBackground;
         }
 
         private boolean isTextLayer() {
-            String combined = normalizedLayer();
-            return combined.contains("text")
-                    || combined.contains("math")
-                    || combined.contains("formula")
-                    || combined.contains("title")
-                    || combined.contains("caption")
-                    || combined.contains("label");
+            return textLayer;
         }
 
         private boolean isExplicitBackground() {
-            String path = propertyPath.toLowerCase(Locale.ROOT);
-            String combined = normalizedLayer();
-            return path.contains("background")
-                    || path.contains("backstroke")
-                    || combined.contains("background")
-                    || combined.contains("box")
-                    || combined.contains("card");
+            return explicitBackground;
         }
 
         private boolean isTextBackgroundFill() {
-            if (!isExplicitBackground()) {
-                return false;
-            }
-            String path = propertyPath.toLowerCase(Locale.ROOT);
-            return path.contains("background")
-                    || path.contains("fill_color")
-                    || path.equals("color")
-                    || path.endsWith(".color");
-        }
-
-        private String normalizedLayer() {
-            return (styleRole + " " + styleType).toLowerCase(Locale.ROOT);
+            return "background_fill_color".equals(propertyPath);
         }
     }
 

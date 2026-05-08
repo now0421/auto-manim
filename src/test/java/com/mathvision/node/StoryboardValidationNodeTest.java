@@ -69,6 +69,43 @@ class StoryboardValidationNodeTest {
     }
 
     @Test
+    void usesDefaultBlackTextBackgroundWhenOnlyBackgroundStrokeColorIsPresent() {
+        StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
+        StoryboardObject label = scenePatch("label_l", boxPlacement("screen", -1.5, -1.0, 2.1, 2.4));
+        Narrative.StoryboardStyle style = new Narrative.StoryboardStyle();
+        style.setTextColor("#60A5FA");
+        style.setBackgroundStrokeColor("#60A5FA");
+        style.setFontSize(18.0);
+        label.setStyle(style);
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(registryObject("label_l", "text", "l", null)),
+                List.of(label));
+
+        List<String> issues = node.validate(storyboard);
+
+        assertTrue(issues.isEmpty(), () -> String.join("\n", issues));
+    }
+
+    @Test
+    void validatesTextAgainstActualBackgroundFillColor() {
+        StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
+        StoryboardObject title = scenePatch("title", boxPlacement("screen", -1.5, 1.5, 2.1, 2.8));
+        Narrative.StoryboardStyle style = new Narrative.StoryboardStyle();
+        style.setTextColor("#FFFFFF");
+        style.setBackgroundFillColor("#FFFFFF");
+        style.setBackgroundFillOpacity(0.9);
+        title.setStyle(style);
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(registryObject("title", "text", "Main title", null)),
+                List.of(title));
+
+        List<String> issues = node.validate(storyboard);
+
+        assertEquals(1, issues.size(), () -> String.join("\n", issues));
+        assertTrue(issues.get(0).contains("foreground=#FFFFFF, background=#FFFFFF"));
+    }
+
+    @Test
     void reportsTextOverlapUsingStoryboardBounds() {
         StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
         Storyboard storyboard = buildSingleSceneStoryboard(

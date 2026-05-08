@@ -46,9 +46,9 @@ public final class NarrativePrompts {
                     + "- Prefer one reusable object plus actions/style changes over multiple near-duplicate labels, formula cards, highlights, helper objects, or repeated construction elements.\n"
                     + "- Preserve intentional scene-level placement, style, color, and visual hierarchy from the visual design pass unless they cause global consistency, overlap, or readability problems.\n"
                     + "- Once a color is assigned to a concept, it keeps that meaning across the entire storyboard. Record color-to-concept assignments in `global_visual_rules`.\n"
-                    + "- Prefer structured `style` arrays over vague prose. Each style entry should describe one visual layer or role, such as text, background, border, glow, or emphasis.\n"
-                    + "- Do not use a free-text `instructions` field inside style entries. Encode visual intent directly in `properties` using concrete keys and values.\n"
-                    + "- For text cards, formulas with badges, boxed labels, counters, or callouts, encode separate text and background layers as separate entries inside `style`.\n"
+                    + "- Use a single typed `style` object per storyboard object, never a style array and never custom style keys.\n"
+                    + "- Style describes the object itself only. Create separate storyboard objects for labels, badges, helper outlines, cards, or callouts that have their own identity.\n"
+                    + "- For text cards, put text/background fields on that text_card object's single `style`, such as `text_color`, `background_fill_color`, and `background_stroke_color`.\n"
                     + "- Only include `style` when it adds meaningful rendering properties; omit it for visually plain objects.\n"
                     + SystemPrompts.ASCII_TEXT_RULES;
 
@@ -62,6 +62,9 @@ public final class NarrativePrompts {
             "Manim-specific storyboard validation rules:\n"
                     + SystemPrompts.MANIM_MOTION_AND_PACING_RULES
                     + SystemPrompts.MANIM_NAMING_RULES
+                    + "- For named teaching-essential points, lines, intersections, and other geometry whose id or value must be read by the learner, preserve or add a visible companion label unless the current beat explicitly hides it.\n"
+                    + "- Do not express a visible label with `style.label_visible`; use an explicit `kind: text` or `kind: equation` companion object with `behavior = follows_anchor`, `anchor_id` set to the parent id, and `dependency_relation = label_for`.\n"
+                    + StoryboardSchemaPrompts.MANIM_COMPANION_LABEL_EXAMPLE
                     + "- Prefer dark backgrounds (#1C1C1C to #2D2B55) with light content for maximum contrast and cinema feel when the storyboard does not already establish a different valid style.\n";
 
     private static final String OUTPUT_FORMAT =

@@ -99,9 +99,11 @@ class ToolSchemasTest {
     }
 
     @Test
-    void storyboardTool_usesPropertiesNotInstructionsForStyle() {
+    void storyboardTool_usesTypedStyleObjectWithoutInstructions() {
         assertTrue(ToolSchemas.STORYBOARD.contains("\"properties\""));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"required\": [\"role\", \"type\", \"properties\"]"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("Do not invent keys"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"additionalProperties\": false"));
+        assertFalse(ToolSchemas.STORYBOARD.contains("\"required\": [\"role\", \"type\", \"properties\"]"));
         assertFalse(ToolSchemas.STORYBOARD.contains("\"instructions\""));
     }
 
@@ -138,13 +140,14 @@ class ToolSchemasTest {
         assertTrue(ToolSchemas.STORYBOARD.contains("\"additionalProperties\": false"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"static\", \"follows_anchor\", \"derived\", \"fixed_overlay\"]"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"create\", \"write\", \"transform\", \"highlight\", \"move\", \"fade_out\", \"camera\", \"restyle\"]"));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"math_text\", \"plain_text\", \"background_box\", \"border_box\", \"highlight_ring\"]"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"solid\", \"dashed\", \"dotted\"]"));
     }
 
     @Test
     void storyboardSchemaAddsTypedStylePropertiesGuardrails() {
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"patternProperties\""));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"^.*_color$\""));
+        assertFalse(ToolSchemas.STORYBOARD.contains("\"patternProperties\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"text_color\": { \"type\": \"string\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"background_fill_color\": { \"type\": \"string\""));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"font_size\": { \"type\": \"number\" }"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"label_visible\": { \"type\": \"boolean\" }"));
     }

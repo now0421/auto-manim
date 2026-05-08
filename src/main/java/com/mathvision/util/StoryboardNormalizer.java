@@ -9,7 +9,6 @@ import com.mathvision.model.Narrative.StoryboardScene;
 import com.mathvision.model.Narrative.StoryboardStyle;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
@@ -133,7 +132,7 @@ public final class StoryboardNormalizer {
                 continue;
             }
             object.setPlacement(null);
-            object.setStyle(normalizeStyles(object.getStyle()));
+            object.setStyle(normalizeStyle(object.getStyle()));
             normalizedObjects.add(object);
         }
         return normalizedObjects;
@@ -154,11 +153,11 @@ public final class StoryboardNormalizer {
                 object.setId(null);
             }
             object.setPlacement(normalizePlacement(object.getPlacement()));
-            object.setStyle(normalizeStyles(object.getStyle()));
+            object.setStyle(normalizeStyle(object.getStyle()));
 
             if (mode == PatchMode.EXITING) {
                 object.setPlacement(null);
-                object.setStyle(new ArrayList<>());
+                object.setStyle(null);
             }
 
             stripPatchOnlyFields(object, mode);
@@ -204,25 +203,12 @@ public final class StoryboardNormalizer {
         object.setDependencyRelation(null);
         object.setConstraintNote(null);
         if (mode == PatchMode.EXITING) {
-            object.setStyle(new ArrayList<>());
+            object.setStyle(null);
         }
     }
 
-    private static List<StoryboardStyle> normalizeStyles(List<StoryboardStyle> styles) {
-        List<StoryboardStyle> normalizedStyles = new ArrayList<>();
-        if (styles == null) {
-            return normalizedStyles;
-        }
-        for (StoryboardStyle style : styles) {
-            if (style == null) {
-                continue;
-            }
-            if (style.getProperties() == null) {
-                style.setProperties(new LinkedHashMap<>());
-            }
-            normalizedStyles.add(style);
-        }
-        return normalizedStyles;
+    private static StoryboardStyle normalizeStyle(StoryboardStyle style) {
+        return style != null && style.hasData() ? style : null;
     }
 
     private static StoryboardPlacement normalizePlacement(StoryboardPlacement placement) {

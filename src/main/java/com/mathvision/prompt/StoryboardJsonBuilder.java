@@ -136,7 +136,7 @@ public final class StoryboardJsonBuilder {
                     || !StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
                 addPlacement(objectNode, object.getPlacement());
             }
-            addStyles(objectNode, object.getStyle());
+            addStyle(objectNode, object.getStyle());
             putNonBlank(objectNode, "source_node", object.getSourceNode());
             putNonBlank(objectNode, "behavior", object.getBehavior());
             putNonBlank(objectNode, "anchor_id", object.getAnchorId());
@@ -180,27 +180,12 @@ public final class StoryboardJsonBuilder {
         removeIfEmpty(parentNode, axisNode, fieldName);
     }
 
-    private static void addStyles(ObjectNode objectNode, List<StoryboardStyle> styles) {
-        if (styles == null || styles.isEmpty()) {
+    private static void addStyle(ObjectNode objectNode, StoryboardStyle style) {
+        if (style == null || !style.hasData()) {
             return;
         }
 
-        ArrayNode styleArray = objectNode.putArray("style");
-        for (StoryboardStyle style : styles) {
-            if (style == null) {
-                continue;
-            }
-            ObjectNode styleNode = styleArray.addObject();
-            putNonBlank(styleNode, "role", style.getRole());
-            putNonBlank(styleNode, "type", style.getType());
-            if (style.getProperties() != null && !style.getProperties().isEmpty()) {
-                styleNode.set("properties", JsonUtils.mapper().valueToTree(style.getProperties()));
-            }
-            removeIfEmpty(styleArray, styleNode);
-        }
-        if (styleArray.isEmpty()) {
-            objectNode.remove("style");
-        }
+        objectNode.set("style", JsonUtils.mapper().valueToTree(style));
     }
 
     private static void addActions(ObjectNode sceneNode, List<StoryboardAction> actions) {

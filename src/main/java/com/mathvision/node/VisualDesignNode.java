@@ -243,7 +243,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
                         conversationSnapshot,
                         conversationContext.getMaxInputTokens(),
                         userPromptText,
-                        ToolSchemas.SCENE_DESIGN,
+                        ToolSchemas.sceneDesign(outputTarget),
                         () -> toolCalls.incrementAndGet()
                 ))
                 .thenApply(result -> {
@@ -353,17 +353,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         List<String> paletteColors = new ArrayList<>();
         if (scene.getEnteringObjects() != null) {
             for (StoryboardObject obj : scene.getEnteringObjects()) {
-                if (obj.getStyle() != null) {
-                    for (var style : obj.getStyle()) {
-                        if (style.getProperties() != null) {
-                            style.getProperties().forEach((key, value) -> {
-                                if (key.contains("color") && value instanceof String) {
-                                    paletteColors.add((String) value);
-                                }
-                            });
-                        }
-                    }
-                }
+                collectStyleColors(obj.getStyle(), paletteColors);
             }
         }
         return new SceneDesignResult(node, userPrompt, assistantTranscript, scene, newObjects, paletteColors);
@@ -451,7 +441,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             if (sceneObj.getId() == null) continue;
             StoryboardObject registryObj = registryById.get(sceneObj.getId());
             if (registryObj == null) continue;
-            if (sceneObj.getStyle() != null && !sceneObj.getStyle().isEmpty()) {
+            if (sceneObj.getStyle() != null && sceneObj.getStyle().hasData()) {
                 registryObj.setStyle(sceneObj.getStyle());
             }
             if (sceneObj.getPlacement() != null && sceneObj.getPlacement().hasData()) {
@@ -586,7 +576,7 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
             if (obj.getPlacement() != null && obj.getPlacement().hasData()) {
                 sb.append(", placement=").append(formatPlacementSummary(obj.getPlacement()));
             }
-            if (obj.getStyle() != null && !obj.getStyle().isEmpty()) {
+            if (obj.getStyle() != null && obj.getStyle().hasData()) {
                 sb.append(", style=").append(formatStyleSummary(obj.getStyle()));
             }
             sb.append("\n");
@@ -622,21 +612,63 @@ public class VisualDesignNode extends PocketFlow.Node<KnowledgeGraph, KnowledgeG
         }
     }
 
-    private static String formatStyleSummary(List<Narrative.StoryboardStyle> styles) {
-        return styles.stream()
-                .map(s -> {
-                    StringBuilder sb = new StringBuilder();
-                    if (s.getRole() != null) sb.append(s.getRole());
-                    if (s.getProperties() != null && !s.getProperties().isEmpty()) {
-                        sb.append("{");
-                        sb.append(s.getProperties().entrySet().stream()
-                                .map(e -> e.getKey() + "=" + e.getValue())
-                                .collect(Collectors.joining(", ")));
-                        sb.append("}");
-                    }
-                    return sb.toString();
-                })
-                .collect(Collectors.joining("; "));
+    private static String formatStyleSummary(Narrative.StoryboardStyle style) {
+        List<String> parts = new ArrayList<>();
+        appendStylePart(parts, "color", style.getColor());
+        appendStylePart(parts, "text_color", style.getTextColor());
+        appendStylePart(parts, "fill_color", style.getFillColor());
+        appendStylePart(parts, "stroke_color", style.getStrokeColor());
+        appendStylePart(parts, "background_fill_color", style.getBackgroundFillColor());
+        appendStylePart(parts, "background_stroke_color", style.getBackgroundStrokeColor());
+        appendStylePart(parts, "highlight_color", style.getHighlightColor());
+        appendStylePart(parts, "font_family", style.getFontFamily());
+        appendStylePart(parts, "font_weight", style.getFontWeight());
+        appendStylePart(parts, "font_style", style.getFontStyle());
+        appendStylePart(parts, "line_style", style.getLineStyle());
+        appendStylePart(parts, "opacity", style.getOpacity());
+        appendStylePart(parts, "fill_opacity", style.getFillOpacity());
+        appendStylePart(parts, "stroke_opacity", style.getStrokeOpacity());
+        appendStylePart(parts, "background_fill_opacity", style.getBackgroundFillOpacity());
+        appendStylePart(parts, "background_stroke_opacity", style.getBackgroundStrokeOpacity());
+        appendStylePart(parts, "highlight_opacity", style.getHighlightOpacity());
+        appendStylePart(parts, "stroke_width", style.getStrokeWidth());
+        appendStylePart(parts, "font_size", style.getFontSize());
+        appendStylePart(parts, "padding", style.getPadding());
+        appendStylePart(parts, "corner_radius", style.getCornerRadius());
+        appendStylePart(parts, "z_index", style.getZIndex());
+        appendStylePart(parts, "point_size", style.getPointSize());
+        appendStylePart(parts, "radius", style.getRadius());
+        appendStylePart(parts, "marker_size", style.getMarkerSize());
+        appendStylePart(parts, "label_visible", style.getLabelVisible());
+        return "{" + String.join(", ", parts) + "}";
+    }
+
+    private static void appendStylePart(List<String> parts, String key, Object value) {
+        if (value instanceof String && ((String) value).isBlank()) {
+            return;
+        }
+        if (value != null) {
+            parts.add(key + "=" + value);
+        }
+    }
+
+    private static void collectStyleColors(Narrative.StoryboardStyle style, List<String> colors) {
+        if (style == null) {
+            return;
+        }
+        addColor(colors, style.getColor());
+        addColor(colors, style.getTextColor());
+        addColor(colors, style.getFillColor());
+        addColor(colors, style.getStrokeColor());
+        addColor(colors, style.getBackgroundFillColor());
+        addColor(colors, style.getBackgroundStrokeColor());
+        addColor(colors, style.getHighlightColor());
+    }
+
+    private static void addColor(List<String> colors, String color) {
+        if (color != null && !color.isBlank()) {
+            colors.add(color);
+        }
     }
 
     private static String truncate(String text, int maxLen) {

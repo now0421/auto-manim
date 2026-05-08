@@ -314,13 +314,9 @@ class CodeGenerationNodeRoutingTest {
         titlePlacement.setY(yAxis);
         title.setPlacement(titlePlacement);
         Narrative.StoryboardStyle titleStyle = new Narrative.StoryboardStyle();
-        titleStyle.setRole("emphasis");
-        titleStyle.setType("text");
-        titleStyle.setProperties(Map.of(
-                "color", "WHITE",
-                "scale", 0.9
-        ));
-        title.setStyle(List.of(titleStyle));
+        titleStyle.setTextColor("#FFFFFF");
+        titleStyle.setFontSize(28.0);
+        title.setStyle(titleStyle);
         title.setSourceNode("problem");
         scene.setEnteringObjects(List.of(title));
         Narrative.StoryboardObject persistentTitle = new Narrative.StoryboardObject();

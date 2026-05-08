@@ -14,7 +14,9 @@ public final class CodeGenerationPrompts {
                     + SystemPrompts.STORYBOARD_AUTHORITY_RULES
                     + "Mandatory rules:\n"
                     + "- Use `from manim import *`.\n"
-                    + "- Do not invent extra learner-visible objects unless they are necessary for clarity, backend implementation, or an equivalent replacement for an omitted storyboard object.\n"
+                    + "- Do not invent learner-visible objects that are not declared in the storyboard. This includes point labels, line labels, captions, formula badges, helper overlays, angle labels, and explanatory text.\n"
+                    + "- If clarity seems to require an undeclared label or annotation, omit it rather than creating it; only storyboard-declared visible objects may appear on screen.\n"
+                    + "- Do not treat `style.label_visible` as permission to create a label. Render labels only when the storyboard declares explicit text/equation label objects.\n"
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
                     + "- Treat storyboard `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants.\n"
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
@@ -75,6 +77,7 @@ public final class CodeGenerationPrompts {
                     + "Rewrite the full file so it becomes valid, consistent, and ready for the next workflow stage.\n"
                     + "Fix every reported validation problem, preserve the teaching content, keep the requested scene class name, and proactively fix nearby Python/Manim mistakes.\n\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
+                    + "- Do not treat `style.label_visible` as permission to create a label. Render labels only when the storyboard declares explicit text/equation label objects.\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
                     + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
@@ -219,7 +222,7 @@ public final class CodeGenerationPrompts {
                         + "Rewrite the FULL code so it satisfies all validation rules while preserving the teaching goal.\n"
                         + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
                         + "Treat `notes_for_codegen` as hard scene-level constraints; preserve every concrete range, endpoint, lifecycle, visibility, transform, color, and layout instruction unless it is unsupported, in which case preserve the same intent with a documented equivalent.\n"
-                        + "Apply text constructor mapping consistently across the file: `math_text -> MathTex`, `plain_text -> Text`, and avoid `Tex` except for explicit non-math LaTeX text.\n"
+                        + "Apply text constructor mapping consistently across the file: `kind=equation -> MathTex`, `kind=text/text_card -> Text` unless the content clearly requires math rendering, and avoid `Tex` except for explicit non-math LaTeX text.\n"
                         + "Keep `%s` as the exact scene class name.\n"
                         + "Return ONLY the full Python code block.",
                 storyboardBlock, sceneName, generatedCode, problemList, sceneName));
@@ -285,10 +288,11 @@ public final class CodeGenerationPrompts {
                         + "Generate the COMPLETE method body for `def %s(self):`.\n"
                         + "- Include the full `def %s(self):` signature and all code inside.\n"
                         + "- Use variables and objects established in earlier scene methods via `self` if needed.\n"
-                        + "- Follow the storyboard's semantic intent; select and create useful objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
+                        + "- Follow the storyboard's semantic intent; select from storyboard-declared objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
+                        + "- Do not create learner-visible elements outside the storyboard. Backend-only invisible helpers are allowed only when required for calculation or documented API usage.\n"
                         + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, durations, visibility/lifecycle instructions, transforms, palette notes, and layout constraints exactly when present.\n"
                         + "- For any object with `behavior=derived` or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, compute it from `dependency_objects` or use native Manim/API geometry helpers. Do not instantiate it from hardcoded placement coordinates.\n"
-                        + "- Respect storyboard text semantics strictly: `math_text` means `MathTex(...)`, `plain_text` means `Text(...)`, and avoid `Tex(...)` unless the scene explicitly needs non-math LaTeX text.\n"
+                        + "- Respect storyboard text semantics strictly: `kind=equation` means `MathTex(...)`; `kind=text` and `kind=text_card` mean `Text(...)` unless the content clearly requires math rendering; avoid `Tex(...)` unless the scene explicitly needs non-math LaTeX text.\n"
                         + "- Return the method code via the write_scene_code tool.",
                 methodName, sceneIndex + 1, totalScenes,
                 sceneJson, methodName, methodName));
@@ -324,7 +328,8 @@ public final class CodeGenerationPrompts {
                         + "Scene specification:\n```json\n%s\n```\n\n"
                         + "Generate the COMPLETE GeoGebra command block for this scene:\n"
                         + "- Start with a comment line: # %s\n"
-                        + "- Create necessary entering objects for this scene; merge or omit non-essential helpers, duplicate labels, and decorative elements when they do not improve teaching clarity\n"
+                        + "- Create only storyboard-declared visible objects needed for this scene; merge or omit non-essential helpers, duplicate labels, and decorative elements when they do not improve teaching clarity\n"
+                        + "- Do not create learner-visible elements outside the storyboard. Backend-only invisible helpers are allowed only when required for calculation or documented command usage.\n"
                         + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, visibility/lifecycle instructions, styles, and layout constraints exactly when present\n"
                         + "- For derived objects such as intersections, reflections, midpoints, projections, connecting segments, and angle markers, construct them from their dependency objects with native GeoGebra commands instead of hardcoded placement coordinates\n"
                         + "- Apply styles and visibility settings\n"

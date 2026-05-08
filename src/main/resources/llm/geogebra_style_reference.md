@@ -64,23 +64,22 @@ commands.
 
 ```text
 color               // 6-digit hex color, #RRGGBB
-line_thickness      // stronger or lighter stroke emphasis
-line_style          // solid | dashed_long | dashed_short | dotted | dash_dot
+text_color          // 6-digit hex text color, #RRGGBB
+fill_color          // 6-digit hex fill color, #RRGGBB
+stroke_color        // 6-digit hex line or border color, #RRGGBB
+background_fill_color    // text-card/background fill color, #RRGGBB
+background_stroke_color  // text-card/background border color, #RRGGBB
+stroke_width        // stronger or lighter stroke emphasis
+line_style          // solid | dashed | dotted
 point_size          // numeric point size
-point_style         // dot | cross | empty_dot | plus | diamond | triangle
-fill_color          // 6-digit hex color, #RRGGBB, when a filled region/card needs it
 fill_opacity        // 0..1
 stroke_opacity      // 0..1
 opacity             // 0..1
+font_size           // text size hint
+padding             // text-card padding
+corner_radius       // text-card corner radius
+z_index             // layer/order hint
 label_visible       // true | false
-caption             // short displayed caption
-fixed               // true | false
-selection_allowed   // true | false
-tooltip_mode        // automatic | on | off | caption
-layer               // 0..9
-visible             // true | false
-show_axes           // true | false
-show_grid           // true | false
 ```
 
 ## 3. Storyboard Output Guidance
@@ -89,9 +88,14 @@ When writing storyboard JSON:
 
 * `color_palette` must contain only 6-digit hex color strings.
 * `color_scheme` should describe semantic mapping, not implementation details.
-* Object `style` should stay concise, structured, and construction-friendly.
-* Prefer structured properties such as `color`, `fill_color`, `line_style`,
-  `fill_opacity`, and `label_visible` over free-form style prose.
+* Object `style` must be a single typed object, not an array and not a free-form
+  map.
+* Use only the allowed style keys such as `color`, `text_color`, `fill_color`,
+  `stroke_color`, `stroke_width`, `line_style`, `fill_opacity`, and
+  `label_visible`.
+* Create separate storyboard objects for labels, badges, helper outlines,
+  cards, or callouts instead of encoding sidecar layers inside another
+  object's style.
 * Use the same color for the same mathematical concept across scenes.
 * `notes_for_codegen` is a hard downstream constraint field; use it only for
   helper visibility, grid/axes policy, label policy, palette consistency,

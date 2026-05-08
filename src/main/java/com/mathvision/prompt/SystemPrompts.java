@@ -47,7 +47,7 @@ public final class SystemPrompts {
                     + "- `constraint_note`: object-level hard geometry that must be preserved; explain the invariant and relationship meaning here.\n"
                     + "- `anchor_id`: id of the object this one should stay attached to.\n"
                     + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint - at render time the object will be recomputed from its source objects via `dependency_objects`, `dependency_relation`, and `constraint_note`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
-                    + "- `style`: array of visual layer entries (color, opacity, thickness, dash, background, etc.) that describe how the object should look. Each entry targets one visual layer or role. Omit for visually plain objects.\n"
+                    + "- `style`: optional single typed object of visual properties such as color, text_color, fill_color, stroke_color, opacity, stroke_width, line_style, font_size, background_fill_color, background_stroke_color, padding, and z_index. Do not invent custom style keys. Style describes this object only; create separate objects for labels, badges, helper outlines, cards, or callouts.\n"
                     + "- `source_node`: knowledge-graph node id that produced this object; informational only.\n";
 
     /** Scene-structure fields: scene metadata, object lifecycle, and actions. */
@@ -86,7 +86,7 @@ public final class SystemPrompts {
             "How to interpret the storyboard fields:\n"
                     + "- `kind`: determines the GeoGebra construction primitive (point -> named coordinate or path-point, line -> Line/Segment/Ray, circle -> Circle, text -> Text or native label, etc.).\n"
                     + "- `content`: display text or coordinate hint; for text objects this is the visible string, for geometry it is a label or math expression.\n"
-                    + "- `style`: visual properties array (color, thickness, dash, opacity, etc.) to apply via SetColor, SetLineThickness, SetLineStyle, etc.\n"
+                    + "- `style`: optional single typed object of visual properties (color, fill_color, stroke_color, stroke_width, line_style, opacity, label_visible, etc.) to apply via SetColor, SetFilling, SetLineThickness, SetLineStyle, etc.\n"
                     + "- `entering_objects`: scene patches for newly entering objects; use `id` plus optional `placement`/`style` changes.\n"
                     + "- `persistent_objects`: scene patches for carried objects; use `id` plus optional changed `placement`/`style`.\n"
                     + "- `exiting_objects`: id-only entries that may be translated into hidden helper objects or omitted if persistent visibility would cause clutter.\n"
@@ -131,7 +131,8 @@ public final class SystemPrompts {
                     + "- Omit, merge, dim, or replace elements that are decorative, redundant, clutter-causing, naturally expressed by existing objects, or not helpful for the current teaching beat.\n"
                     + "- Omitting an object must not break the semantics of `geometry_constraints`, `constraint_note`, `notes_for_codegen`, `dependency_objects`, `dependency_relation`, `behavior`, `anchor_id`, or `actions.targets`.\n"
                     + "- If an omitted object is referenced by an action target, preserve that action's teaching intent through an equivalent existing object, style change, label, caption, or dependency-safe construction.\n"
-                    + "- If adding a small helper object improves clarity, backend correctness, or replaces an omitted object, keep it semantically consistent and name it clearly.\n";
+                    + "- Do not create learner-visible objects that are not declared in the storyboard. If a label, caption, badge, marker, helper overlay, or explanatory text is useful enough to appear on screen, it must already have a storyboard id.\n"
+                    + "- Backend-only helper variables or invisible helper mobjects/commands may be used only when required by the API or geometry calculation; they must not be shown, labeled, animated, highlighted, or treated as teaching elements.\n";
 
     /** Shared authority model for stages that consume a validated storyboard. */
     public static final String STORYBOARD_AUTHORITY_RULES =
@@ -403,7 +404,8 @@ public final class SystemPrompts {
                     + "- Add a new storyboard object only when it is teaching-essential, improves clarity, or carries a distinct geometric/dependency role.\n"
                     + "- Prefer reusing, restyling, moving, dimming, or relabeling an existing object over creating a new object with the same meaning.\n"
                     + "- Avoid redundant labels, duplicate text cards, repeated formula copies, duplicate highlights, and decorative objects that do not advance the current teaching beat.\n"
-                    + "- Keep `new_objects` and `object_registry` lean: do not register objects that can be expressed as style changes, action descriptions, native labels, or references to existing ids.\n"
+                    + "- A required label, callout, or annotation is not redundant when it gives the learner a distinct name/value, has its own attachment behavior, or is needed to identify the parent object.\n"
+                    + "- Keep `new_objects` and `object_registry` lean: do not register objects that can be expressed as style changes, action descriptions, built-in labels, or references to existing ids.\n"
                     + "- When a derived object (angle marker, midpoint, intersection, reflection, etc.) can be fully defined by referencing existing objects, do so directly rather than introducing separate helper/scaffold objects.\n"
                     + "- For angle markers, define them by referencing the boundary lines, segments, or rays directly in `dependency_objects` and `dependency_relation` rather than creating helper point objects on existing lines just to use a three-point form.\n"
                     + "- Avoid creating helper points, helper lines, or other scaffolding objects whose sole purpose is to serve as an intermediate input to another object when a direct dependency reference is possible.\n"
@@ -450,7 +452,7 @@ public final class SystemPrompts {
     /** Shared Manim naming rules for storyboard ids and generated identifiers. */
     public static final String MANIM_NAMING_RULES =
             "- Keep all Python identifiers and object names ASCII only.\n"
-                    + "- When object ids become Python variable names, keep them concise and non-redundant because the role/type is already carried elsewhere; prefer `river` over `line_river` and `A` over `pointA`.\n"
+                    + "- When object ids become Python variable names, keep them concise and non-redundant because `kind` already carries the type; prefer `river` over `line_river` and `A` over `pointA`.\n"
                     + "- Single uppercase letters are acceptable for geometric points (e.g. `A`, `B`, `P`); use camelCase or snake_case for compound names.\n"
                     + "- Do not use Python reserved words (`class`, `def`, `lambda`, `for`, `if`, `in`, `is`, `not`, `None`, `True`, `False`, etc.) or Manim built-in class names (`Scene`, `Mobject`, `Line`, `Circle`, `Text`, etc.) as identifiers.\n";
 
@@ -460,10 +462,10 @@ public final class SystemPrompts {
     /** Text constructor mapping rules shared between code generation and evaluation. */
     public static final String MANIM_TEXT_CONSTRUCTOR_MAPPING =
             "Text constructor mapping is mandatory:\n"
-                    + "- `style.type = math_text` must render with `MathTex(...)`.\n"
-                    + "- `style.type = plain_text` must render with `Text(...)`.\n"
+                    + "- `kind = equation` must render with `MathTex(...)`.\n"
+                    + "- `kind = text` and `kind = text_card` normally render with `Text(...)`.\n"
                     + "- Avoid `Tex(...)` unless the storyboard explicitly calls for non-math LaTeX text.\n"
-                    + "- If storyboard style type is missing, infer it from content: formulas, Greek letters, angle notation, superscripts, subscripts, and LaTeX control sequences are math text; ordinary labels and prose fragments are plain text.\n";
+                    + "- If the kind/content disagree, infer from content: formulas, Greek letters, angle notation, superscripts, subscripts, and LaTeX control sequences are math text; ordinary labels and prose fragments are plain text.\n";
 
     // ========================================================================
     // GeoGebra-specific rules
@@ -471,7 +473,7 @@ public final class SystemPrompts {
 
     /** Shared GeoGebra naming rules for storyboard ids and generated identifiers. */
     public static final String GEOGEBRA_NAMING_RULES =
-            "- Keep object names concise and non-redundant because the role/type is already carried elsewhere; prefer `l` over `lineL` and `c` over `circleC`.\n"
+            "- Keep object names concise and non-redundant because `kind` already carries the type; prefer `l` over `lineL` and `c` over `circleC`.\n"
                     + "- Prefer native GeoGebra math-style names. Point names must start with an uppercase letter (e.g. `A`, `P_1`); vector names must start with a lowercase letter (e.g. `v`, `u`); lines, circles, and other non-point objects may start with a lowercase letter (e.g. `l`, `c`, `tri`). Use `_` for subscripts and `'` for primes.\n"
                     + "- Translate ASCII-spelled ids to GeoGebra-native math names when needed by applying these structural rules:\n"
                     + "  - A trailing `prime` suffix becomes a prime mark: `<base>prime` -> `<base>'`\n"
