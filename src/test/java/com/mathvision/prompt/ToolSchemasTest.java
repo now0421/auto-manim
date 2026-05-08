@@ -151,4 +151,14 @@ class ToolSchemasTest {
         assertTrue(ToolSchemas.STORYBOARD.contains("\"font_size\": { \"type\": \"number\" }"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"label_visible\": { \"type\": \"boolean\" }"));
     }
+
+    @Test
+    void storyboardSchemaIncludesStructuredConstraintsContract() {
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"constraints\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"category\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"relation\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"objects\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("angle_between_rays"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("constraint_note is only"));
+    }
 }

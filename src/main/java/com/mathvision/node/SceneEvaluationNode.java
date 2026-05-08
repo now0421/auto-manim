@@ -1350,7 +1350,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         }
         if (!context.isEmpty()) {
             context.put("repair_rule",
-                    "For dependency-driven or derived objects, keep dependency_relation and constraint_note true; fix layout by moving/scaling upstream source objects, the whole constrained group, camera/view, or label attachment instead of directly assigning coordinates to the derived object.");
+                    "For dependency-driven or derived objects, keep dependency_relation, structured constraints, and constraint_note true; fix layout by moving/scaling upstream source objects, the whole constrained group, camera/view, or label attachment instead of directly assigning coordinates to the derived object.");
         }
         return context;
     }
@@ -1373,6 +1373,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         putNonBlank(context, "behavior", object.getBehavior());
         putNonBlank(context, "anchor_id", object.getAnchorId());
         putNonBlank(context, "dependency_relation", object.getDependencyRelation());
+        if (object.getConstraints() != null && !object.getConstraints().isEmpty()) {
+            context.put("constraints", object.getConstraints());
+        }
         putNonBlank(context, "constraint_note", object.getConstraintNote());
         List<String> dependencies = cleanDependencyObjects(object);
         if (!dependencies.isEmpty()) {
@@ -1421,6 +1424,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             map.put("dependency_objects", dependencies);
         }
         putNonBlank(map, "dependency_relation", object.getDependencyRelation());
+        if (object.getConstraints() != null && !object.getConstraints().isEmpty()) {
+            map.put("constraints", object.getConstraints());
+        }
         putNonBlank(map, "constraint_note", object.getConstraintNote());
         if (StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
             map.put("placement", "omitted_for_dependency_driven_object");

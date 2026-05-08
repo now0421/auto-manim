@@ -44,6 +44,27 @@ public final class ToolSchemas {
                     + "  \"additionalProperties\": false"
                     + "}";
 
+    private static final String STORYBOARD_CONSTRAINTS_FIELD =
+            "\"constraints\": {"
+                    + "  \"type\": \"array\","
+                    + "  \"description\": \"Machine-readable hard or soft invariants for this object or scene. Use this as the primary semantic contract; constraint_note is only a short legacy/debug summary.\","
+                    + "  \"items\": {"
+                    + "    \"type\": \"object\","
+                    + "    \"properties\": {"
+                    + "      \"id\": { \"type\": \"string\", \"description\": \"Optional stable id for this single constraint\" },"
+                    + "      \"category\": { \"type\": \"string\", \"enum\": [\"geometry\", \"measurement\", \"motion\", \"attachment\", \"layout\", \"visibility\", \"style\", \"lifecycle\"], \"description\": \"Which validator/codegen subsystem should consume this constraint\" },"
+                    + "      \"relation\": { \"type\": \"string\", \"description\": \"Canonical relation such as lies_on, connects_points, reflection_across, intersection_of, angle_between_rays, arc_sweep, equal_measure_group, same_side_of, moves_on_object, label_for, fixed_offset_from, screen_fixed, persistent_across_scenes\" },"
+                    + "      \"objects\": { \"type\": \"array\", \"description\": \"Ordered object ids governed by this constraint, including the owner object for object-level constraints\", \"items\": { \"type\": \"string\" } },"
+                    + "      \"roles\": { \"type\": \"object\", \"description\": \"Role-to-id mapping such as target/source/reference/vertex/start_boundary/end_boundary/anchor. Values may be ids or short id lists.\", \"additionalProperties\": true },"
+                    + "      \"params\": { \"type\": \"object\", \"description\": \"Structured relation parameters such as side, sector, direction, range, coordinate_space, offset, tolerance, or lifecycle scenes\", \"additionalProperties\": true },"
+                    + "      \"strength\": { \"type\": \"string\", \"enum\": [\"hard\", \"repair_hard\", \"soft\"], \"description\": \"hard is mathematical/semantic, repair_hard is required during cleanup, soft is preference\" },"
+                    + "      \"reason\": { \"type\": \"string\", \"description\": \"Short human-readable explanation\" }"
+                    + "    },"
+                    + "    \"additionalProperties\": false,"
+                    + "    \"required\": [\"category\", \"relation\", \"objects\", \"strength\"]"
+                    + "  }"
+                    + "}";
+
     public static String storyboard(String outputTarget) {
         return isManim(outputTarget) ? withoutLabelVisible(STORYBOARD) : STORYBOARD;
     }
@@ -252,7 +273,8 @@ public final class ToolSchemas {
             + "              \"anchor_id\": { \"type\": \"string\" },"
             + "              \"dependency_objects\": { \"type\": \"array\", \"description\": \"Ordered object ids this object depends on. Use ids only, no prose.\", \"items\": { \"type\": \"string\" } },"
             + "              \"dependency_relation\": { \"type\": \"string\", \"description\": \"Short construction relationship such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\" },"
-            + "              \"constraint_note\": { \"type\": \"string\", \"description\": \"Hard local geometric rule. For angle or arc markers, include the intended sector or sweep such as smaller/interior, directed, clockwise/counterclockwise, exterior, or side of a reference line/normal; layout-only quadrant wording is not enough.\" }"
+            + "              " + STORYBOARD_CONSTRAINTS_FIELD + ","
+            + "              \"constraint_note\": { \"type\": \"string\", \"description\": \"Short legacy/debug summary of the structured constraints; do not rely on this instead of constraints[].\" }"
             + "            },"
             + "            \"additionalProperties\": false,"
             + "            \"required\": [\"id\", \"kind\", \"content\"]"
@@ -314,6 +336,7 @@ public final class ToolSchemas {
             + "                \"description\": \"Scene-level hard geometric invariants that downstream stages must preserve, such as reflection symmetry, collinearity, equal-radius construction, incidence, bounded motion, or intersection definitions\","
             + "                \"items\": { \"type\": \"string\" }"
             + "              },"
+            + "              " + STORYBOARD_CONSTRAINTS_FIELD + ","
             + "              \"step_refs\": {"
             + "                \"type\": \"array\","
             + "                \"description\": \"Referenced teaching beats, graph nodes, or problem-solving steps covered by this scene\","
@@ -585,7 +608,8 @@ public final class ToolSchemas {
             + "              \"anchor_id\": { \"type\": \"string\" },"
             + "              \"dependency_objects\": { \"type\": \"array\", \"description\": \"Ordered object ids this object depends on. Use ids only, no prose.\", \"items\": { \"type\": \"string\" } },"
             + "              \"dependency_relation\": { \"type\": \"string\", \"description\": \"Short construction relationship such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\" },"
-            + "              \"constraint_note\": { \"type\": \"string\", \"description\": \"Hard local geometric rule. For angle or arc markers, include the intended sector or sweep such as smaller/interior, directed, clockwise/counterclockwise, exterior, or side of a reference line/normal; layout-only quadrant wording is not enough.\" }"
+            + "              " + STORYBOARD_CONSTRAINTS_FIELD + ","
+            + "              \"constraint_note\": { \"type\": \"string\", \"description\": \"Short legacy/debug summary of the structured constraints; do not rely on this instead of constraints[].\" }"
             + "            },"
             + "            \"required\": [\"id\", \"kind\", \"content\"]"
             + "          }"

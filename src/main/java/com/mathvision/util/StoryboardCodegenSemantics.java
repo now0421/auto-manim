@@ -1,6 +1,7 @@
 package com.mathvision.util;
 
 import com.mathvision.model.Narrative.StoryboardObject;
+import com.mathvision.model.Narrative.StoryboardConstraint;
 
 import java.util.Set;
 
@@ -40,7 +41,41 @@ public final class StoryboardCodegenSemantics {
             return true;
         }
         String relation = normalize(object.getDependencyRelation());
-        return COORDINATE_DERIVED_RELATIONS.contains(relation);
+        if (COORDINATE_DERIVED_RELATIONS.contains(relation)) {
+            return true;
+        }
+        if (object.getConstraints() != null) {
+            for (StoryboardConstraint constraint : object.getConstraints()) {
+                if (constraint == null) {
+                    continue;
+                }
+                String constraintRelation = normalize(constraint.getRelation());
+                if (COORDINATE_DERIVED_RELATIONS.contains(constraintRelation)
+                        || isCoordinateDerivedConstraintRelation(constraintRelation)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isCoordinateDerivedConstraintRelation(String relation) {
+        return Set.of(
+                "lies_on",
+                "point_on_object",
+                "intersection_of",
+                "reflection_across",
+                "midpoint_of",
+                "projection_onto",
+                "foot_of_perpendicular",
+                "parallel_to",
+                "perpendicular_to",
+                "angle_between_rays",
+                "angle_between_lines",
+                "arc_sweep",
+                "ray_from_to",
+                "line_through_points"
+        ).contains(relation);
     }
 
     private static String normalize(String value) {

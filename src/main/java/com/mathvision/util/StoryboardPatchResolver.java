@@ -2,6 +2,7 @@ package com.mathvision.util;
 
 import com.mathvision.model.Narrative.Storyboard;
 import com.mathvision.model.Narrative.StoryboardAction;
+import com.mathvision.model.Narrative.StoryboardConstraint;
 import com.mathvision.model.Narrative.StoryboardObject;
 import com.mathvision.model.Narrative.StoryboardPlacement;
 import com.mathvision.model.Narrative.StoryboardPlacementAxis;
@@ -124,6 +125,7 @@ public final class StoryboardPatchResolver {
         copy.setDependencyObjects(copyStringList(source.getDependencyObjects()));
         copy.setDependencyRelation(source.getDependencyRelation());
         copy.setConstraintNote(source.getConstraintNote());
+        copy.setConstraints(copyConstraints(source.getConstraints()));
         return copy;
     }
 
@@ -141,6 +143,7 @@ public final class StoryboardPatchResolver {
         copy.setSafeAreaPlan(source.getSafeAreaPlan());
         copy.setScreenOverlayPlan(source.getScreenOverlayPlan());
         copy.setGeometryConstraints(copyStringList(source.getGeometryConstraints()));
+        copy.setConstraints(copyConstraints(source.getConstraints()));
         copy.setStepRefs(copyStringList(source.getStepRefs()));
         copy.setActions(copyActions(source.getActions()));
         copy.setNotesForCodegen(copyStringList(source.getNotesForCodegen()));
@@ -210,6 +213,9 @@ public final class StoryboardPatchResolver {
         }
         if (!isBlank(patch.getConstraintNote())) {
             target.setConstraintNote(patch.getConstraintNote());
+        }
+        if (patch.getConstraints() != null && !patch.getConstraints().isEmpty()) {
+            target.setConstraints(copyConstraints(patch.getConstraints()));
         }
     }
 
@@ -320,6 +326,67 @@ public final class StoryboardPatchResolver {
 
     private static List<String> copyStringList(List<String> values) {
         return values == null ? new ArrayList<>() : new ArrayList<>(values);
+    }
+
+    private static List<StoryboardConstraint> copyConstraints(List<StoryboardConstraint> constraints) {
+        List<StoryboardConstraint> copies = new ArrayList<>();
+        if (constraints == null) {
+            return copies;
+        }
+        for (StoryboardConstraint constraint : constraints) {
+            if (constraint == null || !constraint.hasData()) {
+                continue;
+            }
+            StoryboardConstraint copy = new StoryboardConstraint();
+            copy.setId(constraint.getId());
+            copy.setCategory(constraint.getCategory());
+            copy.setRelation(constraint.getRelation());
+            copy.setObjects(copyStringList(constraint.getObjects()));
+            copy.setRoles(copyObjectMap(constraint.getRoles()));
+            copy.setParams(copyObjectMap(constraint.getParams()));
+            copy.setStrength(constraint.getStrength());
+            copy.setReason(constraint.getReason());
+            copies.add(copy);
+        }
+        return copies;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> copyObjectMap(Map<String, Object> source) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        if (source == null) {
+            return copy;
+        }
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()) {
+                continue;
+            }
+            copy.put(entry.getKey(), copyObjectValue(entry.getValue()));
+        }
+        return copy;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object copyObjectValue(Object value) {
+        if (value instanceof Map<?, ?>) {
+            Map<?, ?> map = (Map<?, ?>) value;
+            Map<String, Object> copy = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    copy.put(String.valueOf(entry.getKey()), copyObjectValue(entry.getValue()));
+                }
+            }
+            return copy;
+        }
+        if (value instanceof List<?>) {
+            List<?> list = (List<?>) value;
+            List<Object> copy = new ArrayList<>();
+            for (Object item : list) {
+                copy.add(copyObjectValue(item));
+            }
+            return copy;
+        }
+        return value;
     }
 
     private static boolean isBlank(String value) {

@@ -103,6 +103,9 @@ public final class StoryboardNormalizer {
         if (scene.getGeometryConstraints() == null) {
             scene.setGeometryConstraints(new ArrayList<>());
         }
+        if (scene.getConstraints() == null) {
+            scene.setConstraints(new ArrayList<>());
+        }
         if (scene.getStepRefs() == null) {
             scene.setStepRefs(new ArrayList<>());
         }
@@ -133,6 +136,9 @@ public final class StoryboardNormalizer {
             }
             object.setPlacement(null);
             object.setStyle(normalizeStyle(object.getStyle()));
+            if (object.getConstraints() == null) {
+                object.setConstraints(new ArrayList<>());
+            }
             normalizedObjects.add(object);
         }
         return normalizedObjects;
@@ -202,6 +208,7 @@ public final class StoryboardNormalizer {
         object.setDependencyObjects(new ArrayList<>());
         object.setDependencyRelation(null);
         object.setConstraintNote(null);
+        object.setConstraints(new ArrayList<>());
         if (mode == PatchMode.EXITING) {
             object.setStyle(null);
         }

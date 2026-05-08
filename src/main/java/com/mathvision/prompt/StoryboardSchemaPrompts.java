@@ -132,6 +132,7 @@ public final class StoryboardSchemaPrompts {
                     + "    \"safe_area_plan\": \"string, how important content stays readable and inside the safe frame\",\n"
                     + "    \"screen_overlay_plan\": \"string, what text or formulas stay fixed relative to the viewport rather than the main geometry, and where the safe overlay zone is\",\n"
                     + "    \"geometry_constraints\": [\"string, hard geometric invariants that downstream codegen and fix stages must preserve\"],\n"
+                    + "    \"constraints\": [\"object, machine-readable scene-level invariant with category, relation, objects, optional roles/params, strength, and reason; geometry_constraints is only a legacy/debug summary\"],\n"
                     + "    \"step_refs\": [\"string, referenced knowledge-graph step or solving beat covered by this scene\"],\n"
                     + "    \"entering_objects\": [\n"
                     + ENTERING_OBJECT_SCHEMA + "\n"
@@ -160,7 +161,19 @@ public final class StoryboardSchemaPrompts {
                     + "      \"anchor_id\": \"string, id of the object this one should stay attached to when relevant\",\n"
                     + "      \"dependency_objects\": [\"string, ordered source object ids only; empty for independent objects\"],\n"
                     + "      \"dependency_relation\": \"string, concise construction relationship such as independent|follows_anchor|connects_points|reflection_across_line|intersection|midpoint|angle_between|label_for\",\n"
-                    + "      \"constraint_note\": \"string, hard local geometric rule for this object; for angle/arc markers include the intended sector or sweep such as smaller/interior, directed, clockwise/counterclockwise, exterior, or side of a reference line/normal\"\n"
+                    + "      \"constraints\": [\n"
+                    + "        {\n"
+                    + "          \"id\": \"string, optional stable id for this single invariant\",\n"
+                    + "          \"category\": \"geometry|measurement|motion|attachment|layout|visibility|style|lifecycle\",\n"
+                    + "          \"relation\": \"string, canonical relation such as lies_on|connects_points|reflection_across|intersection_of|angle_between_rays|arc_sweep|equal_measure_group|same_side_of|moves_on_object|label_for|fixed_offset_from|screen_fixed\",\n"
+                    + "          \"objects\": [\"string, ordered object ids governed by this constraint, including this object id\"],\n"
+                    + "          \"roles\": { \"role_name\": \"object id or short id list\" },\n"
+                    + "          \"params\": { \"parameter_name\": \"structured value such as side, sector, direction, range, coordinate_space, offset, tolerance, or lifecycle scenes\" },\n"
+                    + "          \"strength\": \"hard|repair_hard|soft\",\n"
+                    + "          \"reason\": \"string, short human-readable explanation\"\n"
+                    + "        }\n"
+                    + "      ],\n"
+                    + "      \"constraint_note\": \"string, short legacy/debug summary of constraints[]; do not use it as the only semantic carrier\"\n"
                     + "    }";
 
     // ── Example data ───────────────────────────────────────────────────
@@ -379,7 +392,7 @@ public final class StoryboardSchemaPrompts {
 
     /** Patch-semantics explanation shared by both output formats. */
     public static final String PATCH_SEMANTICS_NOTE =
-            "`entering_objects` and `persistent_objects` in each scene are patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, or constraint_note there — those belong in the object registry.\n"
+            "`entering_objects` and `persistent_objects` in each scene are patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, constraints, or constraint_note there — those belong in the object registry.\n"
                     + "`exiting_objects` entries carry `id` only.\n";
 
     /** Text style semantics rules shared by both output formats. */

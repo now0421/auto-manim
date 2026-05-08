@@ -4,6 +4,7 @@ import com.mathvision.config.WorkflowConfig;
 import com.mathvision.model.KnowledgeGraph;
 import com.mathvision.model.Narrative;
 import com.mathvision.model.Narrative.Storyboard;
+import com.mathvision.model.Narrative.StoryboardConstraint;
 import com.mathvision.model.Narrative.StoryboardObject;
 import com.mathvision.model.Narrative.StoryboardPlacement;
 import com.mathvision.model.Narrative.StoryboardPlacementAxis;
@@ -300,6 +301,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         issues.addAll(validateAsciiText(storyboard));
         issues.addAll(validateStoryboardColors(storyboard));
         issues.addAll(validateDependencyFields(storyboard));
+        issues.addAll(validateStructuredConstraints(storyboard));
         issues.addAll(validateGeometricMarkerDefinitions(storyboard));
 
         return issues;
@@ -355,6 +357,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             String dependency = normalizeForSemanticCheck(String.join(" ", dependencies) + " "
                     + safe(object.getDependencyRelation()) + " " + safe(object.getConstraintNote()));
             String constraint = normalizeForSemanticCheck(object.getConstraintNote());
+            boolean hasStructuredMeasurementConstraint = hasStructuredConstraint(object,
+                    "angle_between_rays", "angle_between_lines", "angle_between", "arc_sweep", "right_angle_at");
 
             if (dependencies.isEmpty() && !mentionsAngleVertex(object, dependency)) {
                 issues.add("object_registry: angle/arc marker '" + objectId
@@ -364,11 +368,12 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 issues.add("object_registry: angle/arc marker '" + objectId
                         + "' must define both boundary rays, segments, lines, normals, tangents, or source objects in dependency_objects/dependency_relation");
             }
-            if (isArcMarker(object) && !mentionsOrderedArcSweep(dependency, constraint)) {
+            if (isArcMarker(object) && !hasStructuredMeasurementConstraint
+                    && !mentionsOrderedArcSweep(dependency, constraint)) {
                 issues.add("object_registry: arc marker '" + objectId
                         + "' must define the ordered arc sweep, including where the arc starts and where it ends");
             }
-            if (!mentionsAngleSector(constraint)) {
+            if (!hasStructuredMeasurementConstraint && !mentionsAngleSector(constraint)) {
                 issues.add("object_registry: angle/arc marker '" + objectId
                         + "' must define the intended displayed sector in constraint_note (for example smaller/interior, directed, exterior, or side of a reference line/normal)");
             }
@@ -378,6 +383,96 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             }
         }
         return issues;
+    }
+
+    private List<String> validateStructuredConstraints(Storyboard storyboard) {
+        List<String> issues = new ArrayList<>();
+        if (storyboard == null) {
+            return issues;
+        }
+        Set<String> knownIds = new LinkedHashSet<>();
+        if (storyboard.getObjectRegistry() != null) {
+            for (StoryboardObject object : storyboard.getObjectRegistry()) {
+                String id = StoryboardPatchResolver.objectId(object);
+                if (id != null) {
+                    knownIds.add(id);
+                }
+            }
+        }
+
+        if (storyboard.getObjectRegistry() != null) {
+            for (StoryboardObject object : storyboard.getObjectRegistry()) {
+                String objectId = StoryboardPatchResolver.objectId(object);
+                validateConstraintList("object_registry object '" + objectId + "'",
+                        object != null ? object.getConstraints() : null, knownIds, objectId, issues);
+                if (isDependencyDriven(object)
+                        && (object.getConstraints() == null || object.getConstraints().isEmpty())
+                        && (object.getConstraintNote() == null || object.getConstraintNote().isBlank())) {
+                    issues.add("object_registry: dependency-driven object '" + objectId
+                            + "' must define structured constraints or a legacy constraint_note");
+                }
+            }
+        }
+
+        if (storyboard.getScenes() != null) {
+            for (int i = 0; i < storyboard.getScenes().size(); i++) {
+                StoryboardScene scene = storyboard.getScenes().get(i);
+                String sceneId = scene != null ? scene.getSceneId() : null;
+                validateConstraintList("scene " + (i + 1) + " (" + sceneId + ")",
+                        scene != null ? scene.getConstraints() : null, knownIds, null, issues);
+            }
+        }
+        return issues;
+    }
+
+    private void validateConstraintList(String scope,
+                                        List<StoryboardConstraint> constraints,
+                                        Set<String> knownIds,
+                                        String ownerId,
+                                        List<String> issues) {
+        if (constraints == null || constraints.isEmpty()) {
+            return;
+        }
+        Set<String> seenIds = new HashSet<>();
+        for (int i = 0; i < constraints.size(); i++) {
+            StoryboardConstraint constraint = constraints.get(i);
+            String label = scope + " constraints[" + i + "]";
+            if (constraint == null || !constraint.hasData()) {
+                issues.add(label + ": empty constraint must be removed");
+                continue;
+            }
+            if (constraint.getCategory() == null || constraint.getCategory().isBlank()) {
+                issues.add(label + ": missing category");
+            }
+            if (constraint.getRelation() == null || constraint.getRelation().isBlank()) {
+                issues.add(label + ": missing relation");
+            }
+            if (constraint.getId() != null && !constraint.getId().isBlank()
+                    && !seenIds.add(constraint.getId().trim())) {
+                issues.add(label + ": duplicate constraint id '" + constraint.getId().trim() + "'");
+            }
+            if (constraint.getStrength() != null && !constraint.getStrength().isBlank()) {
+                String strength = constraint.getStrength().trim().toLowerCase(Locale.ROOT);
+                if (!Set.of("hard", "repair_hard", "soft").contains(strength)) {
+                    issues.add(label + ": strength must be hard, repair_hard, or soft");
+                }
+            }
+            List<String> objects = constraint.getObjects();
+            if (objects == null || objects.isEmpty()) {
+                issues.add(label + ": objects must list the ordered object ids governed by the constraint");
+            } else {
+                for (String objectId : objects) {
+                    if (objectId == null || objectId.isBlank()) {
+                        issues.add(label + ": objects contains a blank id");
+                    } else if (!knownIds.contains(objectId.trim())) {
+                        issues.add(label + ": objects references unknown id '" + objectId.trim() + "'");
+                    }
+                }
+                if (ownerId != null && !ownerId.isBlank() && !objects.contains(ownerId)) {
+                    issues.add(label + ": object-level constraint should include its owner id '" + ownerId + "' in objects");
+                }
+            }
+        }
     }
 
     private boolean isAngleOrArcMarker(StoryboardObject object) {
@@ -432,6 +527,22 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
 
     private boolean isArcMarkerKind(String kind) {
         return containsAny(kind, " arc ", " arc_marker ");
+    }
+
+    private boolean hasStructuredConstraint(StoryboardObject object, String... relations) {
+        if (object == null || object.getConstraints() == null || object.getConstraints().isEmpty()) {
+            return false;
+        }
+        for (StoryboardConstraint constraint : object.getConstraints()) {
+            if (constraint == null || constraint.getRelation() == null) {
+                continue;
+            }
+            String relation = normalizeForSemanticCheck(constraint.getRelation());
+            if (containsAny(relation, relations)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hasLegacyAngleOrArcMarkerIdFallback(StoryboardObject object) {
@@ -1464,8 +1575,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                     + "- Keep opacity in separate `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
                     + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to #000000 when no text background is present.\n"
                     + "- For non-text objects, ensure foreground colors contrast with #000000 at ratio >= 3.0.\n"
-                    + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or constraint_note.\n"
-                    + "- Every dependency-driven object must define dependency_objects as object ids and dependency_relation as a concise construction relation; put hard geometric invariants in constraint_note.\n"
+                    + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation, structured constraints, or constraint_note.\n"
+                    + "- Every dependency-driven object must define dependency_objects as object ids, dependency_relation as a concise construction relation, and structured constraints for hard geometric invariants; constraint_note is only a short summary.\n"
                     + "- ASCII repair is mandatory: rewrite every JSON string value so it contains only characters with code <= 0x7F.\n"
                     + "- Apply this normalization map wherever needed: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
                     + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.";

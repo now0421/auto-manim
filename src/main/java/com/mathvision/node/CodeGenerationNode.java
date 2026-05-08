@@ -394,18 +394,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
         Map<String, StoryboardObject> enriched = new LinkedHashMap<>();
         for (StoryboardObject obj : registry) {
-            StoryboardObject copy = new StoryboardObject();
-            copy.setId(obj.getId());
-            copy.setKind(obj.getKind());
-            copy.setContent(obj.getContent());
-            copy.setBehavior(obj.getBehavior());
-            copy.setAnchorId(obj.getAnchorId());
-            copy.setDependencyObjects(obj.getDependencyObjects() != null
-                    ? new ArrayList<>(obj.getDependencyObjects()) : new ArrayList<>());
-            copy.setDependencyRelation(obj.getDependencyRelation());
-            copy.setConstraintNote(obj.getConstraintNote());
-            copy.setStyle(obj.getStyle());
-            copy.setPlacement(obj.getPlacement());
+            StoryboardObject copy = StoryboardPatchResolver.copyObject(obj);
             enriched.put(obj.getId(), copy);
         }
         return enriched;
@@ -455,6 +444,9 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             }
             if (obj.getConstraintNote() != null && !obj.getConstraintNote().isBlank()) {
                 sb.append(", constraint_note=").append(truncate(obj.getConstraintNote(), 80));
+            }
+            if (obj.getConstraints() != null && !obj.getConstraints().isEmpty()) {
+                sb.append(", constraints=").append(truncate(JsonUtils.toJson(obj.getConstraints()), 180));
             }
             if (!StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(obj)
                     && obj.getPlacement() != null && obj.getPlacement().hasData()) {

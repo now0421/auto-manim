@@ -44,9 +44,10 @@ public final class SystemPrompts {
                     + "- `behavior`: dependency semantics - `static` means independently defined, `derived` means defined from other geometry, `follows_anchor` means attached to `anchor_id`, `fixed_overlay` means screen-space overlay.\n"
                     + "- `dependency_objects`: ordered ids of source objects this object depends on; use ids only, no prose.\n"
                     + "- `dependency_relation`: concise construction relation such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\n"
-                    + "- `constraint_note`: object-level hard geometry that must be preserved; explain the invariant and relationship meaning here.\n"
+                    + "- `constraints`: machine-readable object-level invariants. Each entry has `category`, `relation`, ordered `objects`, optional `roles` and `params`, `strength`, and `reason`; use this as the primary semantic contract for codegen, validation, and repair.\n"
+                    + "- `constraint_note`: short legacy/debug summary of `constraints`; do not use it as the only carrier for hard geometry.\n"
                     + "- `anchor_id`: id of the object this one should stay attached to.\n"
-                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint - at render time the object will be recomputed from its source objects via `dependency_objects`, `dependency_relation`, and `constraint_note`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
+                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint - at render time the object will be recomputed from its source objects via `dependency_objects`, `dependency_relation`, and `constraints`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
                     + "- `style`: optional single typed object of visual properties such as color, text_color, fill_color, stroke_color, opacity, stroke_width, line_style, font_size, background_fill_color, background_stroke_color, padding, and z_index. Do not invent custom style keys. Style describes this object only; create separate objects for labels, badges, helper outlines, cards, or callouts.\n"
                     + "- `source_node`: knowledge-graph node id that produced this object; informational only.\n";
 
@@ -62,6 +63,7 @@ public final class SystemPrompts {
                     + "- `exiting_objects`: id-only entries for objects that should explicitly leave the scene.\n"
                     + "- `actions`: the main execution plan; respect their order, targets, and visible intent.\n"
                     + "- `object_registry`: canonical global object definitions; keep stable identity, kind, content, dependency, and behavior here, not scene-specific placement.\n"
+                    + "- Scene `constraints`: machine-readable scene-level invariants and relation groups; use them before free-text `geometry_constraints`.\n"
                     + "- `notes_for_codegen`: scene-level hard implementation constraints for downstream code generation and repair, including concrete motion ranges, endpoints, lifecycle, visibility, palette, transform, and layout instructions. Follow them exactly unless they conflict with runtime validity, backend support, or stronger geometric constraints; when exact wording is unsupported, preserve the same constraint intent with a documented equivalent.\n"
                     + "- `continuity_plan`, `global_visual_rules`: global constraints that shape the whole file.\n";
 
@@ -69,7 +71,8 @@ public final class SystemPrompts {
     public static final String STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT =
             "- `goal`: what the scene must accomplish for understanding or solution progress.\n"
                     + "- `layout_goal`: intended screen composition and relative placement of major elements.\n"
-                    + "- `geometry_constraints`: scene-level invariants such as reflections, symmetry, collinearity, intersections, equal lengths.\n"
+                    + "- `constraints`: scene-level structured invariants such as reflections, symmetry, collinearity, intersections, equal lengths, equal-angle groups, motion limits, and lifecycle requirements.\n"
+                    + "- `geometry_constraints`: legacy/debug summary of scene-level invariants.\n"
                     + "- `safe_area_plan`: how important content stays readable and inside the safe frame.\n"
                     + "- `screen_overlay_plan`: text or formulas that stay fixed in screen space.\n"
                     + "- `camera_anchor`, `camera_plan`: camera focus and behavior.\n";
@@ -93,8 +96,8 @@ public final class SystemPrompts {
                     + "- `actions`: state changes; convert into construction order, visibility changes, highlight states, or helper toggles rather than literal animation.\n"
                     + "- `placement`, `layout_goal`, `safe_area_plan`, `screen_overlay_plan`: guide readable coordinates, allowed ranges, label placement, and visibility choices.\n"
                     + "- `behavior = follows_anchor` or `derived`: object should be defined from its source geometry so it updates automatically.\n"
-                    + "- `behavior = static`: independently defined object; can still be fixed, draggable, or moved later depending on `actions`, `geometry_constraints`, `constraint_note`, and `notes_for_codegen`.\n"
-                    + "- `dependency_objects`, `dependency_relation`, `constraint_note`, `anchor_id`: describe dependency relationships and geometric invariants that must be preserved in the construction.\n"
+                    + "- `behavior = static`: independently defined object; can still be fixed, draggable, or moved later depending on `actions`, structured `constraints`, `geometry_constraints`, and `notes_for_codegen`.\n"
+                    + "- `dependency_objects`, `dependency_relation`, `constraints`, `anchor_id`: describe dependency relationships and geometric invariants that must be preserved in the construction.\n"
                     + "- For constrained motion, prefer explicit documented GeoGebra constructions such as `Point(path)`, `PointIn(region)`, `Intersect(...)`, `Reflect(...)`, `Midpoint(...)`, or slider-driven parameterizations with declared bounds.\n"
                     + "- When a point should remain on a line, segment, circle, or similar object, the generated command should visibly encode that incidence relation.\n";
 
@@ -103,7 +106,8 @@ public final class SystemPrompts {
             "Storyboard field guide for this repair pass:\n"
                     + "- `goal` and `layout_goal`: preserve what the scene is trying to teach and how the frame should be composed.\n"
                     + "- `safe_area_plan` and `screen_overlay_plan`: use these first when fixing overlap and offscreen issues.\n"
-                    + "- `geometry_constraints` and each object's `constraint_note`: treat these as hard geometric invariants.\n"
+                    + "- Scene/object `constraints`: treat hard and repair_hard entries as the primary geometric invariants.\n"
+                    + "- Legacy `geometry_constraints` and each object's `constraint_note`: use as summaries or fallback when structured constraints are absent.\n"
                     + "- `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation`: preserve attachment logic for derived lines, reflected points, moving labels, and overlays.\n"
                     + "- `kind` and `content`: preserve the geometric or textual identity of each object when repositioning.\n"
                     + "- `style`: preserve visual hierarchy and emphasis when adjusting layout.\n"
@@ -116,7 +120,8 @@ public final class SystemPrompts {
                     + "- `goal` and `layout_goal`: preserve what the scene is trying to teach and how the construction should be laid out.\n"
                     + "- The initial GeoGebra visible coordinate window is part of the output contract; do not rely on user zooming or panning to make the construction readable.\n"
                     + "- Fix out-of-bounds, underfilled, clustered, or overlapping layouts by moving/scaling/recentering whole constrained groups while preserving the construction.\n"
-                    + "- `geometry_constraints` and each object's `constraint_note`: treat these as hard geometric invariants.\n"
+                    + "- Scene/object `constraints`: treat hard and repair_hard entries as the primary geometric invariants.\n"
+                    + "- Legacy `geometry_constraints` and each object's `constraint_note`: use as summaries or fallback when structured constraints are absent.\n"
                     + "- `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation`: preserve dependency-safe construction order for reflected points, intersections, midpoints, and derived objects.\n"
                     + "- `kind` and `content`: preserve the geometric or textual identity of each object when repositioning.\n"
                     + "- `style`: preserve visual properties (color, thickness, dash) when adjusting layout.\n"
@@ -129,7 +134,7 @@ public final class SystemPrompts {
                     + "- Treat storyboard objects as candidate teaching elements, not a mandatory one-for-one rendering checklist.\n"
                     + "- Create or keep elements that carry core teaching reasoning, hard geometry, dependency relationships, conclusion evidence, or the current narration focus.\n"
                     + "- Omit, merge, dim, or replace elements that are decorative, redundant, clutter-causing, naturally expressed by existing objects, or not helpful for the current teaching beat.\n"
-                    + "- Omitting an object must not break the semantics of `geometry_constraints`, `constraint_note`, `notes_for_codegen`, `dependency_objects`, `dependency_relation`, `behavior`, `anchor_id`, or `actions.targets`.\n"
+                    + "- Omitting an object must not break the semantics of structured `constraints`, `geometry_constraints`, `constraint_note`, `notes_for_codegen`, `dependency_objects`, `dependency_relation`, `behavior`, `anchor_id`, or `actions.targets`.\n"
                     + "- If an omitted object is referenced by an action target, preserve that action's teaching intent through an equivalent existing object, style change, label, caption, or dependency-safe construction.\n"
                     + "- Do not create learner-visible objects that are not declared in the storyboard. If a label, caption, badge, marker, helper overlay, or explanatory text is useful enough to appear on screen, it must already have a storyboard id.\n"
                     + "- Backend-only helper variables or invisible helper mobjects/commands may be used only when required by the API or geometry calculation; they must not be shown, labeled, animated, highlighted, or treated as teaching elements.\n";
@@ -139,9 +144,9 @@ public final class SystemPrompts {
             "Storyboard authority rules:\n"
                     + "- Treat `object_registry` as the canonical authority for object identity, kind, content, dependency semantics, and hard geometric meaning.\n"
                     + "- Treat scene `entering_objects`, `persistent_objects`, and `exiting_objects` as per-scene state patches: their `placement`, `style`, and visibility describe the momentary visual state for that scene, not the object's full semantic definition.\n"
-                    + "- Treat `geometry_constraints`, `notes_for_codegen`, object-registry `constraint_note`, `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` as hard semantic requirements.\n"
-                    + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as a hard geometric constraint unless `geometry_constraints`, `notes_for_codegen`, or the object-registry `constraint_note` explicitly says the coordinate itself is fixed.\n"
-                    + "- For `behavior = derived` or dependency-driven objects, compute or attach them from their source objects according to object-registry `dependency_objects`, `dependency_relation`, and `constraint_note`; scene placement is only an initial/preview visual state.\n"
+                    + "- Treat structured `constraints`, `geometry_constraints`, `notes_for_codegen`, object-registry `constraint_note`, `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` as hard semantic requirements.\n"
+                    + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as a hard geometric constraint unless structured `constraints`, `geometry_constraints`, `notes_for_codegen`, or the object-registry `constraint_note` explicitly says the coordinate itself is fixed.\n"
+                    + "- For `behavior = derived` or dependency-driven objects, compute or attach them from their source objects according to object-registry `dependency_objects`, `dependency_relation`, and structured `constraints`; scene placement is only an initial/preview visual state.\n"
                     + "- Treat scene order, action order, narration, layout_goal, safe_area_plan, screen_overlay_plan, and camera_plan as planning guidance for presentation, continuity, and readability; adapt them when runtime correctness or a clearer implementation requires it. Do not adapt away explicit `notes_for_codegen` constraints unless they are unsupported or contradictory.\n"
                     + STORYBOARD_ELEMENT_SELECTION_RULES
                     + "- Do not treat backend-specific notes, unsupported API names, undocumented commands, or purely decorative effects as hard requirements when they conflict with the active backend manual or runtime correctness.\n"
@@ -160,7 +165,7 @@ public final class SystemPrompts {
             "Storyboard reference rules:\n"
                     + "- Treat storyboard JSON as helpful reference context for the intended topic, prior scene plan, object names, and possible teaching ideas, not as a strict semantic authority.\n"
                     + "- When you use storyboard semantics, prefer object_registry dependency facts over scene patch placement/style details. Scene patches are momentary visual states, not canonical object definitions.\n"
-                    + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as hard constraints unless `geometry_constraints`, `notes_for_codegen`, or the object-registry `constraint_note` explicitly says the coordinate itself is fixed.\n"
+                    + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as hard constraints unless structured `constraints`, `geometry_constraints`, `notes_for_codegen`, or the object-registry `constraint_note` explicitly says the coordinate itself is fixed.\n"
                     + "- Do not block, rewrite, or over-constrain code solely because it omits, merges, renames, simplifies, or reorders storyboard details when the result is runnable, clear, and aligned with the overall user request.\n"
                     + "- Use storyboard geometry, dependency notes, and placements as hints. Preserve them when they are already implemented consistently or when doing so is low-risk, but runtime correctness, visual clarity, and internally consistent code take precedence.\n"
                     + "- If storyboard details conflict with safer code, rendered evidence, backend limitations, or a clearer implementation, choose a coherent implementation and keep object names, coordinates, dependencies, and layout internally consistent.\n";
@@ -185,9 +190,9 @@ public final class SystemPrompts {
     /** Storyboard authoring rules for encoding geometry constraints that downstream stages must preserve. */
     public static final String GEOMETRY_CONSTRAINT_AUTHORING_RULES =
             "Storyboard geometry constraint authoring rules:\n"
-                    + "- If an object is movable but constrained, keep `behavior` for dependency semantics and encode the motion/path/range constraint explicitly in `geometry_constraints`, `constraint_note`, `dependency_objects`, `dependency_relation`, structured `placement`, or `notes_for_codegen`.\n"
+                    + "- If an object is movable but constrained, keep `behavior` for dependency semantics and encode the motion/path/range constraint explicitly in structured `constraints`, `dependency_objects`, `dependency_relation`, structured `placement`, or `notes_for_codegen`.\n"
                     + "- When an object depends on another object's position, encode that dependency explicitly with `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation`.\n"
-                    + "- When a geometric relationship must survive later layout fixes, record it explicitly in `geometry_constraints` and in object-level `constraint_note`.\n"
+                    + "- When a geometric relationship must survive later layout fixes, record it explicitly in scene/object `constraints`; keep `geometry_constraints` and `constraint_note` as short summaries.\n"
                     + "- Treat geometric relationships such as symmetry, reflection, equal length, equal angle, collinearity, intersection, perpendicularity, and shared-center motion as hard constraints, not optional style notes.\n"
                     + "- If a layout risks overflow, prefer planning a smaller or recentered whole construction rather than placing mathematically linked points independently near the edges.\n";
 
@@ -196,8 +201,9 @@ public final class SystemPrompts {
             "Geometric marker authoring rules:\n"
                     + "- For angle markers, arcs, right-angle marks, braces, ticks, and similar derived annotations, the storyboard must define the geometry they measure, not just their visual placement.\n"
                     + "- For any angle or arc that represents an angle, `dependency_objects` must include the vertex/anchor plus the ordered start boundary and end boundary source objects, and `dependency_relation` should describe the measured angle or arc relation.\n"
+                    + "- Also add a structured `constraints` entry with `category=measurement`, `relation=angle_between_rays` or `arc_sweep`, `objects` including the marker id and boundary ids, `roles` naming vertex/start_boundary/end_boundary, and `params` naming sector, direction, and side_of_reference when relevant.\n"
                     + "- For any visual arc drawn from one point/ray to another, say explicitly where the arc starts and where it ends, for example `arc at P from ray P->A to normal ray P->N` or `arc from point U to point V on circle c`.\n"
-                    + "- `constraint_note` must say whether the displayed sector is the smaller/interior angle, a reflex/exterior angle, a directed angle, clockwise/counterclockwise sweep, or a specific side of a reference line or normal.\n"
+                    + "- `constraints[].params` must say whether the displayed sector is the smaller/interior angle, a reflex/exterior angle, a directed angle, clockwise/counterclockwise sweep, or a specific side of a reference line or normal; `constraint_note` may summarize it.\n"
                     + "- Label clearance and visibility are layout constraints only; never replace sector geometry with vague wording such as `quadrant chosen to stay in view` unless the measured sector is also defined.\n"
                     + "- If an angle is measured against a normal or perpendicular, state which normal ray or side is used when the side matters for the teaching point.\n"
                     + "- If equal angles are shown, define both angle markers symmetrically from their source rays so downstream code can preserve equality without guessing a quadrant.\n";
@@ -240,7 +246,7 @@ public final class SystemPrompts {
                     + "- Preserve intentional empty space and a safe overlay zone; do not solve layout problems by piling overlays or opaque objects over the active geometry.\n"
                     + "- If the view becomes crowded, split the content, dim the old context, or remove temporary annotations instead of squeezing everything tighter.\n"
                     + "- When correcting out-of-bounds elements, reposition them with adequate clearance from every frame edge (minimum 0.5 units on all sides); never fix a boundary violation by placing objects flush against the edge.\n"
-                    + "- When a derived object (reflection, projection, intersection, etc.) extends outside the frame, do NOT change its placement directly - it is computed from its source objects at render time. Instead, trace the dependency chain in object_registry (`dependency_objects`, `dependency_relation`, `constraint_note`) to identify the upstream source object(s) and adjust their coordinates so the derived result lands inside the frame. For example, if a reflected point B' is offscreen because it mirrors B across line l, move B closer to l or shift l itself; never override B' with an arbitrary coordinate that contradicts its geometric definition.\n";
+                    + "- When a derived object (reflection, projection, intersection, etc.) extends outside the frame, do NOT change its placement directly - it is computed from its source objects at render time. Instead, trace the dependency chain in object_registry (`dependency_objects`, `dependency_relation`, `constraints`) to identify the upstream source object(s) and adjust their coordinates so the derived result lands inside the frame. For example, if a reflected point B' is offscreen because it mirrors B across line l, move B closer to l or shift l itself; never override B' with an arbitrary coordinate that contradicts its geometric definition.\n";
 
     /** High-contrast color rules to avoid pale-on-pale combinations. */
     public static final String HIGH_CONTRAST_COLOR_RULES =
@@ -410,7 +416,7 @@ public final class SystemPrompts {
                     + "- For angle markers, define them by referencing the boundary lines, segments, or rays directly in `dependency_objects` and `dependency_relation` rather than creating helper point objects on existing lines just to use a three-point form.\n"
                     + "- Avoid creating helper points, helper lines, or other scaffolding objects whose sole purpose is to serve as an intermediate input to another object when a direct dependency reference is possible.\n"
                     + "- If an object exists on the construction (a line, a segment, a ray, a circle), reference it directly instead of creating a duplicate or a proxy point on it.\n"
-                    + "- When the target platform has a concise syntax that works with existing objects, prefer that syntax and record the intent in `dependency_relation` and `constraint_note` so downstream code generation can use it.\n";
+                    + "- When the target platform has a concise syntax that works with existing objects, prefer that syntax and record the intent in `dependency_relation` and structured `constraints` so downstream code generation can use it.\n";
 
     /** Rules for minimizing auxiliary/helper objects in code generation and code repair stages. */
     public static final String MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES =
@@ -553,7 +559,7 @@ public final class SystemPrompts {
                     + "- Read `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` literally: if an object follows a moving anchor, implement it with `always_redraw(...)` or an updater.\n"
                     + "- Preserve scene beats, scene exits, and overlay zones from the storyboard instead of compressing everything into one crowded final frame.\n"
                     + MANIM_MANUAL_ONLY_RULES
-                    + "- Treat `geometry_constraints`, `constraint_note`, and `notes_for_codegen` as hard invariants. If the frame is tight, preserve the construction and recenter/scale the whole constrained group instead of breaking the math or the stated implementation constraint.\n";
+                    + "- Treat structured `constraints`, `geometry_constraints`, `constraint_note`, and `notes_for_codegen` as hard invariants. If the frame is tight, preserve the construction and recenter/scale the whole constrained group instead of breaking the math or the stated implementation constraint.\n";
 
     /** Storyboard codegen preamble for GeoGebra output. */
     public static final String STORYBOARD_CODEGEN_INTRO_GEOGEBRA =
@@ -561,7 +567,7 @@ public final class SystemPrompts {
                     + STORYBOARD_AUTHORITY_RULES
                     + "- Keep the same object identities stable across steps.\n"
                     + "- Convert `actions` into construction order, visibility changes, highlights, or helper toggles rather than literal animation.\n"
-                    + "- Preserve `geometry_constraints`, `notes_for_codegen`, `behavior`, `anchor_id`, `dependency_objects`, `dependency_relation`, and `constraint_note` through dependency-safe GeoGebra commands.\n"
+                    + "- Preserve structured `constraints`, `geometry_constraints`, `notes_for_codegen`, `behavior`, `anchor_id`, `dependency_objects`, `dependency_relation`, and `constraint_note` through dependency-safe GeoGebra commands.\n"
                     + "- Interpret `behavior` by dependency semantics, not by whether the object can move: `static` means independently defined base object, not automatically a free point.\n"
                     + "- If a point is described as movable/draggable and also constrained to a line, segment, ray, circle, polygon edge, or other object, generate it as a point on that object or with an equivalent dependency-safe parameterization, never as an unconstrained coordinate point.\n"
                     + "- If a point is fixed and no dependency is stated, define it as an independent anchor and keep it fixed unless the storyboard explicitly asks for dragging.\n"

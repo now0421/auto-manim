@@ -4,6 +4,7 @@ import com.mathvision.model.Narrative.Storyboard;
 import com.mathvision.model.Narrative.StoryboardScene;
 import com.mathvision.model.Narrative.StoryboardObject;
 import com.mathvision.model.Narrative.StoryboardAction;
+import com.mathvision.model.Narrative.StoryboardConstraint;
 import com.mathvision.model.Narrative.StoryboardPlacement;
 import com.mathvision.model.Narrative.StoryboardPlacementAxis;
 import com.mathvision.model.Narrative.StoryboardStyle;
@@ -109,6 +110,7 @@ public final class StoryboardJsonBuilder {
         putNonBlank(sceneNode, "safe_area_plan", scene.getSafeAreaPlan());
         putNonBlank(sceneNode, "screen_overlay_plan", scene.getScreenOverlayPlan());
         putTrimmedStringArray(sceneNode, "geometry_constraints", scene.getGeometryConstraints());
+        addConstraintArray(sceneNode, "constraints", scene.getConstraints());
         putTrimmedStringArray(sceneNode, "step_refs", scene.getStepRefs());
 
         addObjectArray(sceneNode, "entering_objects", scene.getEnteringObjects(), options);
@@ -145,8 +147,40 @@ public final class StoryboardJsonBuilder {
             putNonBlank(objectNode, "anchor_id", object.getAnchorId());
             putTrimmedStringArray(objectNode, "dependency_objects", object.getDependencyObjects());
             putNonBlank(objectNode, "dependency_relation", object.getDependencyRelation());
+            addConstraintArray(objectNode, "constraints", object.getConstraints());
             putNonBlank(objectNode, "constraint_note", object.getConstraintNote());
             removeIfEmpty(arrayNode, objectNode);
+        }
+    }
+
+    private static void addConstraintArray(ObjectNode parent,
+                                           String fieldName,
+                                           List<StoryboardConstraint> constraints) {
+        if (constraints == null || constraints.isEmpty()) {
+            return;
+        }
+        ArrayNode arrayNode = parent.putArray(fieldName);
+        for (StoryboardConstraint constraint : constraints) {
+            if (constraint == null || !constraint.hasData()) {
+                continue;
+            }
+            ObjectNode constraintNode = arrayNode.addObject();
+            putNonBlank(constraintNode, "id", constraint.getId());
+            putNonBlank(constraintNode, "category", constraint.getCategory());
+            putNonBlank(constraintNode, "relation", constraint.getRelation());
+            putTrimmedStringArray(constraintNode, "objects", constraint.getObjects());
+            if (constraint.getRoles() != null && !constraint.getRoles().isEmpty()) {
+                constraintNode.set("roles", JsonUtils.mapper().valueToTree(constraint.getRoles()));
+            }
+            if (constraint.getParams() != null && !constraint.getParams().isEmpty()) {
+                constraintNode.set("params", JsonUtils.mapper().valueToTree(constraint.getParams()));
+            }
+            putNonBlank(constraintNode, "strength", constraint.getStrength());
+            putNonBlank(constraintNode, "reason", constraint.getReason());
+            removeIfEmpty(arrayNode, constraintNode);
+        }
+        if (arrayNode.isEmpty()) {
+            parent.remove(fieldName);
         }
     }
 

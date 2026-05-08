@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Narrative composition result from the enrichment stage.
@@ -126,6 +128,9 @@ public class Narrative {
         @JsonProperty("geometry_constraints")
         private List<String> geometryConstraints = new ArrayList<>();
 
+        @JsonProperty("constraints")
+        private List<StoryboardConstraint> constraints = new ArrayList<>();
+
         @JsonProperty("step_refs")
         private List<String> stepRefs = new ArrayList<>();
 
@@ -184,6 +189,11 @@ public class Narrative {
         public List<String> getGeometryConstraints() { return geometryConstraints; }
         public void setGeometryConstraints(List<String> geometryConstraints) {
             this.geometryConstraints = geometryConstraints;
+        }
+
+        public List<StoryboardConstraint> getConstraints() { return constraints; }
+        public void setConstraints(List<StoryboardConstraint> constraints) {
+            this.constraints = constraints != null ? constraints : new ArrayList<>();
         }
 
         public List<String> getStepRefs() { return stepRefs; }
@@ -254,6 +264,9 @@ public class Narrative {
         @JsonProperty("constraint_note")
         private String constraintNote;
 
+        @JsonProperty("constraints")
+        private List<StoryboardConstraint> constraints = new ArrayList<>();
+
         public StoryboardObject() {}
 
         public String getId() { return id; }
@@ -291,6 +304,83 @@ public class Narrative {
 
         public String getConstraintNote() { return constraintNote; }
         public void setConstraintNote(String constraintNote) { this.constraintNote = constraintNote; }
+
+        public List<StoryboardConstraint> getConstraints() { return constraints; }
+        public void setConstraints(List<StoryboardConstraint> constraints) {
+            this.constraints = constraints != null ? constraints : new ArrayList<>();
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    public static class StoryboardConstraint {
+
+        @JsonProperty("id")
+        private String id;
+
+        @JsonProperty("category")
+        private String category;
+
+        @JsonProperty("relation")
+        private String relation;
+
+        @JsonProperty("objects")
+        private List<String> objects = new ArrayList<>();
+
+        @JsonProperty("roles")
+        private Map<String, Object> roles = new LinkedHashMap<>();
+
+        @JsonProperty("params")
+        private Map<String, Object> params = new LinkedHashMap<>();
+
+        @JsonProperty("strength")
+        private String strength;
+
+        @JsonProperty("reason")
+        private String reason;
+
+        public StoryboardConstraint() {}
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+
+        public String getCategory() { return category; }
+        public void setCategory(String category) { this.category = category; }
+
+        public String getRelation() { return relation; }
+        public void setRelation(String relation) { this.relation = relation; }
+
+        public List<String> getObjects() { return objects; }
+        public void setObjects(List<String> objects) {
+            this.objects = objects != null ? objects : new ArrayList<>();
+        }
+
+        public Map<String, Object> getRoles() { return roles; }
+        public void setRoles(Map<String, Object> roles) {
+            this.roles = roles != null ? roles : new LinkedHashMap<>();
+        }
+
+        public Map<String, Object> getParams() { return params; }
+        public void setParams(Map<String, Object> params) {
+            this.params = params != null ? params : new LinkedHashMap<>();
+        }
+
+        public String getStrength() { return strength; }
+        public void setStrength(String strength) { this.strength = strength; }
+
+        public String getReason() { return reason; }
+        public void setReason(String reason) { this.reason = reason; }
+
+        public boolean hasData() {
+            return (id != null && !id.isBlank())
+                    || (category != null && !category.isBlank())
+                    || (relation != null && !relation.isBlank())
+                    || (objects != null && !objects.isEmpty())
+                    || (roles != null && !roles.isEmpty())
+                    || (params != null && !params.isEmpty())
+                    || (strength != null && !strength.isBlank())
+                    || (reason != null && !reason.isBlank());
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

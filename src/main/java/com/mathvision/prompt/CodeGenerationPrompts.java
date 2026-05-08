@@ -18,7 +18,7 @@ public final class CodeGenerationPrompts {
                     + "- If clarity seems to require an undeclared label or annotation, omit it rather than creating it; only storyboard-declared visible objects may appear on screen.\n"
                     + "- Do not treat `style.label_visible` as permission to create a label. Render labels only when the storyboard declares explicit text/equation label objects.\n"
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
-                    + "- Treat storyboard `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants.\n"
+                    + "- Treat storyboard structured `constraints`, `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants; prefer `constraints` when fields disagree.\n"
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + "Additional code generation rules:\n"
                     + "- `entering_objects[].content` describes candidate visible content; implement only the objects that are necessary or helpful for the teaching beat.\n"
@@ -107,7 +107,7 @@ public final class CodeGenerationPrompts {
                     + "- Return GeoGebra commands, not Python and not JavaScript.\n"
                     + "- Build from base objects to derived objects in a clear dependency chain.\n"
                     + "- Preserve geometric meaning: intersections, reflections, midpoints, perpendiculars, parallels, equal-radius points, and similar constructions must stay dependency-driven.\n"
-                    + "- Treat storyboard `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants.\n"
+                    + "- Treat storyboard structured `constraints`, `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants; prefer `constraints` when fields disagree.\n"
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES
@@ -220,7 +220,7 @@ public final class CodeGenerationPrompts {
                         + "Current code:\n```python\n%s\n```\n\n"
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL code so it satisfies all validation rules while preserving the teaching goal.\n"
-                        + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
+                        + "If storyboard structured constraints, geometry constraints, or derived-object definitions are present, preserve them while fixing validation issues.\n"
                         + "Treat `notes_for_codegen` as hard scene-level constraints; preserve every concrete range, endpoint, lifecycle, visibility, transform, color, and layout instruction unless it is unsupported, in which case preserve the same intent with a documented equivalent.\n"
                         + "Apply text constructor mapping consistently across the file: `kind=equation -> MathTex`, `kind=text/text_card -> Text` unless the content clearly requires math rendering, and avoid `Tex` except for explicit non-math LaTeX text.\n"
                         + "Keep `%s` as the exact scene class name.\n"
@@ -247,7 +247,7 @@ public final class CodeGenerationPrompts {
                         + "Current code:\n```geogebra\n%s\n```\n\n"
                         + "Problems found:\n%s\n\n"
                         + "Rewrite the FULL command script so it satisfies all validation rules while preserving the teaching goal.\n"
-                        + "If storyboard geometry constraints or derived-object definitions are present, preserve them while fixing validation issues.\n"
+                        + "If storyboard structured constraints, geometry constraints, or derived-object definitions are present, preserve them while fixing validation issues.\n"
                         + "Treat `notes_for_codegen` as hard scene-level constraints; preserve every concrete range, endpoint, lifecycle, visibility, style, and layout instruction unless it is unsupported, in which case preserve the same intent with a documented equivalent.\n"
                         + "Use English GeoGebra command names and preserve the figure naming intent around `%s`.\n"
                         + "Return ONLY the full GeoGebra code block.",
@@ -291,7 +291,7 @@ public final class CodeGenerationPrompts {
                         + "- Follow the storyboard's semantic intent; select from storyboard-declared objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
                         + "- Do not create learner-visible elements outside the storyboard. Backend-only invisible helpers are allowed only when required for calculation or documented API usage.\n"
                         + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, durations, visibility/lifecycle instructions, transforms, palette notes, and layout constraints exactly when present.\n"
-                        + "- For any object with `behavior=derived` or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, compute it from `dependency_objects` or use native Manim/API geometry helpers. Do not instantiate it from hardcoded placement coordinates.\n"
+                        + "- For any object with `behavior=derived`, structured `constraints`, or dependency relations such as `intersection`, `reflection_across_line`, `midpoint`, `projection`, `connects_points`, or `angle_between`, compute it from `dependency_objects`/`constraints` or use native Manim/API geometry helpers. Do not instantiate it from hardcoded placement coordinates.\n"
                         + "- Respect storyboard text semantics strictly: `kind=equation` means `MathTex(...)`; `kind=text` and `kind=text_card` mean `Text(...)` unless the content clearly requires math rendering; avoid `Tex(...)` unless the scene explicitly needs non-math LaTeX text.\n"
                         + "- Return the method code via the write_scene_code tool.",
                 methodName, sceneIndex + 1, totalScenes,

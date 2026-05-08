@@ -3,6 +3,7 @@ package com.mathvision.node;
 import com.mathvision.config.WorkflowConfig;
 import com.mathvision.model.Narrative;
 import com.mathvision.model.Narrative.Storyboard;
+import com.mathvision.model.Narrative.StoryboardConstraint;
 import com.mathvision.model.Narrative.StoryboardObject;
 import com.mathvision.model.Narrative.StoryboardPlacement;
 import com.mathvision.model.Narrative.StoryboardPlacementAxis;
@@ -214,6 +215,34 @@ class StoryboardValidationNodeTest {
 
         assertTrue(issues.stream().anyMatch(issue -> issue.contains("dependency_objects")),
                 () -> String.join("\n", issues));
+    }
+
+    @Test
+    void acceptsAngleMarkerSectorFromStructuredConstraint() {
+        StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
+        StoryboardObject pointP = registryObject("P", "point", "Vertex", null);
+        StoryboardObject lineL = registryObject("l", "line", "Reference line", null);
+        StoryboardObject pointA = registryObject("A", "point", "Point A", null);
+        StoryboardObject angle = registryObject("angleIn", "angle_marker", "Angle at P", null);
+        angle.setBehavior(StoryboardObject.BEHAVIOR_DERIVED);
+        angle.setDependencyObjects(List.of("P", "l", "A"));
+        angle.setDependencyRelation("angle_between");
+        angle.setConstraints(List.of(constraint(
+                "angleIn_sector",
+                "measurement",
+                "angle_between_rays",
+                List.of("angleIn", "P", "l", "A"),
+                Map.of("vertex", "P", "start_boundary", "l", "end_boundary", "A"),
+                Map.of("sector", "smaller", "side_of_reference", Map.of("reference", "l", "side", "same_as", "object", "A")),
+                "hard")));
+
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(pointP, lineL, pointA, angle),
+                List.of());
+
+        List<String> issues = node.validate(storyboard);
+
+        assertTrue(issues.isEmpty(), () -> String.join("\n", issues));
     }
 
     @Test
@@ -438,6 +467,24 @@ class StoryboardValidationNodeTest {
         object.setId(id);
         object.setPlacement(placement);
         return object;
+    }
+
+    private StoryboardConstraint constraint(String id,
+                                            String category,
+                                            String relation,
+                                            List<String> objects,
+                                            Map<String, Object> roles,
+                                            Map<String, Object> params,
+                                            String strength) {
+        StoryboardConstraint constraint = new StoryboardConstraint();
+        constraint.setId(id);
+        constraint.setCategory(category);
+        constraint.setRelation(relation);
+        constraint.setObjects(objects);
+        constraint.setRoles(roles);
+        constraint.setParams(params);
+        constraint.setStrength(strength);
+        return constraint;
     }
 
     private StoryboardPlacement boxPlacement(String coordinateSpace,

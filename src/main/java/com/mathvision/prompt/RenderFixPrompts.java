@@ -112,7 +112,7 @@ public final class RenderFixPrompts {
                 .append("Treat the error summary as a routing hint, not as a single-line patch target.\n")
                 .append("Sweep all `Text(...)`, `Tex(...)`, and `MathTex(...)` calls whenever the error category suggests text-constructor or LaTeX misuse.\n")
                 .append("Prioritize the earliest root-cause category instead of patching downstream symptoms.\n")
-                .append("Use storyboard geometric constraints or derived constructions as reference context only; keep the final code internally consistent while fixing the render failure.\n")
+                .append("Use storyboard structured constraints, geometric summaries, or derived constructions as reference context only; keep the final code internally consistent while fixing the render failure.\n")
                 .append("Also proactively check for common Python and Manim runtime mistakes.\n")
                 .append("Remember: Return ONLY the single Python code block containing the full file. No explanation.\n");
 
