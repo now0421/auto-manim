@@ -48,9 +48,12 @@ public final class StoryboardJsonBuilder {
      * Builds storyboard JSON for post-render layout repair.
      * This keeps compact structure but preserves additional scene intent fields
      * so the fixer can recover layout without breaking geometric constraints.
+     * Derived-object placement is still suppressed, because scene-evaluation
+     * fixes must repair the dependency chain or constrained group rather than
+     * copying stale preview coordinates into the code.
      */
     public static String buildForSceneEvaluationFix(Storyboard storyboard) {
-        return build(storyboard, new BuildOptions(true, false));
+        return build(storyboard, new BuildOptions(true, true));
     }
 
     private static String build(Storyboard storyboard, BuildOptions options) {

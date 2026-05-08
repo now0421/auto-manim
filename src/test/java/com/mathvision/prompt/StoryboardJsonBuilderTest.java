@@ -40,7 +40,7 @@ class StoryboardJsonBuilderTest {
         assertFalse(findObject(codegen.get("scenes").get(0).get("entering_objects"), "Pmin").has("placement"));
 
         JsonNode sceneFix = JsonUtils.mapper().readTree(StoryboardJsonBuilder.buildForSceneEvaluationFix(storyboard));
-        assertTrue(findObject(sceneFix.get("scenes").get(0).get("entering_objects"), "Pmin").has("placement"));
+        assertFalse(findObject(sceneFix.get("scenes").get(0).get("entering_objects"), "Pmin").has("placement"));
     }
 
     private static StoryboardObject objectWithPlacement(String id,

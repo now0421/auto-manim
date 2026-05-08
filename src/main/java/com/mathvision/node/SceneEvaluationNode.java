@@ -5,6 +5,10 @@ import com.mathvision.model.CodeFixRequest;
 import com.mathvision.model.CodeFixSource;
 import com.mathvision.model.CodeResult;
 import com.mathvision.model.Narrative;
+import com.mathvision.model.Narrative.Storyboard;
+import com.mathvision.model.Narrative.StoryboardObject;
+import com.mathvision.model.Narrative.StoryboardPlacement;
+import com.mathvision.model.Narrative.StoryboardPlacementAxis;
 import com.mathvision.model.RenderResult;
 import com.mathvision.model.SceneEvaluationResult;
 import com.mathvision.model.SceneEvaluationResult.Bounds;
@@ -19,6 +23,8 @@ import com.mathvision.prompt.StoryboardJsonBuilder;
 import com.mathvision.util.ErrorSummarizer;
 import com.mathvision.util.GeoGebraCodeUtils;
 import com.mathvision.service.FileOutputService;
+import com.mathvision.util.StoryboardCodegenSemantics;
+import com.mathvision.util.StoryboardPatchResolver;
 import com.mathvision.util.TextUtils;
 import com.mathvision.util.TimeUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -37,6 +43,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -215,7 +222,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                 retryState.setAttempts(attemptsSoFar + 1);
                 retryState.setRequestFix(true);
                 retryState.pendingIssueSummary = issueSummary;
-                retryState.pendingSceneEvaluationJson = buildFixReportJson(result);
+                retryState.pendingSceneEvaluationJson = buildFixReportJson(result, storyboardFrom(input.narrative()));
                 result.setRevisionTriggered(true);
                 result.setRevisionAttempts(retryState.getAttempts());
                 result.setGateReason(String.format(
@@ -263,6 +270,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                                                           SceneEvaluationResult result) {
         CodeResult codeResult = input.codeResult();
         Narrative narrative = input.narrative();
+        Storyboard storyboard = storyboardFrom(narrative);
         RenderResult renderResult = input.renderResult();
         SceneEvaluationRetryState retryState = input.retryState();
 
@@ -275,15 +283,15 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                 : buildIssueSummary(result));
         request.setSceneEvaluationJson(retryState.pendingSceneEvaluationJson != null
                 ? retryState.pendingSceneEvaluationJson
-                : buildFallbackFixJson(result));
+                : buildFixReportJson(result, storyboard));
         request.setTargetConcept(codeResult.getTargetConcept());
         request.setTargetDescription(codeResult.getTargetDescription());
         request.setSceneName(codeResult.getSceneName());
         // For GeoGebra, the expected scene name is typically GeoGebraCodeUtils.EXPECTED_FIGURE_NAME
         boolean isGeoGebra = renderResult != null && renderResult.isGeoGebraTarget();
         request.setExpectedSceneName(isGeoGebra ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : "MainScene");
-        request.setStoryboardJson(narrative != null && narrative.hasStoryboard()
-                ? StoryboardJsonBuilder.buildForSceneEvaluationFix(narrative.getStoryboard())
+        request.setStoryboardJson(storyboard != null
+                ? StoryboardJsonBuilder.buildForSceneEvaluationFix(storyboard)
                 : StoryboardJsonBuilder.EMPTY_STORYBOARD_JSON);
         request.setFixHistory(new ArrayList<>(retryState.fixHistory));
         return request;
@@ -1206,7 +1214,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         return ErrorSummarizer.compactSummary(issueSummary, 200);
     }
 
-    private String buildFixReportJson(SceneEvaluationResult result) {
+    private String buildFixReportJson(SceneEvaluationResult result, Storyboard storyboard) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("scene_name", result.getSceneName());
         payload.put("geometry_path", result.getGeometryPath());
@@ -1216,6 +1224,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         payload.put("blocking_issue_count", result.getBlockingIssueCount());
         payload.put("overlap_issue_count", result.getOverlapIssueCount());
         payload.put("offscreen_issue_count", result.getOffscreenIssueCount());
+        Map<String, StoryboardObject> storyboardObjects = buildStoryboardObjectMap(storyboard);
 
         List<Map<String, Object>> samples = new ArrayList<>();
         int addedSamples = 0;
@@ -1247,6 +1256,10 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                 if (issue.getSecondaryElement() != null) {
                     issueMap.put("secondary_element", elementRefMap(issue.getSecondaryElement()));
                 }
+                Map<String, Object> dependencyContext = dependencyContextMap(issue, storyboardObjects);
+                if (!dependencyContext.isEmpty()) {
+                    issueMap.put("storyboard_dependency_context", dependencyContext);
+                }
                 if (issue.getOverflow() != null) {
                     issueMap.put("overflow", overflowMap(issue.getOverflow()));
                 }
@@ -1270,6 +1283,281 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             return MAPPER.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
             return buildFallbackFixJson(result);
+        }
+    }
+
+    private Storyboard storyboardFrom(Narrative narrative) {
+        return narrative != null && narrative.hasStoryboard() ? narrative.getStoryboard() : null;
+    }
+
+    private Map<String, StoryboardObject> buildStoryboardObjectMap(Storyboard storyboard) {
+        Map<String, StoryboardObject> objects = new LinkedHashMap<>();
+        if (storyboard == null) {
+            return objects;
+        }
+        Storyboard mergedStoryboard = StoryboardPatchResolver.buildMergedStoryboard(storyboard);
+        Storyboard source = mergedStoryboard != null ? mergedStoryboard : storyboard;
+
+        if (source.getObjectRegistry() != null) {
+            for (StoryboardObject object : source.getObjectRegistry()) {
+                putStoryboardObject(objects, object);
+            }
+        }
+        if (source.getScenes() != null) {
+            for (Narrative.StoryboardScene scene : source.getScenes()) {
+                if (scene == null) {
+                    continue;
+                }
+                putStoryboardObjects(objects, scene.getEnteringObjects());
+                putStoryboardObjects(objects, scene.getPersistentObjects());
+                putStoryboardObjects(objects, scene.getExitingObjects());
+            }
+        }
+        return objects;
+    }
+
+    private void putStoryboardObjects(Map<String, StoryboardObject> objects, List<StoryboardObject> values) {
+        if (values == null) {
+            return;
+        }
+        for (StoryboardObject object : values) {
+            putStoryboardObject(objects, object);
+        }
+    }
+
+    private void putStoryboardObject(Map<String, StoryboardObject> objects, StoryboardObject object) {
+        String objectId = StoryboardPatchResolver.objectId(object);
+        if (objectId != null && !objectId.isBlank()) {
+            objects.put(objectId, object);
+        }
+    }
+
+    private Map<String, Object> dependencyContextMap(LayoutIssue issue,
+                                                     Map<String, StoryboardObject> storyboardObjects) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        if (issue == null || storyboardObjects == null || storyboardObjects.isEmpty()) {
+            return context;
+        }
+        Map<String, Object> primary = dependencyContextForElement(
+                "primary", issue.getPrimaryElement(), storyboardObjects);
+        if (!primary.isEmpty()) {
+            context.put("primary", primary);
+        }
+        Map<String, Object> secondary = dependencyContextForElement(
+                "secondary", issue.getSecondaryElement(), storyboardObjects);
+        if (!secondary.isEmpty()) {
+            context.put("secondary", secondary);
+        }
+        if (!context.isEmpty()) {
+            context.put("repair_rule",
+                    "For dependency-driven or derived objects, keep dependency_relation and constraint_note true; fix layout by moving/scaling upstream source objects, the whole constrained group, camera/view, or label attachment instead of directly assigning coordinates to the derived object.");
+        }
+        return context;
+    }
+
+    private Map<String, Object> dependencyContextForElement(String role,
+                                                            ElementRef element,
+                                                            Map<String, StoryboardObject> storyboardObjects) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        String objectId = resolveStoryboardObjectId(element, storyboardObjects);
+        if (objectId == null) {
+            return context;
+        }
+        StoryboardObject object = storyboardObjects.get(objectId);
+        if (object == null) {
+            return context;
+        }
+        context.put("reported_role", role);
+        context.put("object_id", objectId);
+        putNonBlank(context, "kind", object.getKind());
+        putNonBlank(context, "behavior", object.getBehavior());
+        putNonBlank(context, "anchor_id", object.getAnchorId());
+        putNonBlank(context, "dependency_relation", object.getDependencyRelation());
+        putNonBlank(context, "constraint_note", object.getConstraintNote());
+        List<String> dependencies = cleanDependencyObjects(object);
+        if (!dependencies.isEmpty()) {
+            context.put("dependency_objects", dependencies);
+        }
+        List<Map<String, Object>> chain = new ArrayList<>();
+        appendDependencyChain(objectId, storyboardObjects, new LinkedHashSet<>(), chain);
+        if (!chain.isEmpty()) {
+            context.put("full_dependency_chain", chain);
+        }
+        if (StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
+            context.put("derived_placement_omitted", true);
+        }
+        return context;
+    }
+
+    private void appendDependencyChain(String objectId,
+                                       Map<String, StoryboardObject> storyboardObjects,
+                                       LinkedHashSet<String> visited,
+                                       List<Map<String, Object>> chain) {
+        if (objectId == null || !visited.add(objectId)) {
+            return;
+        }
+        StoryboardObject object = storyboardObjects.get(objectId);
+        if (object == null) {
+            Map<String, Object> missing = new LinkedHashMap<>();
+            missing.put("object_id", objectId);
+            missing.put("available", false);
+            chain.add(missing);
+            return;
+        }
+        chain.add(storyboardObjectDependencyMap(objectId, object));
+        for (String dependencyId : cleanDependencyObjects(object)) {
+            appendDependencyChain(dependencyId, storyboardObjects, visited, chain);
+        }
+    }
+
+    private Map<String, Object> storyboardObjectDependencyMap(String objectId, StoryboardObject object) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("object_id", objectId);
+        putNonBlank(map, "kind", object.getKind());
+        putNonBlank(map, "behavior", object.getBehavior());
+        putNonBlank(map, "anchor_id", object.getAnchorId());
+        List<String> dependencies = cleanDependencyObjects(object);
+        if (!dependencies.isEmpty()) {
+            map.put("dependency_objects", dependencies);
+        }
+        putNonBlank(map, "dependency_relation", object.getDependencyRelation());
+        putNonBlank(map, "constraint_note", object.getConstraintNote());
+        if (StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
+            map.put("placement", "omitted_for_dependency_driven_object");
+        } else {
+            String placementSummary = formatPlacementSummary(object);
+            if (!placementSummary.isBlank()) {
+                map.put("placement", placementSummary);
+            }
+        }
+        return map;
+    }
+
+    private String resolveStoryboardObjectId(ElementRef element,
+                                             Map<String, StoryboardObject> storyboardObjects) {
+        if (element == null || storyboardObjects == null || storyboardObjects.isEmpty()) {
+            return null;
+        }
+        List<String> candidates = new ArrayList<>();
+        addObjectIdCandidates(candidates, element.getSemanticName());
+        addObjectIdCandidates(candidates, element.getStableId());
+        for (String candidate : candidates) {
+            if (storyboardObjects.containsKey(candidate)) {
+                return candidate;
+            }
+        }
+        Map<String, String> normalizedIds = new LinkedHashMap<>();
+        for (String objectId : storyboardObjects.keySet()) {
+            normalizedIds.putIfAbsent(normalizeIdForMatch(objectId), objectId);
+        }
+        for (String candidate : candidates) {
+            String match = normalizedIds.get(normalizeIdForMatch(candidate));
+            if (match != null) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    private void addObjectIdCandidates(List<String> candidates, String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return;
+        }
+        String value = rawValue.trim();
+        addCandidate(candidates, value);
+        if (value.startsWith("self.") && value.length() > "self.".length()) {
+            addCandidate(candidates, value.substring("self.".length()));
+        }
+        int dot = value.lastIndexOf('.');
+        if (dot >= 0 && dot < value.length() - 1) {
+            addCandidate(candidates, value.substring(dot + 1));
+        }
+        for (String token : value.split("[^A-Za-z0-9_']+")) {
+            addCandidate(candidates, token);
+        }
+    }
+
+    private void addCandidate(List<String> candidates, String candidate) {
+        if (candidate != null && !candidate.isBlank() && !candidates.contains(candidate.trim())) {
+            candidates.add(candidate.trim());
+        }
+    }
+
+    private String normalizeIdForMatch(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("ggb-")) {
+            normalized = normalized.substring(4);
+        }
+        if (normalized.startsWith("self.")) {
+            normalized = normalized.substring(5);
+        }
+        return normalized.replaceAll("[^a-z0-9]", "");
+    }
+
+    private List<String> cleanDependencyObjects(StoryboardObject object) {
+        List<String> dependencies = new ArrayList<>();
+        if (object == null || object.getDependencyObjects() == null) {
+            return dependencies;
+        }
+        for (String dependencyId : object.getDependencyObjects()) {
+            if (dependencyId != null && !dependencyId.isBlank()) {
+                dependencies.add(dependencyId.trim());
+            }
+        }
+        return dependencies;
+    }
+
+    private String formatPlacementSummary(StoryboardObject object) {
+        if (object == null || object.getPlacement() == null || !object.getPlacement().hasData()) {
+            return "";
+        }
+        StoryboardPlacement placement = object.getPlacement();
+        List<String> parts = new ArrayList<>();
+        if (placement.getCoordinateSpace() != null && !placement.getCoordinateSpace().isBlank()) {
+            parts.add("coordinate_space=" + placement.getCoordinateSpace().trim());
+        }
+        String xSummary = formatAxisSummary("x", placement.getX());
+        String ySummary = formatAxisSummary("y", placement.getY());
+        String zSummary = formatAxisSummary("z", placement.getZ());
+        if (!xSummary.isBlank()) {
+            parts.add(xSummary);
+        }
+        if (!ySummary.isBlank()) {
+            parts.add(ySummary);
+        }
+        if (!zSummary.isBlank()) {
+            parts.add(zSummary);
+        }
+        return String.join(", ", parts);
+    }
+
+    private String formatAxisSummary(String axisName, StoryboardPlacementAxis axis) {
+        if (axis == null || !axis.hasData()) {
+            return "";
+        }
+        if (axis.getValue() != null) {
+            return axisName + "=" + round(axis.getValue());
+        }
+        Double min = axis.getMin();
+        Double max = axis.getMax();
+        if (min != null && max != null) {
+            return axisName + "=" + round(min) + ".." + round(max);
+        }
+        if (min != null) {
+            return axisName + ">=" + round(min);
+        }
+        if (max != null) {
+            return axisName + "<=" + round(max);
+        }
+        return "";
+    }
+
+    private void putNonBlank(Map<String, Object> map, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            map.put(key, value.trim());
         }
     }
 

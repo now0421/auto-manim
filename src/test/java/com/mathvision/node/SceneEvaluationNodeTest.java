@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -120,6 +121,31 @@ class SceneEvaluationNodeTest {
         assertTrue(request.getStoryboardJson().contains("\"goal\""));
         assertTrue(request.getStoryboardJson().contains("\"layout_goal\""));
         assertTrue(request.getStoryboardJson().contains("\"constraint_note\""));
+        assertFalse(request.getStoryboardJson().contains("\"placement\""));
+    }
+
+    @Test
+    void sceneEvaluationFixReportIncludesStoryboardDependencyChain() throws IOException {
+        Path geometryPath = tempDir.resolve("5_mobject_geometry.json");
+        Files.writeString(geometryPath, derivedOffscreenGeometryJson());
+
+        Map<String, Object> ctx = buildContext(geometryPath, buildSceneFixNarrative());
+        SceneEvaluationNode node = new SceneEvaluationNode();
+
+        SceneEvaluationNode.SceneEvaluationInput input = node.prep(ctx);
+        SceneEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertEquals(WorkflowActions.FIX_CODE, action);
+        CodeFixRequest request = (CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
+        assertNotNull(request);
+        String sceneEvaluationJson = request.getSceneEvaluationJson();
+        assertTrue(sceneEvaluationJson.contains("\"storyboard_dependency_context\""));
+        assertTrue(sceneEvaluationJson.contains("\"full_dependency_chain\""));
+        assertTrue(sceneEvaluationJson.contains("\"point_Bprime\""));
+        assertTrue(sceneEvaluationJson.contains("\"point_B\""));
+        assertTrue(sceneEvaluationJson.contains("\"line_l\""));
+        assertTrue(sceneEvaluationJson.contains("\"derived_placement_omitted\""));
     }
 
     @Test
@@ -233,12 +259,23 @@ class SceneEvaluationNodeTest {
     }
 
     private Narrative buildSceneFixNarrative() {
+        Narrative.StoryboardObject pointB = new Narrative.StoryboardObject();
+        pointB.setId("point_B");
+        pointB.setKind("point");
+
+        Narrative.StoryboardObject lineL = new Narrative.StoryboardObject();
+        lineL.setId("line_l");
+        lineL.setKind("line");
+
         Narrative.StoryboardObject pointBPrime = new Narrative.StoryboardObject();
         pointBPrime.setId("point_Bprime");
         pointBPrime.setKind("point");
         pointBPrime.setContent("Reflection of B across l");
         pointBPrime.setBehavior("derived");
+        pointBPrime.setDependencyObjects(List.of("point_B", "line_l"));
+        pointBPrime.setDependencyRelation("reflection_across_line");
         pointBPrime.setConstraintNote("Reflection of B across l");
+        pointBPrime.setPlacement(placement(8.0, 3.8));
 
         Narrative.StoryboardScene scene = new Narrative.StoryboardScene();
         scene.setSceneId("scene_2");
@@ -258,6 +295,7 @@ class SceneEvaluationNodeTest {
 
         Narrative.Storyboard storyboard = new Narrative.Storyboard();
         storyboard.setContinuityPlan("Preserve the same diagram while repairing layout.");
+        storyboard.setObjectRegistry(List.of(pointB, lineL, pointBPrime));
         storyboard.getScenes().add(scene);
 
         Narrative narrative = new Narrative();
@@ -265,6 +303,18 @@ class SceneEvaluationNodeTest {
         narrative.setTargetDescription("Demo description");
         narrative.setStoryboard(storyboard);
         return narrative;
+    }
+
+    private Narrative.StoryboardPlacement placement(double x, double y) {
+        Narrative.StoryboardPlacement placement = new Narrative.StoryboardPlacement();
+        placement.setCoordinateSpace("world");
+        Narrative.StoryboardPlacementAxis xAxis = new Narrative.StoryboardPlacementAxis();
+        xAxis.setValue(x);
+        Narrative.StoryboardPlacementAxis yAxis = new Narrative.StoryboardPlacementAxis();
+        yAxis.setValue(y);
+        placement.setX(xAxis);
+        placement.setY(yAxis);
+        return placement;
     }
 
     private String cleanGeometryJson() {
@@ -352,6 +402,38 @@ class SceneEvaluationNodeTest {
                 "          \"bounds\": {",
                 "            \"min\": [6.8, 3.2, 0.0],",
                 "            \"max\": [7.5, 4.4, 0.0]",
+                "          }",
+                "        }",
+                "      ]",
+                "    }",
+                "  ]",
+                "}");
+    }
+
+    private String derivedOffscreenGeometryJson() {
+        return String.join("\n",
+                "{",
+                "  \"scene_name\": \"MainScene\",",
+                "  \"frame_bounds\": {",
+                "    \"min\": [-7.111111, -4.0, 0.0],",
+                "    \"max\": [7.111111, 4.0, 0.0]",
+                "  },",
+                "  \"samples\": [",
+                "    {",
+                "      \"sample_id\": \"sample-0001\",",
+                "      \"sample_role\": \"scene_final\",",
+                "      \"scene_method\": \"construct\",",
+                "      \"source_code\": \"self.play(FadeIn(point_Bprime))\",",
+                "      \"elements\": [",
+                "        {",
+                "          \"stable_id\": \"mob-0003\",",
+                "          \"semantic_name\": \"point_Bprime\",",
+                "          \"class_name\": \"Dot\",",
+                "          \"semantic_class\": \"point\",",
+                "          \"visible\": true,",
+                "          \"bounds\": {",
+                "            \"min\": [7.0, 3.6, 0.0],",
+                "            \"max\": [7.5, 4.3, 0.0]",
                 "          }",
                 "        }",
                 "      ]",
