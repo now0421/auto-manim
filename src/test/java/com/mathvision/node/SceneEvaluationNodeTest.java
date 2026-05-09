@@ -120,7 +120,8 @@ class SceneEvaluationNodeTest {
         assertNotNull(request);
         assertTrue(request.getStoryboardJson().contains("\"goal\""));
         assertTrue(request.getStoryboardJson().contains("\"layout_goal\""));
-        assertTrue(request.getStoryboardJson().contains("\"constraint_note\""));
+        assertTrue(request.getStoryboardJson().contains("\"constraints\""));
+        assertFalse(request.getStoryboardJson().contains("\"constraint_note\""));
         assertFalse(request.getStoryboardJson().contains("\"placement\""));
     }
 
@@ -274,7 +275,6 @@ class SceneEvaluationNodeTest {
         pointBPrime.setBehavior("derived");
         pointBPrime.setDependencyObjects(List.of("point_B", "line_l"));
         pointBPrime.setDependencyRelation("reflection_across_line");
-        pointBPrime.setConstraintNote("Reflection of B across l");
         pointBPrime.setPlacement(placement(8.0, 3.8));
 
         Narrative.StoryboardScene scene = new Narrative.StoryboardScene();
@@ -283,7 +283,14 @@ class SceneEvaluationNodeTest {
         scene.setGoal("Keep the reflection construction exact while cleaning the layout.");
         scene.setNarration("Reflect B across l and preserve the mirror symmetry.");
         scene.setLayoutGoal("Keep explanatory text off the core geometry while B' stays symmetric to B.");
-        scene.getGeometryConstraints().add("B' is the exact reflection of B across line l");
+        scene.getConstraints().add(constraint(
+                "scene_reflection_Bprime",
+                "geometry",
+                "reflection_across",
+                Map.of("image", "point_Bprime", "source", "point_B", "mirror", "line_l"),
+                Map.of(),
+                "hard",
+                "B' is the exact reflection of B across line l"));
         scene.getEnteringObjects().add(pointBPrime);
         Narrative.StoryboardObject persistB = new Narrative.StoryboardObject();
         persistB.setId("point_B");
@@ -315,6 +322,24 @@ class SceneEvaluationNodeTest {
         placement.setX(xAxis);
         placement.setY(yAxis);
         return placement;
+    }
+
+    private Narrative.StoryboardConstraint constraint(String id,
+                                                      String domain,
+                                                      String relation,
+                                                      Map<String, Object> refs,
+                                                      Map<String, Object> parameters,
+                                                      String strength,
+                                                      String reason) {
+        Narrative.StoryboardConstraint constraint = new Narrative.StoryboardConstraint();
+        constraint.setId(id);
+        constraint.setDomain(domain);
+        constraint.setRelation(relation);
+        constraint.setRefs(refs);
+        constraint.setParameters(parameters);
+        constraint.setStrength(strength);
+        constraint.setReason(reason);
+        return constraint;
     }
 
     private String cleanGeometryJson() {

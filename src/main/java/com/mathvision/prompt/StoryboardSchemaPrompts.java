@@ -1,5 +1,7 @@
 package com.mathvision.prompt;
 
+import com.mathvision.util.StoryboardConstraintCatalog;
+
 /**
  * Shared JSON schema fragments for storyboard output formats.
  *
@@ -131,8 +133,7 @@ public final class StoryboardSchemaPrompts {
                     + "    \"layout_goal\": \"string, intended screen composition and relative placement of major elements, including where the main visual focus and empty breathing room should be\",\n"
                     + "    \"safe_area_plan\": \"string, how important content stays readable and inside the safe frame\",\n"
                     + "    \"screen_overlay_plan\": \"string, what text or formulas stay fixed relative to the viewport rather than the main geometry, and where the safe overlay zone is\",\n"
-                    + "    \"geometry_constraints\": [\"string, hard geometric invariants that downstream codegen and fix stages must preserve\"],\n"
-                    + "    \"constraints\": [\"object, machine-readable scene-level invariant with category, relation, objects, optional roles/params, strength, and reason; geometry_constraints is only a legacy/debug summary\"],\n"
+                    + "    \"constraints\": [\"object, machine-readable scene-level invariant with domain, relation, refs, optional parameters, strength, and reason\"],\n"
                     + "    \"step_refs\": [\"string, referenced knowledge-graph step or solving beat covered by this scene\"],\n"
                     + "    \"entering_objects\": [\n"
                     + ENTERING_OBJECT_SCHEMA + "\n"
@@ -160,20 +161,18 @@ public final class StoryboardSchemaPrompts {
                     + "      \"behavior\": \"string, dependency role such as static|follows_anchor|derived|fixed_overlay\",\n"
                     + "      \"anchor_id\": \"string, id of the object this one should stay attached to when relevant\",\n"
                     + "      \"dependency_objects\": [\"string, ordered source object ids only; empty for independent objects\"],\n"
-                    + "      \"dependency_relation\": \"string, concise construction relationship such as independent|follows_anchor|connects_points|reflection_across_line|intersection|midpoint|angle_between|label_for\",\n"
+                    + "      \"dependency_relation\": \"string, concise construction relationship such as independent|follows_anchor|point_on_object|connects_points|reflection_across_line|intersection|midpoint|angle_between|label_for\",\n"
                     + "      \"constraints\": [\n"
                     + "        {\n"
                     + "          \"id\": \"string, optional stable id for this single invariant\",\n"
-                    + "          \"category\": \"geometry|measurement|motion|attachment|layout|visibility|style|lifecycle\",\n"
-                    + "          \"relation\": \"string, canonical relation such as lies_on|connects_points|reflection_across|intersection_of|angle_between_rays|arc_sweep|equal_measure_group|same_side_of|moves_on_object|label_for|fixed_offset_from|screen_fixed\",\n"
-                    + "          \"objects\": [\"string, ordered object ids governed by this constraint, including this object id\"],\n"
-                    + "          \"roles\": { \"role_name\": \"object id or short id list\" },\n"
-                    + "          \"params\": { \"parameter_name\": \"structured value such as side, sector, direction, range, coordinate_space, offset, tolerance, or lifecycle scenes\" },\n"
+                    + "          \"domain\": \"" + StoryboardConstraintCatalog.domainList() + "\",\n"
+                    + "          \"relation\": \"string, one of " + StoryboardConstraintCatalog.relationList() + "\",\n"
+                    + "          \"refs\": { \"role_name\": \"object id, object id list, or nested object-id map; role names must match the selected relation catalog\" },\n"
+                    + "          \"parameters\": { \"parameter_name\": \"structured non-object value allowed by the selected relation; never put object ids here\" },\n"
                     + "          \"strength\": \"hard|repair_hard|soft\",\n"
                     + "          \"reason\": \"string, short human-readable explanation\"\n"
                     + "        }\n"
-                    + "      ],\n"
-                    + "      \"constraint_note\": \"string, short legacy/debug summary of constraints[]; do not use it as the only semantic carrier\"\n"
+                    + "      ]\n"
                     + "    }";
 
     // ── Example data ───────────────────────────────────────────────────
@@ -188,8 +187,7 @@ public final class StoryboardSchemaPrompts {
                     + "      \"behavior\": \"static\",\n"
                     + "      \"anchor_id\": \"\",\n"
                     + "      \"dependency_objects\": [],\n"
-                    + "      \"dependency_relation\": \"independent\",\n"
-                    + "      \"constraint_note\": \"fixed baseline\"\n"
+                    + "      \"dependency_relation\": \"independent\"\n"
                     + "    }";
 
     /** Example object-registry entry: a derived moving point. */
@@ -203,7 +201,23 @@ public final class StoryboardSchemaPrompts {
                     + "      \"anchor_id\": \"numberLine\",\n"
                     + "      \"dependency_objects\": [\"numberLine\"],\n"
                     + "      \"dependency_relation\": \"point_on_object\",\n"
-                    + "      \"constraint_note\": \"lies on numberLine\"\n"
+                    + "      \"constraints\": [\n"
+                    + "        {\n"
+                    + "          \"domain\": \"geometry\",\n"
+                    + "          \"relation\": \"lies_on\",\n"
+                    + "          \"refs\": {\"point\": \"P\", \"support\": \"numberLine\"},\n"
+                    + "          \"strength\": \"hard\",\n"
+                    + "          \"reason\": \"P must stay on numberLine\"\n"
+                    + "        },\n"
+                    + "        {\n"
+                    + "          \"domain\": \"motion\",\n"
+                    + "          \"relation\": \"moves_on_object\",\n"
+                    + "          \"refs\": {\"point\": \"P\", \"support\": \"numberLine\"},\n"
+                    + "          \"parameters\": {\"range\": \"visible_line\"},\n"
+                    + "          \"strength\": \"hard\",\n"
+                    + "          \"reason\": \"P slides along numberLine\"\n"
+                    + "        }\n"
+                    + "      ]\n"
                     + "    }";
 
     private static final String EXAMPLE_POINT_P_LABEL_BODY =
@@ -215,8 +229,7 @@ public final class StoryboardSchemaPrompts {
                     + "      \"behavior\": \"follows_anchor\",\n"
                     + "      \"anchor_id\": \"P\",\n"
                     + "      \"dependency_objects\": [\"P\"],\n"
-                    + "      \"dependency_relation\": \"label_for\",\n"
-                    + "      \"constraint_note\": \"small readable label offset from P\"\n"
+                    + "      \"dependency_relation\": \"label_for\"\n"
                     + "    }";
 
     /** Backend-specific example snippet: a companion text label attached to a point. */
@@ -249,8 +262,7 @@ public final class StoryboardSchemaPrompts {
                     + "      \"behavior\": \"fixed_overlay\",\n"
                     + "      \"anchor_id\": \"\",\n"
                     + "      \"dependency_objects\": [],\n"
-                    + "      \"dependency_relation\": \"independent_overlay\",\n"
-                    + "      \"constraint_note\": \"\"\n"
+                    + "      \"dependency_relation\": \"independent_overlay\"\n"
                     + "    }";
 
     /** Example object-registry entry: a derived minimum marker. */
@@ -264,7 +276,23 @@ public final class StoryboardSchemaPrompts {
                     + "      \"anchor_id\": \"numberLine\",\n"
                     + "      \"dependency_objects\": [\"numberLine\"],\n"
                     + "      \"dependency_relation\": \"minimum_on_object\",\n"
-                    + "      \"constraint_note\": \"lies on numberLine at the minimum\"\n"
+                    + "      \"constraints\": [\n"
+                    + "        {\n"
+                    + "          \"domain\": \"geometry\",\n"
+                    + "          \"relation\": \"lies_on\",\n"
+                    + "          \"refs\": {\"point\": \"minMarker\", \"support\": \"numberLine\"},\n"
+                    + "          \"strength\": \"hard\",\n"
+                    + "          \"reason\": \"minimum marker stays on numberLine\"\n"
+                    + "        },\n"
+                    + "        {\n"
+                    + "          \"domain\": \"measurement\",\n"
+                    + "          \"relation\": \"minimum_of\",\n"
+                    + "          \"refs\": {\"marker\": \"minMarker\", \"support\": \"numberLine\"},\n"
+                    + "          \"parameters\": {\"objective\": \"displayed function value\"},\n"
+                    + "          \"strength\": \"hard\",\n"
+                    + "          \"reason\": \"minMarker identifies the minimum\"\n"
+                    + "        }\n"
+                    + "      ]\n"
                     + "    }";
 
     /** Example scene 1 entering_objects with numberLine, P, and formulaCard. */
@@ -320,7 +348,15 @@ public final class StoryboardSchemaPrompts {
                     + "    \"layout_goal\": \"Keep the main diagram centered and reserve edge space for supporting labels.\",\n"
                     + "    \"safe_area_plan\": \"Keep all important content inside x[-7,7] and y[-4,4] with margin.\",\n"
                     + "    \"screen_overlay_plan\": \"No fixed screen overlay needed.\",\n"
-                    + "    \"geometry_constraints\": [\"Keep derived points defined by their construction, not by ad hoc coordinates.\"],\n"
+                    + "    \"constraints\": [\n"
+                    + "      {\n"
+                    + "        \"domain\": \"geometry\",\n"
+                    + "        \"relation\": \"preserve_derived_construction\",\n"
+                    + "        \"refs\": {\"objects\": [\"P\"]},\n"
+                    + "        \"strength\": \"hard\",\n"
+                    + "        \"reason\": \"Keep derived points defined by their construction, not by ad hoc coordinates.\"\n"
+                    + "      }\n"
+                    + "    ],\n"
                     + "    \"step_refs\": [\"problem_setup\"],\n"
                     + EXAMPLE_SCENE1_ENTERING_OBJECTS + ",\n"
                     + "    \"persistent_objects\": [],\n"
@@ -365,7 +401,7 @@ public final class StoryboardSchemaPrompts {
                     + "    \"layout_goal\": \"Keep the diagram centered; highlight the minimum point.\",\n"
                     + "    \"safe_area_plan\": \"Keep all important content inside x[-7,7] and y[-4,4] with margin.\",\n"
                     + "    \"screen_overlay_plan\": \"No fixed screen overlay needed.\",\n"
-                    + "    \"geometry_constraints\": [],\n"
+                    + "    \"constraints\": [],\n"
                     + "    \"step_refs\": [\"minimum_reveal\"],\n"
                     + EXAMPLE_SCENE2_ENTERING_OBJECTS + ",\n"
                     + "    \"persistent_objects\": [\n"
@@ -392,7 +428,7 @@ public final class StoryboardSchemaPrompts {
 
     /** Patch-semantics explanation shared by both output formats. */
     public static final String PATCH_SEMANTICS_NOTE =
-            "`entering_objects` and `persistent_objects` in each scene are patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, constraints, or constraint_note there — those belong in the object registry.\n"
+            "`entering_objects` and `persistent_objects` in each scene are patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, or constraints there — those belong in the object registry.\n"
                     + "`exiting_objects` entries carry `id` only.\n";
 
     /** Text style semantics rules shared by both output formats. */

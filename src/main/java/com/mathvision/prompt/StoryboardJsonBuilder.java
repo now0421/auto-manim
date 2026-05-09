@@ -109,7 +109,6 @@ public final class StoryboardJsonBuilder {
         putNonBlank(sceneNode, "camera_plan", scene.getCameraPlan());
         putNonBlank(sceneNode, "safe_area_plan", scene.getSafeAreaPlan());
         putNonBlank(sceneNode, "screen_overlay_plan", scene.getScreenOverlayPlan());
-        putTrimmedStringArray(sceneNode, "geometry_constraints", scene.getGeometryConstraints());
         addConstraintArray(sceneNode, "constraints", scene.getConstraints());
         putTrimmedStringArray(sceneNode, "step_refs", scene.getStepRefs());
 
@@ -148,7 +147,6 @@ public final class StoryboardJsonBuilder {
             putTrimmedStringArray(objectNode, "dependency_objects", object.getDependencyObjects());
             putNonBlank(objectNode, "dependency_relation", object.getDependencyRelation());
             addConstraintArray(objectNode, "constraints", object.getConstraints());
-            putNonBlank(objectNode, "constraint_note", object.getConstraintNote());
             removeIfEmpty(arrayNode, objectNode);
         }
     }
@@ -166,14 +164,13 @@ public final class StoryboardJsonBuilder {
             }
             ObjectNode constraintNode = arrayNode.addObject();
             putNonBlank(constraintNode, "id", constraint.getId());
-            putNonBlank(constraintNode, "category", constraint.getCategory());
+            putNonBlank(constraintNode, "domain", constraint.getDomain());
             putNonBlank(constraintNode, "relation", constraint.getRelation());
-            putTrimmedStringArray(constraintNode, "objects", constraint.getObjects());
-            if (constraint.getRoles() != null && !constraint.getRoles().isEmpty()) {
-                constraintNode.set("roles", JsonUtils.mapper().valueToTree(constraint.getRoles()));
+            if (constraint.getRefs() != null && !constraint.getRefs().isEmpty()) {
+                constraintNode.set("refs", JsonUtils.mapper().valueToTree(constraint.getRefs()));
             }
-            if (constraint.getParams() != null && !constraint.getParams().isEmpty()) {
-                constraintNode.set("params", JsonUtils.mapper().valueToTree(constraint.getParams()));
+            if (constraint.getParameters() != null && !constraint.getParameters().isEmpty()) {
+                constraintNode.set("parameters", JsonUtils.mapper().valueToTree(constraint.getParameters()));
             }
             putNonBlank(constraintNode, "strength", constraint.getStrength());
             putNonBlank(constraintNode, "reason", constraint.getReason());
@@ -255,6 +252,7 @@ public final class StoryboardJsonBuilder {
     private static void putTrimmedStringArray(ObjectNode node, String fieldName, List<String> values) {
         ArrayNode array = node.putArray(fieldName);
         if (values == null) {
+            node.remove(fieldName);
             return;
         }
         for (String value : values) {
@@ -262,6 +260,9 @@ public final class StoryboardJsonBuilder {
             if (!normalized.isEmpty()) {
                 array.add(normalized);
             }
+        }
+        if (array.isEmpty()) {
+            node.remove(fieldName);
         }
     }
 

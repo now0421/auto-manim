@@ -50,6 +50,14 @@ class ToolSchemasTest {
     }
 
     @Test
+    void sceneDesignTool_isValidJson() {
+        assertDoesNotThrow(() -> {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.readTree(ToolSchemas.SCENE_DESIGN);
+        });
+    }
+
+    @Test
     void manimCodeTool_isValidJson() {
         assertDoesNotThrow(() -> {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -155,10 +163,30 @@ class ToolSchemasTest {
     @Test
     void storyboardSchemaIncludesStructuredConstraintsContract() {
         assertTrue(ToolSchemas.STORYBOARD.contains("\"constraints\""));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"category\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"domain\""));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"relation\""));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"objects\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"refs\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"parameters\""));
         assertTrue(ToolSchemas.STORYBOARD.contains("angle_between_rays"));
-        assertTrue(ToolSchemas.STORYBOARD.contains("constraint_note is only"));
+        assertFalse(ToolSchemas.STORYBOARD.contains("constraint_note"));
+    }
+
+    @Test
+    void sceneDesignSchemaIncludesSceneLevelConstraintsContract() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode schema = mapper.readTree(ToolSchemas.SCENE_DESIGN);
+
+        com.fasterxml.jackson.databind.JsonNode sceneProperties = schema.get(0)
+                .path("function")
+                .path("parameters")
+                .path("properties")
+                .path("scene")
+                .path("properties");
+
+        assertFalse(sceneProperties.has("geometry_constraints"));
+        assertTrue(sceneProperties.has("constraints"));
+        assertEquals("array", sceneProperties.path("constraints").path("type").asText());
+        assertEquals("object", sceneProperties.path("constraints").path("items").path("type").asText());
+        assertTrue(sceneProperties.path("constraints").path("items").path("properties").has("relation"));
     }
 }

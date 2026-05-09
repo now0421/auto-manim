@@ -25,7 +25,6 @@ class StoryboardJsonBuilderTest {
         StoryboardObject anchor = objectWithPlacement("A", "point", "static", "independent", -3.0, 1.0);
         StoryboardObject pmin = objectWithPlacement("Pmin", "point", "derived", "intersection", 0.6, -1.0);
         pmin.setDependencyObjects(List.of("ABprime", "l"));
-        pmin.setConstraintNote("lies on both ABprime and l");
         storyboard.setObjectRegistry(List.of(anchor, pmin));
 
         StoryboardScene scene = new StoryboardScene();
@@ -55,8 +54,7 @@ class StoryboardJsonBuilderTest {
                 "A_ref_reflection",
                 "geometry",
                 "reflection_across",
-                List.of("A_ref", "A", "l"),
-                Map.of("target", "A_ref", "source", "A", "mirror_line", "l"),
+                Map.of("image", "A_ref", "source", "A", "mirror", "l"),
                 Map.of(),
                 "hard")));
         StoryboardObject line = objectWithPlacement("l", "line", "static", "independent", 0.0, 0.0);
@@ -69,8 +67,7 @@ class StoryboardJsonBuilderTest {
                 "reflection_group",
                 "geometry",
                 "equal_measure_group",
-                List.of("A_ref", "A", "l"),
-                Map.of("members", List.of("A_ref", "A")),
+                Map.of("members", List.of("A_ref", "A"), "reference", "l"),
                 Map.of("measure", "distance_to_line"),
                 "hard")));
         scene.setEnteringObjects(List.of(scenePatch("A", -3.0, 1.0), scenePatch("A_ref", -3.0, -3.0)));
@@ -83,6 +80,25 @@ class StoryboardJsonBuilderTest {
         assertFalse(reflectedNode.has("placement"));
         assertTrue(codegen.get("scenes").get(0).has("constraints"));
         assertTrue(codegen.toString().contains("\"relation\":\"reflection_across\""));
+    }
+
+    @Test
+    void codegenJsonOmitsEmptyScenePatchMetadataArrays() throws Exception {
+        Storyboard storyboard = new Storyboard();
+        storyboard.setObjectRegistry(List.of(objectWithPlacement("A", "point", "static", "independent", -3.0, 1.0)));
+
+        StoryboardScene scene = new StoryboardScene();
+        scene.setSceneId("scene_1");
+        scene.setTitle("Clean patches");
+        scene.setEnteringObjects(List.of(scenePatch("A", -3.0, 1.0)));
+        storyboard.setScenes(List.of(scene));
+
+        String codegenJson = StoryboardJsonBuilder.buildForCodegen(storyboard);
+
+        assertFalse(codegenJson.contains("\"dependency_objects\" : [ ]"));
+        assertFalse(codegenJson.contains("\"constraints\" : [ ]"));
+        assertFalse(codegenJson.contains("\"geometry_constraints\" : [ ]"));
+        assertFalse(codegenJson.contains("\"step_refs\" : [ ]"));
     }
 
     private static StoryboardObject objectWithPlacement(String id,
@@ -120,19 +136,17 @@ class StoryboardJsonBuilderTest {
     }
 
     private static StoryboardConstraint constraint(String id,
-                                                   String category,
+                                                   String domain,
                                                    String relation,
-                                                   List<String> objects,
-                                                   Map<String, Object> roles,
-                                                   Map<String, Object> params,
+                                                   Map<String, Object> refs,
+                                                   Map<String, Object> parameters,
                                                    String strength) {
         StoryboardConstraint constraint = new StoryboardConstraint();
         constraint.setId(id);
-        constraint.setCategory(category);
+        constraint.setDomain(domain);
         constraint.setRelation(relation);
-        constraint.setObjects(objects);
-        constraint.setRoles(roles);
-        constraint.setParams(params);
+        constraint.setRefs(refs);
+        constraint.setParameters(parameters);
         constraint.setStrength(strength);
         return constraint;
     }

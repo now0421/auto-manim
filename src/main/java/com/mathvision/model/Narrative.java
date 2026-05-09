@@ -56,6 +56,7 @@ public class Narrative {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public static class Storyboard {
 
         @JsonProperty("continuity_plan")
@@ -90,6 +91,7 @@ public class Narrative {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public static class StoryboardScene {
 
         @JsonProperty("scene_id")
@@ -124,9 +126,6 @@ public class Narrative {
 
         @JsonProperty("screen_overlay_plan")
         private String screenOverlayPlan;
-
-        @JsonProperty("geometry_constraints")
-        private List<String> geometryConstraints = new ArrayList<>();
 
         @JsonProperty("constraints")
         private List<StoryboardConstraint> constraints = new ArrayList<>();
@@ -186,11 +185,6 @@ public class Narrative {
             this.screenOverlayPlan = screenOverlayPlan;
         }
 
-        public List<String> getGeometryConstraints() { return geometryConstraints; }
-        public void setGeometryConstraints(List<String> geometryConstraints) {
-            this.geometryConstraints = geometryConstraints;
-        }
-
         public List<StoryboardConstraint> getConstraints() { return constraints; }
         public void setConstraints(List<StoryboardConstraint> constraints) {
             this.constraints = constraints != null ? constraints : new ArrayList<>();
@@ -224,6 +218,7 @@ public class Narrative {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public static class StoryboardObject {
 
         public static final String BEHAVIOR_STATIC = "static";
@@ -260,9 +255,6 @@ public class Narrative {
 
         @JsonProperty("dependency_relation")
         private String dependencyRelation;
-
-        @JsonProperty("constraint_note")
-        private String constraintNote;
 
         @JsonProperty("constraints")
         private List<StoryboardConstraint> constraints = new ArrayList<>();
@@ -302,9 +294,6 @@ public class Narrative {
         public String getDependencyRelation() { return dependencyRelation; }
         public void setDependencyRelation(String dependencyRelation) { this.dependencyRelation = dependencyRelation; }
 
-        public String getConstraintNote() { return constraintNote; }
-        public void setConstraintNote(String constraintNote) { this.constraintNote = constraintNote; }
-
         public List<StoryboardConstraint> getConstraints() { return constraints; }
         public void setConstraints(List<StoryboardConstraint> constraints) {
             this.constraints = constraints != null ? constraints : new ArrayList<>();
@@ -318,20 +307,17 @@ public class Narrative {
         @JsonProperty("id")
         private String id;
 
-        @JsonProperty("category")
-        private String category;
+        @JsonProperty("domain")
+        private String domain;
 
         @JsonProperty("relation")
         private String relation;
 
-        @JsonProperty("objects")
-        private List<String> objects = new ArrayList<>();
+        @JsonProperty("refs")
+        private Map<String, Object> refs = new LinkedHashMap<>();
 
-        @JsonProperty("roles")
-        private Map<String, Object> roles = new LinkedHashMap<>();
-
-        @JsonProperty("params")
-        private Map<String, Object> params = new LinkedHashMap<>();
+        @JsonProperty("parameters")
+        private Map<String, Object> parameters = new LinkedHashMap<>();
 
         @JsonProperty("strength")
         private String strength;
@@ -344,25 +330,20 @@ public class Narrative {
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
 
-        public String getCategory() { return category; }
-        public void setCategory(String category) { this.category = category; }
+        public String getDomain() { return domain; }
+        public void setDomain(String domain) { this.domain = domain; }
 
         public String getRelation() { return relation; }
         public void setRelation(String relation) { this.relation = relation; }
 
-        public List<String> getObjects() { return objects; }
-        public void setObjects(List<String> objects) {
-            this.objects = objects != null ? objects : new ArrayList<>();
+        public Map<String, Object> getRefs() { return refs; }
+        public void setRefs(Map<String, Object> refs) {
+            this.refs = refs != null ? refs : new LinkedHashMap<>();
         }
 
-        public Map<String, Object> getRoles() { return roles; }
-        public void setRoles(Map<String, Object> roles) {
-            this.roles = roles != null ? roles : new LinkedHashMap<>();
-        }
-
-        public Map<String, Object> getParams() { return params; }
-        public void setParams(Map<String, Object> params) {
-            this.params = params != null ? params : new LinkedHashMap<>();
+        public Map<String, Object> getParameters() { return parameters; }
+        public void setParameters(Map<String, Object> parameters) {
+            this.parameters = parameters != null ? parameters : new LinkedHashMap<>();
         }
 
         public String getStrength() { return strength; }
@@ -373,11 +354,10 @@ public class Narrative {
 
         public boolean hasData() {
             return (id != null && !id.isBlank())
-                    || (category != null && !category.isBlank())
+                    || (domain != null && !domain.isBlank())
                     || (relation != null && !relation.isBlank())
-                    || (objects != null && !objects.isEmpty())
-                    || (roles != null && !roles.isEmpty())
-                    || (params != null && !params.isEmpty())
+                    || (refs != null && !refs.isEmpty())
+                    || (parameters != null && !parameters.isEmpty())
                     || (strength != null && !strength.isBlank())
                     || (reason != null && !reason.isBlank());
         }

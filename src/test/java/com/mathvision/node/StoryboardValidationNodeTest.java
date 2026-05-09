@@ -206,7 +206,6 @@ class StoryboardValidationNodeTest {
         StoryboardObject reflectedPoint = registryObject("Bprime", "point", "Reflected point", null);
         reflectedPoint.setBehavior(StoryboardObject.BEHAVIOR_DERIVED);
         reflectedPoint.setDependencyRelation("reflection_across_line");
-        reflectedPoint.setConstraintNote("mirror symmetric across river");
         Storyboard storyboard = buildSingleSceneStoryboard(
                 List.of(reflectedPoint),
                 List.of(scenePatch("Bprime", boxPlacement("world", 2.9, 3.1, -3.6, -3.4))));
@@ -231,9 +230,8 @@ class StoryboardValidationNodeTest {
                 "angleIn_sector",
                 "measurement",
                 "angle_between_rays",
-                List.of("angleIn", "P", "l", "A"),
-                Map.of("vertex", "P", "start_boundary", "l", "end_boundary", "A"),
-                Map.of("sector", "smaller", "side_of_reference", Map.of("reference", "l", "side", "same_as", "object", "A")),
+                Map.of("marker", "angleIn", "vertex", "P", "start_boundary", "l", "end_boundary", "A"),
+                Map.of("sector", "smaller", "side_of_reference", Map.of("reference_role", "start_boundary", "side", "same_as", "object_role", "end_boundary")),
                 "hard")));
 
         Storyboard storyboard = buildSingleSceneStoryboard(
@@ -246,6 +244,62 @@ class StoryboardValidationNodeTest {
     }
 
     @Test
+    void reportsRelationSpecificConstraintCatalogIssues() {
+        StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
+        StoryboardObject pointP = registryObject("P", "point", "Point P", null);
+        StoryboardObject pointA = registryObject("A", "point", "Point A", null);
+        StoryboardObject lineL = registryObject("l", "line", "Mirror line", null);
+        pointP.setConstraints(List.of(constraint(
+                "bad_reflection",
+                "measurement",
+                "reflection_across",
+                Map.of("image", "P", "source", "A", "axis", "l", "extra", "A"),
+                Map.of("mirror", "l"),
+                "required")));
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(pointP, pointA, lineL),
+                List.of());
+
+        List<String> issues = node.validate(storyboard);
+        String joinedIssues = String.join("\n", issues);
+
+        assertTrue(joinedIssues.contains("domain 'measurement' does not match relation 'reflection_across' domain 'geometry'"),
+                () -> joinedIssues);
+        assertTrue(joinedIssues.contains("strength must be hard, repair_hard, or soft"), () -> joinedIssues);
+        assertTrue(joinedIssues.contains("does not allow refs role 'extra'"), () -> joinedIssues);
+        assertTrue(joinedIssues.contains("does not allow parameter 'mirror'"), () -> joinedIssues);
+        assertTrue(joinedIssues.contains("parameters must not contain object id 'l'"), () -> joinedIssues);
+    }
+
+    @Test
+    void requiresCatalogParametersForAngleMarkerConstraints() {
+        StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
+        StoryboardObject pointP = registryObject("P", "point", "Vertex", null);
+        StoryboardObject lineL = registryObject("l", "line", "Reference line", null);
+        StoryboardObject pointA = registryObject("A", "point", "Point A", null);
+        StoryboardObject angle = registryObject("angleIn", "angle_marker", "Angle at P", null);
+        angle.setBehavior(StoryboardObject.BEHAVIOR_DERIVED);
+        angle.setDependencyObjects(List.of("P", "l", "A"));
+        angle.setDependencyRelation("angle_between");
+        angle.setConstraints(List.of(constraint(
+                "angleIn_sector",
+                "measurement",
+                "angle_between_rays",
+                Map.of("marker", "angleIn", "vertex", "P", "start_boundary", "l", "end_boundary", "A"),
+                Map.of(),
+                null)));
+        Storyboard storyboard = buildSingleSceneStoryboard(
+                List.of(pointP, lineL, pointA, angle),
+                List.of());
+
+        List<String> issues = node.validate(storyboard);
+        String joinedIssues = String.join("\n", issues);
+
+        assertTrue(joinedIssues.contains("missing strength"), () -> joinedIssues);
+        assertTrue(joinedIssues.contains("requires parameter 'sector'"), () -> joinedIssues);
+    }
+
+    @Test
     void formatsOffscreenDependencyChainWithPlacementRelationAndConstraint() {
         StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
         StoryboardObject pointB = registryObject("B", "point", "Point B", null);
@@ -254,7 +308,13 @@ class StoryboardValidationNodeTest {
         reflectedPoint.setBehavior(StoryboardObject.BEHAVIOR_DERIVED);
         reflectedPoint.setDependencyObjects(List.of("B", "river"));
         reflectedPoint.setDependencyRelation("reflection_across_line");
-        reflectedPoint.setConstraintNote("mirror symmetric across river");
+        reflectedPoint.setConstraints(List.of(constraint(
+                "Bprime_reflection",
+                "geometry",
+                "reflection_across",
+                Map.of("image", "Bprime", "source", "B", "mirror", "river"),
+                Map.of(),
+                "hard")));
         Storyboard storyboard = buildSingleSceneStoryboard(
                 List.of(pointB, river, reflectedPoint),
                 List.of(
@@ -273,7 +333,6 @@ class StoryboardValidationNodeTest {
         assertTrue(issue.contains("- B: world placement x=3.0, y=1.5"));
         assertTrue(issue.contains("- river: world placement y=-1.5"));
         assertTrue(issue.contains("- relation: reflection_across_line"));
-        assertTrue(issue.contains("- constraint: mirror symmetric across river"));
         assertFalse(issue.contains("repair_rule"));
     }
 
@@ -352,6 +411,8 @@ class StoryboardValidationNodeTest {
         assertFalse(Files.exists(tempDir.resolve("3_narrative.json")));
         assertTrue(validatedStoryboardJson.contains("\"scenes\""));
         assertTrue(validatedStoryboardJson.contains("Layout validation"));
+        assertFalse(validatedStoryboardJson.contains("\"dependency_objects\" : [ ]"));
+        assertFalse(validatedStoryboardJson.contains("\"constraints\" : [ ]"));
         assertTrue(reportJson.contains("\"initial_issue_count\""));
         assertTrue(reportJson.contains("\"initial_issues\""));
         assertTrue(reportJson.contains("\"total_validation_events\""));
@@ -470,19 +531,17 @@ class StoryboardValidationNodeTest {
     }
 
     private StoryboardConstraint constraint(String id,
-                                            String category,
+                                            String domain,
                                             String relation,
-                                            List<String> objects,
-                                            Map<String, Object> roles,
-                                            Map<String, Object> params,
+                                            Map<String, Object> refs,
+                                            Map<String, Object> parameters,
                                             String strength) {
         StoryboardConstraint constraint = new StoryboardConstraint();
         constraint.setId(id);
-        constraint.setCategory(category);
+        constraint.setDomain(domain);
         constraint.setRelation(relation);
-        constraint.setObjects(objects);
-        constraint.setRoles(roles);
-        constraint.setParams(params);
+        constraint.setRefs(refs);
+        constraint.setParameters(parameters);
         constraint.setStrength(strength);
         return constraint;
     }

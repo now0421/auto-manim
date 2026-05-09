@@ -1350,7 +1350,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         }
         if (!context.isEmpty()) {
             context.put("repair_rule",
-                    "For dependency-driven or derived objects, keep dependency_relation, structured constraints, and constraint_note true; fix layout by moving/scaling upstream source objects, the whole constrained group, camera/view, or label attachment instead of directly assigning coordinates to the derived object.");
+                    "For dependency-driven or derived objects, keep dependency_relation and structured constraints true; fix layout by moving/scaling upstream source objects, the whole constrained group, camera/view, or label attachment instead of directly assigning coordinates to the derived object.");
         }
         return context;
     }
@@ -1376,7 +1376,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (object.getConstraints() != null && !object.getConstraints().isEmpty()) {
             context.put("constraints", object.getConstraints());
         }
-        putNonBlank(context, "constraint_note", object.getConstraintNote());
         List<String> dependencies = cleanDependencyObjects(object);
         if (!dependencies.isEmpty()) {
             context.put("dependency_objects", dependencies);
@@ -1427,7 +1426,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (object.getConstraints() != null && !object.getConstraints().isEmpty()) {
             map.put("constraints", object.getConstraints());
         }
-        putNonBlank(map, "constraint_note", object.getConstraintNote());
         if (StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
             map.put("placement", "omitted_for_dependency_driven_object");
         } else {

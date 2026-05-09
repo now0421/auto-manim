@@ -16,7 +16,7 @@ public final class VisualDesignPrompts {
             "Output format:\n"
                     + StoryboardSchemaPrompts.JSON_SYNTAX_REQUIREMENTS
                     + "Return a JSON object with two top-level keys: `scene` and `new_objects`.\n"
-                    + "`scene.entering_objects` and `scene.persistent_objects` are scene-level patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, constraints, or constraint_note here — those belong in `new_objects`.\n"
+                    + "`scene.entering_objects` and `scene.persistent_objects` are scene-level patches: each entry carries only `id` plus optional `placement` and `style`. Do NOT include kind, content, source_node, behavior, anchor_id, dependency_objects, dependency_relation, or constraints here — those belong in `new_objects`.\n"
                     + "`new_objects` entries represent the canonical registry definition of each object introduced in this scene. They carry identity, content, dependency, and behavior but not scene-specific placement or style.\n"
                     + "Only add `new_objects` that are teaching-essential, clarify the current beat, or carry distinct geometry/dependency semantics. Required labels or callouts with their own attachment behavior are not duplicates. Reuse existing registry ids instead of creating repeated formulas, redundant highlights, or decorative helper objects.\n"
                     + "{\n"

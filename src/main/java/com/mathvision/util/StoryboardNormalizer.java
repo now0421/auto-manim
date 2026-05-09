@@ -100,9 +100,6 @@ public final class StoryboardNormalizer {
                     ? "Keep titles and formulas visually separate if they must stay readable during viewpoint changes."
                     : "No separate overlay needed.");
         }
-        if (scene.getGeometryConstraints() == null) {
-            scene.setGeometryConstraints(new ArrayList<>());
-        }
         if (scene.getConstraints() == null) {
             scene.setConstraints(new ArrayList<>());
         }
@@ -207,7 +204,6 @@ public final class StoryboardNormalizer {
         object.setAnchorId(null);
         object.setDependencyObjects(new ArrayList<>());
         object.setDependencyRelation(null);
-        object.setConstraintNote(null);
         object.setConstraints(new ArrayList<>());
         if (mode == PatchMode.EXITING) {
             object.setStyle(null);

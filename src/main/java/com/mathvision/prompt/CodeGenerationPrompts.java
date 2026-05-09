@@ -18,7 +18,7 @@ public final class CodeGenerationPrompts {
                     + "- If clarity seems to require an undeclared label or annotation, omit it rather than creating it; only storyboard-declared visible objects may appear on screen.\n"
                     + "- Do not treat `style.label_visible` as permission to create a label. Render labels only when the storyboard declares explicit text/equation label objects.\n"
                     + "- Preserve scene continuity instead of clearing the scene between beats.\n"
-                    + "- Treat storyboard structured `constraints`, `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants; prefer `constraints` when fields disagree.\n"
+                    + "- Treat storyboard structured `constraints` and scene `notes_for_codegen` fields as hard invariants.\n"
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + "Additional code generation rules:\n"
                     + "- `entering_objects[].content` describes candidate visible content; implement only the objects that are necessary or helpful for the teaching beat.\n"
@@ -107,7 +107,7 @@ public final class CodeGenerationPrompts {
                     + "- Return GeoGebra commands, not Python and not JavaScript.\n"
                     + "- Build from base objects to derived objects in a clear dependency chain.\n"
                     + "- Preserve geometric meaning: intersections, reflections, midpoints, perpendiculars, parallels, equal-radius points, and similar constructions must stay dependency-driven.\n"
-                    + "- Treat storyboard structured `constraints`, `geometry_constraints`, scene `notes_for_codegen`, and object `constraint_note` fields as hard invariants; prefer `constraints` when fields disagree.\n"
+                    + "- Treat storyboard structured `constraints` and scene `notes_for_codegen` fields as hard invariants.\n"
                     + SystemPrompts.GEOMETRY_CONSTRAINT_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.OBJECT_LIFECYCLE_RULES

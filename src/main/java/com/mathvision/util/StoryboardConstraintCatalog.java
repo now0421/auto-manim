@@ -1,0 +1,578 @@
+package com.mathvision.util;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Central registry for storyboard structured constraint semantics.
+ *
+ * The JSON model intentionally keeps refs/parameters as maps so LLM output
+ * stays flexible, but this catalog defines the relation-specific contract that
+ * validation, prompt text, schema text, and codegen helpers should share.
+ */
+public final class StoryboardConstraintCatalog {
+
+    public enum Scope {
+        OBJECT,
+        SCENE
+    }
+
+    private static final List<String> DOMAINS = List.of(
+            "geometry",
+            "measurement",
+            "motion",
+            "attachment",
+            "layout",
+            "visibility",
+            "style",
+            "lifecycle"
+    );
+
+    private static final List<String> STRENGTHS = List.of("hard", "repair_hard", "soft");
+
+    private static final Map<String, RelationSpec> RELATIONS = buildRelations();
+
+    private StoryboardConstraintCatalog() {}
+
+    public static boolean isValidDomain(String domain) {
+        return domain != null && DOMAINS.contains(normalize(domain));
+    }
+
+    public static boolean isValidStrength(String strength) {
+        return strength != null && STRENGTHS.contains(normalize(strength));
+    }
+
+    public static RelationSpec relation(String relation) {
+        return RELATIONS.get(normalize(relation));
+    }
+
+    public static Collection<RelationSpec> relations() {
+        return RELATIONS.values();
+    }
+
+    public static String domainEnumJson() {
+        return jsonStringArray(DOMAINS);
+    }
+
+    public static String strengthEnumJson() {
+        return jsonStringArray(STRENGTHS);
+    }
+
+    public static String relationEnumJson() {
+        return jsonStringArray(RELATIONS.keySet());
+    }
+
+    public static String relationList() {
+        return String.join(", ", RELATIONS.keySet());
+    }
+
+    public static String domainList() {
+        return String.join("|", DOMAINS);
+    }
+
+    public static String toolSchemaSummary() {
+        List<String> entries = new ArrayList<>();
+        for (RelationSpec spec : RELATIONS.values()) {
+            StringBuilder entry = new StringBuilder();
+            entry.append(spec.relation()).append(": refs ");
+            entry.append(spec.requiredRefDescription());
+            if (!spec.requiredParameters().isEmpty()) {
+                entry.append("; required parameters ").append(String.join("/", spec.requiredParameters()));
+            }
+            entries.add(entry.toString());
+        }
+        return String.join(" | ", entries);
+    }
+
+    public static String promptSummary() {
+        return "Known constraint relations: " + relationList()
+                + ". For each relation, refs must use the cataloged semantic roles and parameters must use cataloged non-object keys.";
+    }
+
+    public static boolean isCoordinateDerivedRelation(String relation) {
+        RelationSpec spec = relation(relation);
+        return spec != null && spec.coordinateDerived();
+    }
+
+    public static boolean isCoordinateDerivedDependencyRelation(String relation) {
+        String normalized = normalize(relation);
+        return Set.of(
+                "connects_points",
+                "reflection_across_line",
+                "intersection",
+                "midpoint",
+                "angle_between",
+                "label_for",
+                "projection",
+                "foot_of_perpendicular",
+                "perpendicular_foot",
+                "perpendicular_bisector",
+                "parallel_through",
+                "perpendicular_through",
+                "circle_through",
+                "arc_between",
+                "ray_from_points",
+                "segment_between",
+                "line_through_points"
+        ).contains(normalized);
+    }
+
+    private static Map<String, RelationSpec> buildRelations() {
+        Map<String, RelationSpec> relations = new LinkedHashMap<>();
+
+        add(relations, spec("geometry", "lies_on")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("point")
+                .requireRef("support")
+                .optionalParams("side", "range", "tolerance"));
+        add(relations, spec("geometry", "point_on_object")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("point")
+                .requireRef("support")
+                .optionalParams("range", "tolerance"));
+        add(relations, spec("geometry", "connects_points")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("object", "connector", "segment", "line", "ray")
+                .requireAnyRef("start", "point_a", "from")
+                .requireAnyRef("end", "point_b", "to")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "line_through_points")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("line", "object")
+                .requireAnyRef("point_a", "start", "from")
+                .requireAnyRef("point_b", "end", "to")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "ray_from_to")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("ray", "object")
+                .requireAnyRef("start", "from")
+                .requireAnyRef("through", "end", "to"));
+        add(relations, spec("geometry", "intersection_of")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("point", "intersection")
+                .requireAnyRef("object_a", "support_a", "first")
+                .requireAnyRef("object_b", "support_b", "second")
+                .optionalParams("which", "tolerance"));
+        add(relations, spec("geometry", "reflection_across")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("image")
+                .requireRef("source")
+                .requireAnyRef("mirror", "axis", "line")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "midpoint_of")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("point", "midpoint")
+                .requireAnyRef("endpoint_a", "start", "point_a")
+                .requireAnyRef("endpoint_b", "end", "point_b"));
+        add(relations, spec("geometry", "projection_onto")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("projection", "point", "image")
+                .requireRef("source")
+                .requireAnyRef("support", "line", "target")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "foot_of_perpendicular")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("foot", "point")
+                .requireRef("source")
+                .requireAnyRef("support", "line")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "parallel_to")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("object", "line")
+                .requireAnyRef("reference", "parallel_to")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "perpendicular_to")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("object", "line")
+                .requireAnyRef("reference", "perpendicular_to")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "same_side_of")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireRef("objects")
+                .requireAnyRef("reference", "line", "boundary")
+                .optionalParams("side", "tolerance"));
+        add(relations, spec("geometry", "collinear")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireRef("points")
+                .optionalParams("tolerance"));
+        add(relations, spec("geometry", "equal_length")
+                .scopes(Scope.SCENE)
+                .requireRef("members")
+                .optionalParams("tolerance", "group"));
+
+        add(relations, spec("measurement", "angle_between_rays")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("marker")
+                .requireRef("vertex")
+                .requireRef("start_boundary")
+                .requireRef("end_boundary")
+                .optionalRefs("reference_line", "normal")
+                .requireParam("sector")
+                .optionalParams("direction", "side_of_reference", "tolerance")
+                .enumParam("sector", "smaller", "interior", "exterior", "reflex", "directed", "right")
+                .enumParam("direction", "clockwise", "counterclockwise", "undirected"));
+        add(relations, spec("measurement", "angle_between_lines")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("marker")
+                .requireRef("vertex")
+                .requireAnyRef("line_a", "start_boundary")
+                .requireAnyRef("line_b", "end_boundary")
+                .requireParam("sector")
+                .optionalParams("direction", "side_of_reference", "tolerance")
+                .enumParam("sector", "smaller", "interior", "exterior", "reflex", "directed", "right")
+                .enumParam("direction", "clockwise", "counterclockwise", "undirected"));
+        add(relations, spec("measurement", "arc_sweep")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("marker", "arc")
+                .requireAnyRef("center", "anchor", "vertex")
+                .requireRef("start_boundary")
+                .requireRef("end_boundary")
+                .requireParam("direction")
+                .optionalParams("sector", "radius", "side_of_reference", "tolerance")
+                .enumParam("direction", "clockwise", "counterclockwise")
+                .enumParam("sector", "minor", "major", "directed", "interior", "exterior"));
+        add(relations, spec("measurement", "right_angle_at")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("marker")
+                .requireRef("vertex")
+                .requireRef("start_boundary")
+                .requireRef("end_boundary")
+                .optionalParams("side_of_reference", "tolerance"));
+        add(relations, spec("measurement", "equal_measure_group")
+                .scopes(Scope.SCENE)
+                .requireRef("members")
+                .optionalRefs("reference")
+                .optionalParams("measure", "group", "tolerance")
+                .enumParam("measure", "angle", "length", "distance_to_line", "radius", "area"));
+        add(relations, spec("measurement", "distance_between")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("measurement", "label", "object")
+                .requireAnyRef("start", "point_a")
+                .requireAnyRef("end", "point_b")
+                .optionalParams("display", "tolerance"));
+        add(relations, spec("measurement", "minimum_of")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("marker", "point")
+                .requireAnyRef("support", "object")
+                .optionalParams("objective", "range", "tolerance"));
+
+        add(relations, spec("motion", "moves_on_object")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireRef("point")
+                .requireRef("support")
+                .optionalParams("range", "speed", "loop", "tolerance"));
+        add(relations, spec("motion", "moves_along_range")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "point")
+                .requireParam("range")
+                .optionalParams("coordinate_space", "speed", "loop"));
+        add(relations, spec("motion", "slider_driven")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "target")
+                .optionalRefs("slider")
+                .requireParam("range")
+                .optionalParams("parameter", "speed", "loop"));
+        add(relations, spec("motion", "follows_path")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "point")
+                .requireAnyRef("path", "support")
+                .optionalParams("range", "speed", "loop"));
+
+        add(relations, spec("attachment", "label_for")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireRef("label")
+                .requireRef("anchor")
+                .optionalParams("offset", "coordinate_space", "side", "clearance"));
+        add(relations, spec("attachment", "fixed_offset_from")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("object", "label", "attached")
+                .requireRef("anchor")
+                .requireParam("offset")
+                .optionalParams("coordinate_space", "side", "clearance"));
+        add(relations, spec("attachment", "anchored_to")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .coordinateDerived()
+                .requireAnyRef("object", "attached")
+                .requireRef("anchor")
+                .optionalParams("offset", "coordinate_space", "side"));
+
+        add(relations, spec("layout", "keep_inside_safe_area")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .optionalParams("margin", "coordinate_space"));
+        add(relations, spec("layout", "avoid_overlap")
+                .scopes(Scope.SCENE)
+                .requireRef("objects")
+                .optionalParams("padding", "priority"));
+        add(relations, spec("layout", "maintain_clearance")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .optionalRefs("from", "reference")
+                .requireParam("clearance")
+                .optionalParams("coordinate_space", "priority"));
+        add(relations, spec("layout", "group_alignment")
+                .scopes(Scope.SCENE)
+                .requireRef("objects")
+                .requireParam("alignment")
+                .optionalParams("axis", "spacing"));
+
+        add(relations, spec("visibility", "visible_during")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .requireParam("scenes")
+                .optionalParams("opacity"));
+        add(relations, spec("visibility", "hidden_after")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .requireParam("scene"));
+        add(relations, spec("visibility", "fade_with")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .requireAnyRef("anchor", "reference"));
+
+        add(relations, spec("style", "style_matches")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .requireAnyRef("reference", "concept")
+                .optionalParams("property", "tolerance"));
+
+        add(relations, spec("lifecycle", "persistent_across_scenes")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .requireParam("scenes"));
+        add(relations, spec("lifecycle", "exits_after_scene")
+                .scopes(Scope.OBJECT, Scope.SCENE)
+                .requireAnyRef("object", "objects")
+                .requireParam("scene"));
+
+        return Collections.unmodifiableMap(relations);
+    }
+
+    private static RelationSpec.Builder spec(String domain, String relation) {
+        return new RelationSpec.Builder(domain, relation);
+    }
+
+    private static void add(Map<String, RelationSpec> relations, RelationSpec.Builder builder) {
+        RelationSpec spec = builder.build();
+        relations.put(spec.relation(), spec);
+    }
+
+    private static String jsonStringArray(Collection<String> values) {
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (String value : values) {
+            if (!first) {
+                sb.append(", ");
+            }
+            sb.append("\"").append(value).append("\"");
+            first = false;
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private static String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    public static final class RelationSpec {
+        private final String domain;
+        private final String relation;
+        private final Set<Scope> scopes;
+        private final List<Set<String>> requiredRefGroups;
+        private final Set<String> optionalRefs;
+        private final Set<String> requiredParameters;
+        private final Set<String> optionalParameters;
+        private final Map<String, Set<String>> enumParameters;
+        private final boolean coordinateDerived;
+
+        private RelationSpec(Builder builder) {
+            this.domain = builder.domain;
+            this.relation = builder.relation;
+            this.scopes = Collections.unmodifiableSet(EnumSet.copyOf(builder.scopes));
+            this.requiredRefGroups = deepUnmodifiable(builder.requiredRefGroups);
+            this.optionalRefs = Collections.unmodifiableSet(new LinkedHashSet<>(builder.optionalRefs));
+            this.requiredParameters = Collections.unmodifiableSet(new LinkedHashSet<>(builder.requiredParameters));
+            this.optionalParameters = Collections.unmodifiableSet(new LinkedHashSet<>(builder.optionalParameters));
+            this.enumParameters = deepUnmodifiableMap(builder.enumParameters);
+            this.coordinateDerived = builder.coordinateDerived;
+        }
+
+        public String domain() {
+            return domain;
+        }
+
+        public String relation() {
+            return relation;
+        }
+
+        public boolean allowsScope(Scope scope) {
+            return scopes.contains(scope);
+        }
+
+        public List<Set<String>> requiredRefGroups() {
+            return requiredRefGroups;
+        }
+
+        public Set<String> optionalRefs() {
+            return optionalRefs;
+        }
+
+        public Set<String> allowedRefs() {
+            Set<String> allowed = new LinkedHashSet<>(optionalRefs);
+            for (Set<String> group : requiredRefGroups) {
+                allowed.addAll(group);
+            }
+            return allowed;
+        }
+
+        public Set<String> requiredParameters() {
+            return requiredParameters;
+        }
+
+        public Set<String> optionalParameters() {
+            return optionalParameters;
+        }
+
+        public Set<String> allowedParameters() {
+            Set<String> allowed = new LinkedHashSet<>(requiredParameters);
+            allowed.addAll(optionalParameters);
+            return allowed;
+        }
+
+        public Map<String, Set<String>> enumParameters() {
+            return enumParameters;
+        }
+
+        public boolean coordinateDerived() {
+            return coordinateDerived;
+        }
+
+        public String requiredRefDescription() {
+            if (requiredRefGroups.isEmpty()) {
+                return "non-empty role map";
+            }
+            List<String> descriptions = new ArrayList<>();
+            for (Set<String> group : requiredRefGroups) {
+                descriptions.add(group.size() == 1 ? group.iterator().next() : "one of " + String.join("/", group));
+            }
+            return String.join(", ", descriptions);
+        }
+
+        private static List<Set<String>> deepUnmodifiable(List<Set<String>> source) {
+            List<Set<String>> copy = new ArrayList<>();
+            for (Set<String> set : source) {
+                copy.add(Collections.unmodifiableSet(new LinkedHashSet<>(set)));
+            }
+            return Collections.unmodifiableList(copy);
+        }
+
+        private static Map<String, Set<String>> deepUnmodifiableMap(Map<String, Set<String>> source) {
+            Map<String, Set<String>> copy = new LinkedHashMap<>();
+            for (Map.Entry<String, Set<String>> entry : source.entrySet()) {
+                copy.put(entry.getKey(), Collections.unmodifiableSet(new LinkedHashSet<>(entry.getValue())));
+            }
+            return Collections.unmodifiableMap(copy);
+        }
+
+        public static final class Builder {
+            private final String domain;
+            private final String relation;
+            private Set<Scope> scopes = EnumSet.of(Scope.OBJECT, Scope.SCENE);
+            private final List<Set<String>> requiredRefGroups = new ArrayList<>();
+            private final Set<String> optionalRefs = new LinkedHashSet<>();
+            private final Set<String> requiredParameters = new LinkedHashSet<>();
+            private final Set<String> optionalParameters = new LinkedHashSet<>();
+            private final Map<String, Set<String>> enumParameters = new LinkedHashMap<>();
+            private boolean coordinateDerived;
+
+            private Builder(String domain, String relation) {
+                this.domain = normalize(domain);
+                this.relation = normalize(relation);
+            }
+
+            private Builder scopes(Scope first, Scope... rest) {
+                this.scopes = EnumSet.of(first, rest);
+                return this;
+            }
+
+            private Builder coordinateDerived() {
+                this.coordinateDerived = true;
+                return this;
+            }
+
+            private Builder requireRef(String role) {
+                this.requiredRefGroups.add(Set.of(normalize(role)));
+                return this;
+            }
+
+            private Builder requireAnyRef(String first, String... rest) {
+                Set<String> group = new LinkedHashSet<>();
+                group.add(normalize(first));
+                for (String role : rest) {
+                    group.add(normalize(role));
+                }
+                this.requiredRefGroups.add(group);
+                return this;
+            }
+
+            private Builder optionalRefs(String... roles) {
+                for (String role : roles) {
+                    this.optionalRefs.add(normalize(role));
+                }
+                return this;
+            }
+
+            private Builder requireParam(String parameter) {
+                this.requiredParameters.add(normalize(parameter));
+                return this;
+            }
+
+            private Builder optionalParams(String... parameters) {
+                for (String parameter : parameters) {
+                    this.optionalParameters.add(normalize(parameter));
+                }
+                return this;
+            }
+
+            private Builder enumParam(String parameter, String... values) {
+                Set<String> normalizedValues = new LinkedHashSet<>();
+                for (String value : values) {
+                    normalizedValues.add(normalize(value));
+                }
+                this.enumParameters.put(normalize(parameter), normalizedValues);
+                return this;
+            }
+
+            private RelationSpec build() {
+                return new RelationSpec(this);
+            }
+        }
+    }
+}

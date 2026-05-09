@@ -548,7 +548,6 @@ class CodeEvaluationNodeTest {
         pmin.setBehavior(Narrative.StoryboardObject.BEHAVIOR_DERIVED);
         pmin.setDependencyObjects(List.of("ABprime", "l"));
         pmin.setDependencyRelation("intersection");
-        pmin.setConstraintNote("lies on both ABprime and l");
         storyboard.getObjectRegistry().add(pmin);
 
         Narrative.StoryboardScene scene = new Narrative.StoryboardScene();

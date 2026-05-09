@@ -124,7 +124,6 @@ public final class StoryboardPatchResolver {
         copy.setAnchorId(source.getAnchorId());
         copy.setDependencyObjects(copyStringList(source.getDependencyObjects()));
         copy.setDependencyRelation(source.getDependencyRelation());
-        copy.setConstraintNote(source.getConstraintNote());
         copy.setConstraints(copyConstraints(source.getConstraints()));
         return copy;
     }
@@ -142,7 +141,6 @@ public final class StoryboardPatchResolver {
         copy.setLayoutGoal(source.getLayoutGoal());
         copy.setSafeAreaPlan(source.getSafeAreaPlan());
         copy.setScreenOverlayPlan(source.getScreenOverlayPlan());
-        copy.setGeometryConstraints(copyStringList(source.getGeometryConstraints()));
         copy.setConstraints(copyConstraints(source.getConstraints()));
         copy.setStepRefs(copyStringList(source.getStepRefs()));
         copy.setActions(copyActions(source.getActions()));
@@ -210,9 +208,6 @@ public final class StoryboardPatchResolver {
         }
         if (!isBlank(patch.getDependencyRelation())) {
             target.setDependencyRelation(patch.getDependencyRelation());
-        }
-        if (!isBlank(patch.getConstraintNote())) {
-            target.setConstraintNote(patch.getConstraintNote());
         }
         if (patch.getConstraints() != null && !patch.getConstraints().isEmpty()) {
             target.setConstraints(copyConstraints(patch.getConstraints()));
@@ -339,11 +334,10 @@ public final class StoryboardPatchResolver {
             }
             StoryboardConstraint copy = new StoryboardConstraint();
             copy.setId(constraint.getId());
-            copy.setCategory(constraint.getCategory());
+            copy.setDomain(constraint.getDomain());
             copy.setRelation(constraint.getRelation());
-            copy.setObjects(copyStringList(constraint.getObjects()));
-            copy.setRoles(copyObjectMap(constraint.getRoles()));
-            copy.setParams(copyObjectMap(constraint.getParams()));
+            copy.setRefs(copyObjectMap(constraint.getRefs()));
+            copy.setParameters(copyObjectMap(constraint.getParameters()));
             copy.setStrength(constraint.getStrength());
             copy.setReason(constraint.getReason());
             copies.add(copy);

@@ -20,6 +20,9 @@ import com.mathvision.service.FileOutputService;
 import com.mathvision.util.AiRequestUtils;
 import com.mathvision.util.JsonUtils;
 import com.mathvision.util.NodeConversationContext;
+import com.mathvision.util.StoryboardConstraintCatalog;
+import com.mathvision.util.StoryboardConstraintCatalog.RelationSpec;
+import com.mathvision.util.StoryboardConstraintCatalog.Scope;
 import com.mathvision.util.StoryboardNormalizer;
 import com.mathvision.util.StoryboardPatchResolver;
 import com.mathvision.util.TargetDescriptionBuilder;
@@ -355,8 +358,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             String objectId = StoryboardPatchResolver.objectId(object);
             List<String> dependencies = cleanDependencyObjects(object);
             String dependency = normalizeForSemanticCheck(String.join(" ", dependencies) + " "
-                    + safe(object.getDependencyRelation()) + " " + safe(object.getConstraintNote()));
-            String constraint = normalizeForSemanticCheck(object.getConstraintNote());
+                    + safe(object.getDependencyRelation()));
             boolean hasStructuredMeasurementConstraint = hasStructuredConstraint(object,
                     "angle_between_rays", "angle_between_lines", "angle_between", "arc_sweep", "right_angle_at");
 
@@ -368,18 +370,13 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 issues.add("object_registry: angle/arc marker '" + objectId
                         + "' must define both boundary rays, segments, lines, normals, tangents, or source objects in dependency_objects/dependency_relation");
             }
-            if (isArcMarker(object) && !hasStructuredMeasurementConstraint
-                    && !mentionsOrderedArcSweep(dependency, constraint)) {
+            if (isArcMarker(object) && !hasStructuredMeasurementConstraint) {
                 issues.add("object_registry: arc marker '" + objectId
-                        + "' must define the ordered arc sweep, including where the arc starts and where it ends");
+                        + "' must define the ordered arc sweep with a structured measurement constraint");
             }
-            if (!hasStructuredMeasurementConstraint && !mentionsAngleSector(constraint)) {
+            if (!hasStructuredMeasurementConstraint) {
                 issues.add("object_registry: angle/arc marker '" + objectId
-                        + "' must define the intended displayed sector in constraint_note (for example smaller/interior, directed, exterior, or side of a reference line/normal)");
-            }
-            if (usesLayoutOnlyQuadrant(constraint)) {
-                issues.add("object_registry: angle/arc marker '" + objectId
-                        + "' uses layout-only quadrant wording; define the measured sector geometrically before label-clearance or visibility notes");
+                        + "' must define the intended displayed sector with a structured measurement constraint");
             }
         }
         return issues;
@@ -404,12 +401,15 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             for (StoryboardObject object : storyboard.getObjectRegistry()) {
                 String objectId = StoryboardPatchResolver.objectId(object);
                 validateConstraintList("object_registry object '" + objectId + "'",
-                        object != null ? object.getConstraints() : null, knownIds, objectId, issues);
+                        object != null ? object.getConstraints() : null,
+                        knownIds,
+                        objectId,
+                        Scope.OBJECT,
+                        issues);
                 if (isDependencyDriven(object)
-                        && (object.getConstraints() == null || object.getConstraints().isEmpty())
-                        && (object.getConstraintNote() == null || object.getConstraintNote().isBlank())) {
+                        && (object.getConstraints() == null || object.getConstraints().isEmpty())) {
                     issues.add("object_registry: dependency-driven object '" + objectId
-                            + "' must define structured constraints or a legacy constraint_note");
+                            + "' must define structured constraints");
                 }
             }
         }
@@ -419,7 +419,11 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 StoryboardScene scene = storyboard.getScenes().get(i);
                 String sceneId = scene != null ? scene.getSceneId() : null;
                 validateConstraintList("scene " + (i + 1) + " (" + sceneId + ")",
-                        scene != null ? scene.getConstraints() : null, knownIds, null, issues);
+                        scene != null ? scene.getConstraints() : null,
+                        knownIds,
+                        null,
+                        Scope.SCENE,
+                        issues);
             }
         }
         return issues;
@@ -429,6 +433,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                                         List<StoryboardConstraint> constraints,
                                         Set<String> knownIds,
                                         String ownerId,
+                                        Scope constraintScope,
                                         List<String> issues) {
         if (constraints == null || constraints.isEmpty()) {
             return;
@@ -441,38 +446,215 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 issues.add(label + ": empty constraint must be removed");
                 continue;
             }
-            if (constraint.getCategory() == null || constraint.getCategory().isBlank()) {
-                issues.add(label + ": missing category");
+            RelationSpec relationSpec = null;
+            if (constraint.getDomain() == null || constraint.getDomain().isBlank()) {
+                issues.add(label + ": missing domain");
+            } else if (!StoryboardConstraintCatalog.isValidDomain(constraint.getDomain())) {
+                issues.add(label + ": unknown domain '" + constraint.getDomain().trim() + "'");
             }
             if (constraint.getRelation() == null || constraint.getRelation().isBlank()) {
                 issues.add(label + ": missing relation");
+            } else {
+                relationSpec = StoryboardConstraintCatalog.relation(constraint.getRelation());
+                if (relationSpec == null) {
+                    issues.add(label + ": unknown relation '" + constraint.getRelation().trim()
+                            + "'; use one of " + StoryboardConstraintCatalog.relationList());
+                } else {
+                    if (!relationSpec.allowsScope(constraintScope)) {
+                        issues.add(label + ": relation '" + relationSpec.relation()
+                                + "' is not valid for " + constraintScope.name().toLowerCase(Locale.ROOT)
+                                + "-level constraints");
+                    }
+                    String domain = normalizeConstraintKey(constraint.getDomain());
+                    if (!domain.isBlank() && !domain.equals(relationSpec.domain())) {
+                        issues.add(label + ": domain '" + constraint.getDomain().trim()
+                                + "' does not match relation '" + relationSpec.relation()
+                                + "' domain '" + relationSpec.domain() + "'");
+                    }
+                }
             }
             if (constraint.getId() != null && !constraint.getId().isBlank()
                     && !seenIds.add(constraint.getId().trim())) {
                 issues.add(label + ": duplicate constraint id '" + constraint.getId().trim() + "'");
             }
-            if (constraint.getStrength() != null && !constraint.getStrength().isBlank()) {
-                String strength = constraint.getStrength().trim().toLowerCase(Locale.ROOT);
-                if (!Set.of("hard", "repair_hard", "soft").contains(strength)) {
-                    issues.add(label + ": strength must be hard, repair_hard, or soft");
-                }
+            if (constraint.getStrength() == null || constraint.getStrength().isBlank()) {
+                issues.add(label + ": missing strength");
+            } else if (!StoryboardConstraintCatalog.isValidStrength(constraint.getStrength())) {
+                issues.add(label + ": strength must be hard, repair_hard, or soft");
             }
-            List<String> objects = constraint.getObjects();
-            if (objects == null || objects.isEmpty()) {
-                issues.add(label + ": objects must list the ordered object ids governed by the constraint");
+            Map<String, Object> refs = constraint.getRefs();
+            if (refs == null || refs.isEmpty()) {
+                issues.add(label + ": refs must map semantic roles to referenced object ids");
             } else {
-                for (String objectId : objects) {
-                    if (objectId == null || objectId.isBlank()) {
-                        issues.add(label + ": objects contains a blank id");
-                    } else if (!knownIds.contains(objectId.trim())) {
-                        issues.add(label + ": objects references unknown id '" + objectId.trim() + "'");
+                validateConstraintRefRoles(label, refs, relationSpec, issues);
+                Set<String> referencedIds = new LinkedHashSet<>();
+                collectConstraintRefs(label, refs, referencedIds, issues);
+                for (String refId : referencedIds) {
+                    if (!knownIds.contains(refId)) {
+                        issues.add(label + ": refs references unknown id '" + refId + "'");
                     }
                 }
-                if (ownerId != null && !ownerId.isBlank() && !objects.contains(ownerId)) {
-                    issues.add(label + ": object-level constraint should include its owner id '" + ownerId + "' in objects");
+                if (ownerId != null && !ownerId.isBlank() && !referencedIds.contains(ownerId)) {
+                    issues.add(label + ": object-level constraint should include its owner id '" + ownerId + "' in refs");
                 }
             }
+            validateConstraintParameters(label, constraint.getParameters(), relationSpec, knownIds, issues);
         }
+    }
+
+    private void validateConstraintRefRoles(String label,
+                                            Map<String, Object> refs,
+                                            RelationSpec relationSpec,
+                                            List<String> issues) {
+        if (relationSpec == null || refs == null || refs.isEmpty()) {
+            return;
+        }
+        Set<String> roles = new LinkedHashSet<>();
+        for (String role : refs.keySet()) {
+            String normalizedRole = normalizeConstraintKey(role);
+            if (normalizedRole.isBlank()) {
+                issues.add(label + ": refs contains a blank role name");
+                continue;
+            }
+            roles.add(normalizedRole);
+            if (!relationSpec.allowedRefs().contains(normalizedRole)) {
+                issues.add(label + ": relation '" + relationSpec.relation()
+                        + "' does not allow refs role '" + role + "'");
+            }
+        }
+        for (Set<String> requiredGroup : relationSpec.requiredRefGroups()) {
+            boolean present = false;
+            for (String role : requiredGroup) {
+                if (roles.contains(role)) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                issues.add(label + ": relation '" + relationSpec.relation()
+                        + "' requires refs role " + describeRequiredRoleGroup(requiredGroup));
+            }
+        }
+    }
+
+    private void validateConstraintParameters(String label,
+                                              Map<String, Object> parameters,
+                                              RelationSpec relationSpec,
+                                              Set<String> knownIds,
+                                              List<String> issues) {
+        if (relationSpec == null) {
+            return;
+        }
+        Map<String, Object> safeParameters = parameters != null ? parameters : Map.of();
+        Set<String> parameterKeys = new LinkedHashSet<>();
+        for (String parameterName : safeParameters.keySet()) {
+            String normalizedName = normalizeConstraintKey(parameterName);
+            if (normalizedName.isBlank()) {
+                issues.add(label + ": parameters contains a blank key");
+                continue;
+            }
+            parameterKeys.add(normalizedName);
+            if (!relationSpec.allowedParameters().contains(normalizedName)) {
+                issues.add(label + ": relation '" + relationSpec.relation()
+                        + "' does not allow parameter '" + parameterName + "'");
+            }
+        }
+        for (String requiredParameter : relationSpec.requiredParameters()) {
+            if (!parameterKeys.contains(requiredParameter)) {
+                issues.add(label + ": relation '" + relationSpec.relation()
+                        + "' requires parameter '" + requiredParameter + "'");
+            }
+        }
+        for (Map.Entry<String, Object> entry : safeParameters.entrySet()) {
+            String normalizedName = normalizeConstraintKey(entry.getKey());
+            Set<String> enumValues = relationSpec.enumParameters().get(normalizedName);
+            if (enumValues != null) {
+                Object value = entry.getValue();
+                if (!(value instanceof String)) {
+                    issues.add(label + ": parameter '" + entry.getKey()
+                            + "' must be one of " + String.join(", ", enumValues));
+                } else {
+                    String normalizedValue = normalizeConstraintKey((String) value);
+                    if (!enumValues.contains(normalizedValue)) {
+                        issues.add(label + ": parameter '" + entry.getKey()
+                                + "' must be one of " + String.join(", ", enumValues));
+                    }
+                }
+            }
+            collectParameterObjectIds(label + " parameters." + entry.getKey(),
+                    entry.getValue(), knownIds, issues);
+        }
+    }
+
+    private void collectParameterObjectIds(String label,
+                                           Object value,
+                                           Set<String> knownIds,
+                                           List<String> issues) {
+        if (value == null || knownIds == null || knownIds.isEmpty()) {
+            return;
+        }
+        if (value instanceof String) {
+            String stringValue = ((String) value).trim();
+            if (knownIds.contains(stringValue)) {
+                issues.add(label + ": parameters must not contain object id '" + stringValue
+                        + "'; put object references in refs");
+            }
+            return;
+        }
+        if (value instanceof Iterable<?>) {
+            for (Object item : (Iterable<?>) value) {
+                collectParameterObjectIds(label, item, knownIds, issues);
+            }
+            return;
+        }
+        if (value instanceof Map<?, ?>) {
+            for (Object nestedValue : ((Map<?, ?>) value).values()) {
+                collectParameterObjectIds(label, nestedValue, knownIds, issues);
+            }
+        }
+    }
+
+    private String describeRequiredRoleGroup(Set<String> roles) {
+        return roles.size() == 1 ? "'" + roles.iterator().next() + "'"
+                : "one of [" + String.join(", ", roles) + "]";
+    }
+
+    private String normalizeConstraintKey(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void collectConstraintRefs(String label,
+                                       Object value,
+                                       Set<String> referencedIds,
+                                       List<String> issues) {
+        if (value == null) {
+            issues.add(label + ": refs contains a null value");
+            return;
+        }
+        if (value instanceof String) {
+            String stringValue = (String) value;
+            if (stringValue.isBlank()) {
+                issues.add(label + ": refs contains a blank id");
+            } else {
+                referencedIds.add(stringValue.trim());
+            }
+            return;
+        }
+        if (value instanceof Iterable<?>) {
+            Iterable<?> iterableValue = (Iterable<?>) value;
+            for (Object item : iterableValue) {
+                collectConstraintRefs(label, item, referencedIds, issues);
+            }
+            return;
+        }
+        if (value instanceof Map<?, ?>) {
+            Map<?, ?> mapValue = (Map<?, ?>) value;
+            for (Object nestedValue : mapValue.values()) {
+                collectConstraintRefs(label, nestedValue, referencedIds, issues);
+            }
+            return;
+        }
+        issues.add(label + ": refs values must be object ids or nested id lists/maps");
     }
 
     private boolean isAngleOrArcMarker(StoryboardObject object) {
@@ -550,8 +732,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         String semanticFields = normalizeForSemanticCheck(String.join(" ",
                 safe(object.getContent()),
                 String.join(" ", cleanDependencyObjects(object)),
-                safe(object.getDependencyRelation()),
-                safe(object.getConstraintNote())));
+                safe(object.getDependencyRelation())));
         boolean markerId = containsAny(id, " angle ", " arc ", " anglemarker ", " angle_marker ");
         boolean angleMeaning = containsAny(semanticFields, "theta", " angle ", " perpendicular", " normal", " tangent");
         return markerId && angleMeaning;
@@ -589,29 +770,6 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             }
         }
         return boundaryTerms >= 2;
-    }
-
-    private boolean mentionsOrderedArcSweep(String dependency, String constraint) {
-        String combined = normalizeForSemanticCheck(dependency + " " + constraint);
-        boolean hasStart = containsAny(combined, " from ", " start ", " starts ", " starting ", " first ");
-        boolean hasEnd = containsAny(combined, " to ", " end ", " ends ", " ending ", " second ");
-        return hasStart && hasEnd;
-    }
-
-    private boolean mentionsAngleSector(String constraint) {
-        return containsAny(constraint,
-                "smaller", "small ", "minor", "interior", "inside", "sector", "wedge",
-                "directed", "exterior", "reflex", "clockwise", "counterclockwise",
-                "same side", "opposite side", "left side", "right side", "above", "below",
-                "toward", "away from", "side of");
-    }
-
-    private boolean usesLayoutOnlyQuadrant(String constraint) {
-        if (!containsAny(constraint, "quadrant")) {
-            return false;
-        }
-        boolean layoutOnly = containsAny(constraint, "view", "clear", "label", "visible", "readable", "layout");
-        return layoutOnly && !mentionsAngleSector(constraint);
     }
 
     private String normalizeForSemanticCheck(String text) {
@@ -1166,9 +1324,6 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         if (!isBlank(object.getDependencyRelation())) {
             sb.append("- relation: ").append(object.getDependencyRelation().trim()).append("\n");
         }
-        if (!isBlank(object.getConstraintNote())) {
-            sb.append("- constraint: ").append(object.getConstraintNote().trim()).append("\n");
-        }
         return sb.toString();
     }
 
@@ -1575,8 +1730,8 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                     + "- Keep opacity in separate `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
                     + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to #000000 when no text background is present.\n"
                     + "- For non-text objects, ensure foreground colors contrast with #000000 at ratio >= 3.0.\n"
-                    + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation, structured constraints, or constraint_note.\n"
-                    + "- Every dependency-driven object must define dependency_objects as object ids, dependency_relation as a concise construction relation, and structured constraints for hard geometric invariants; constraint_note is only a short summary.\n"
+                    + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or structured constraints.\n"
+                    + "- Every dependency-driven object must define dependency_objects as object ids, dependency_relation as a concise construction relation, and structured constraints for hard geometric invariants.\n"
                     + "- ASCII repair is mandatory: rewrite every JSON string value so it contains only characters with code <= 0x7F.\n"
                     + "- Apply this normalization map wherever needed: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
                     + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.";

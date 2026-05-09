@@ -1,5 +1,7 @@
 package com.mathvision.prompt;
 
+import com.mathvision.util.StoryboardConstraintCatalog;
+
 /**
  * Central registry of all tool JSON schemas used for structured LLM output.
  *
@@ -47,21 +49,20 @@ public final class ToolSchemas {
     private static final String STORYBOARD_CONSTRAINTS_FIELD =
             "\"constraints\": {"
                     + "  \"type\": \"array\","
-                    + "  \"description\": \"Machine-readable hard or soft invariants for this object or scene. Use this as the primary semantic contract; constraint_note is only a short legacy/debug summary.\","
+                    + "  \"description\": \"Machine-readable hard or soft invariants for this object or scene. Use this as the primary semantic contract.\","
                     + "  \"items\": {"
                     + "    \"type\": \"object\","
                     + "    \"properties\": {"
                     + "      \"id\": { \"type\": \"string\", \"description\": \"Optional stable id for this single constraint\" },"
-                    + "      \"category\": { \"type\": \"string\", \"enum\": [\"geometry\", \"measurement\", \"motion\", \"attachment\", \"layout\", \"visibility\", \"style\", \"lifecycle\"], \"description\": \"Which validator/codegen subsystem should consume this constraint\" },"
-                    + "      \"relation\": { \"type\": \"string\", \"description\": \"Canonical relation such as lies_on, connects_points, reflection_across, intersection_of, angle_between_rays, arc_sweep, equal_measure_group, same_side_of, moves_on_object, label_for, fixed_offset_from, screen_fixed, persistent_across_scenes\" },"
-                    + "      \"objects\": { \"type\": \"array\", \"description\": \"Ordered object ids governed by this constraint, including the owner object for object-level constraints\", \"items\": { \"type\": \"string\" } },"
-                    + "      \"roles\": { \"type\": \"object\", \"description\": \"Role-to-id mapping such as target/source/reference/vertex/start_boundary/end_boundary/anchor. Values may be ids or short id lists.\", \"additionalProperties\": true },"
-                    + "      \"params\": { \"type\": \"object\", \"description\": \"Structured relation parameters such as side, sector, direction, range, coordinate_space, offset, tolerance, or lifecycle scenes\", \"additionalProperties\": true },"
-                    + "      \"strength\": { \"type\": \"string\", \"enum\": [\"hard\", \"repair_hard\", \"soft\"], \"description\": \"hard is mathematical/semantic, repair_hard is required during cleanup, soft is preference\" },"
+                    + "      \"domain\": { \"type\": \"string\", \"enum\": " + StoryboardConstraintCatalog.domainEnumJson() + ", \"description\": \"Which validator/codegen subsystem should consume this constraint. Must match the selected relation catalog entry.\" },"
+                    + "      \"relation\": { \"type\": \"string\", \"enum\": " + StoryboardConstraintCatalog.relationEnumJson() + ", \"description\": \"Canonical relation from the structured constraint catalog. Relation-specific refs/parameters must follow: " + StoryboardConstraintCatalog.toolSchemaSummary() + "\" },"
+                    + "      \"refs\": { \"type\": \"object\", \"description\": \"Semantic role-to-object-id mapping. Values must be object ids or arrays/maps of object ids, and top-level role names must match the selected relation catalog entry.\", \"additionalProperties\": true },"
+                    + "      \"parameters\": { \"type\": \"object\", \"description\": \"Structured non-object parameters allowed by the selected relation, such as side, sector, direction, range, coordinate_space, offset, tolerance, operator, or lifecycle scenes. Do not put object ids here; put them in refs.\", \"additionalProperties\": true },"
+                    + "      \"strength\": { \"type\": \"string\", \"enum\": " + StoryboardConstraintCatalog.strengthEnumJson() + ", \"description\": \"hard is mathematical/semantic, repair_hard is required during cleanup, soft is preference\" },"
                     + "      \"reason\": { \"type\": \"string\", \"description\": \"Short human-readable explanation\" }"
                     + "    },"
                     + "    \"additionalProperties\": false,"
-                    + "    \"required\": [\"category\", \"relation\", \"objects\", \"strength\"]"
+                    + "    \"required\": [\"domain\", \"relation\", \"refs\", \"strength\"]"
                     + "  }"
                     + "}";
 
@@ -273,8 +274,7 @@ public final class ToolSchemas {
             + "              \"anchor_id\": { \"type\": \"string\" },"
             + "              \"dependency_objects\": { \"type\": \"array\", \"description\": \"Ordered object ids this object depends on. Use ids only, no prose.\", \"items\": { \"type\": \"string\" } },"
             + "              \"dependency_relation\": { \"type\": \"string\", \"description\": \"Short construction relationship such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\" },"
-            + "              " + STORYBOARD_CONSTRAINTS_FIELD + ","
-            + "              \"constraint_note\": { \"type\": \"string\", \"description\": \"Short legacy/debug summary of the structured constraints; do not rely on this instead of constraints[].\" }"
+            + "              " + STORYBOARD_CONSTRAINTS_FIELD
             + "            },"
             + "            \"additionalProperties\": false,"
             + "            \"required\": [\"id\", \"kind\", \"content\"]"
@@ -330,11 +330,6 @@ public final class ToolSchemas {
             + "              \"screen_overlay_plan\": {"
             + "                \"type\": \"string\","
             + "                \"description\": \"Any text, labels, or formulas that should stay fixed to screen space rather than move with the world, including the intended safe overlay zone\""
-            + "              },"
-            + "              \"geometry_constraints\": {"
-            + "                \"type\": \"array\","
-            + "                \"description\": \"Scene-level hard geometric invariants that downstream stages must preserve, such as reflection symmetry, collinearity, equal-radius construction, incidence, bounded motion, or intersection definitions\","
-            + "                \"items\": { \"type\": \"string\" }"
             + "              },"
             + "              " + STORYBOARD_CONSTRAINTS_FIELD + ","
             + "              \"step_refs\": {"
@@ -518,7 +513,7 @@ public final class ToolSchemas {
             + "            \"layout_goal\": { \"type\": \"string\" },"
             + "            \"safe_area_plan\": { \"type\": \"string\" },"
             + "            \"screen_overlay_plan\": { \"type\": \"string\" },"
-            + "            \"geometry_constraints\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },"
+            + "            " + STORYBOARD_CONSTRAINTS_FIELD + ","
             + "            \"step_refs\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },"
             + "            \"entering_objects\": {"
             + "              \"type\": \"array\","
@@ -608,8 +603,7 @@ public final class ToolSchemas {
             + "              \"anchor_id\": { \"type\": \"string\" },"
             + "              \"dependency_objects\": { \"type\": \"array\", \"description\": \"Ordered object ids this object depends on. Use ids only, no prose.\", \"items\": { \"type\": \"string\" } },"
             + "              \"dependency_relation\": { \"type\": \"string\", \"description\": \"Short construction relationship such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\" },"
-            + "              " + STORYBOARD_CONSTRAINTS_FIELD + ","
-            + "              \"constraint_note\": { \"type\": \"string\", \"description\": \"Short legacy/debug summary of the structured constraints; do not rely on this instead of constraints[].\" }"
+            + "              " + STORYBOARD_CONSTRAINTS_FIELD
             + "            },"
             + "            \"required\": [\"id\", \"kind\", \"content\"]"
             + "          }"

@@ -323,7 +323,6 @@ class VisualDesignNodeTest {
         newObject.put("anchor_id", "");
         newObject.putArray("dependency_objects");
         newObject.put("dependency_relation", "independent");
-        newObject.put("constraint_note", "");
 
         function.put("arguments", JsonUtils.toJson(arguments));
         return response;
