@@ -253,7 +253,7 @@ public final class SystemPrompts {
                     + "Keep text, labels, strokes, and fills visually distinct from their background.\n"
                     + "Avoid low-contrast pairings such as yellow on white, white on light yellow, or similar pale-on-pale combinations.\n"
                     + "Non-text foreground colors must contrast against the default black storyboard background `#000000` at ratio >= 3.0.\n"
-                    + "Text, titles, formulas, labels, and callouts must contrast at ratio >= 4.5 against their own text-card/background-box color; if no text background is defined, use `#000000` as the background.\n";
+                    + "Text, titles, formulas, labels, and callouts must contrast at ratio >= 4.5 against their own background color; if no background is defined, use `#000000` as the background.\n";
 
     /** High-contrast color rules formatted as bullet lines for direct prompt insertion. */
     public static final String HIGH_CONTRAST_COLOR_RULES_BULLETS =
@@ -336,8 +336,8 @@ public final class SystemPrompts {
                     + "- Keep supporting text comfortably readable; avoid tiny labels and long edge-to-edge strings.\n"
                     + "- Use `buff=0.5` or larger on every `.to_edge()` call; values below 0.5 risk clipping.\n"
                     + "- After creating long text, check whether `text.width > config.frame_width - 1.0` and call `text.set_width(config.frame_width - 1.0)` if so.\n"
-                    + "- MathTex and Tex default to `#FFFFFF` text. When placing them inside a `#FFFFFF` BackgroundRectangle or on any light-colored card, explicitly set a dark text color such as `#111827`.\n"
-                    + "- If text overlaps busy geometry, plan a background box or backstroke-style treatment.\n"
+                    + "- MathTex and Tex default to `#FFFFFF` text. When placing them on any light-colored surface, explicitly set a dark text color such as `#111827`.\n"
+                    + "- If text overlaps busy geometry, prefer adjusting placement or using opacity to separate layers. Only add a background box when the text truly cannot be read without one.\n"
                     + "- Use screen-fixed overlays for explanatory text only when that text should stay independent of world motion.\n";
 
     /** Shared Manim animation-tool selection rules. */
@@ -407,7 +407,8 @@ public final class SystemPrompts {
             "Minimize redundant storyboard objects:\n"
                     + "- Add a new storyboard object only when it is teaching-essential, improves clarity, or carries a distinct geometric/dependency role.\n"
                     + "- Prefer reusing, restyling, moving, dimming, or relabeling an existing object over creating a new object with the same meaning.\n"
-                    + "- Avoid redundant labels, duplicate text cards, repeated formula copies, duplicate highlights, and decorative objects that do not advance the current teaching beat.\n"
+                    + "- Avoid redundant labels, repeated formula copies, duplicate highlights, and decorative objects that do not advance the current teaching beat.\n"
+                    + "- Prefer `kind = text` or `kind = equation` over `kind = text_card` or `kind = formula_card`. Display text directly without a background box unless the card itself is teaching-essential.\n"
                     + "- A required label, callout, or annotation is not redundant when it gives the learner a distinct name/value, has its own attachment behavior, or is needed to identify the parent object.\n"
                     + "- Keep `new_objects` and `object_registry` lean: do not register objects that can be expressed as style changes, action descriptions, built-in labels, or references to existing ids.\n"
                     + "- When a derived object (angle marker, midpoint, intersection, reflection, etc.) can be fully defined by referencing existing objects, do so directly rather than introducing separate helper/scaffold objects.\n"
@@ -467,7 +468,8 @@ public final class SystemPrompts {
     public static final String MANIM_TEXT_CONSTRUCTOR_MAPPING =
             "Text constructor mapping is mandatory:\n"
                     + "- `kind = equation` must render with `MathTex(...)`.\n"
-                    + "- `kind = text` and `kind = text_card` normally render with `Text(...)`.\n"
+                    + "- `kind = text` must render with `Text(...)`.\n"
+                    + "- `kind = text_card` or `kind = formula_card` should be avoided; if present, render as plain `Text(...)` without a background box unless the card is teaching-essential.\n"
                     + "- Avoid `Tex(...)` unless the storyboard explicitly calls for non-math LaTeX text.\n"
                     + "- If the kind/content disagree, infer from content: formulas, Greek letters, angle notation, superscripts, subscripts, and LaTeX control sequences are math text; ordinary labels and prose fragments are plain text.\n";
 

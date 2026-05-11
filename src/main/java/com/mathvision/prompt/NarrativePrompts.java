@@ -43,12 +43,12 @@ public final class NarrativePrompts {
                     + "Storyboard style cleanup rules:\n"
                     + "- Treat the visual design pass as a strong draft, not an immutable contract; this stage may repair layout, style, continuity, and backend practicality before the storyboard becomes the validated downstream authority.\n"
                     + "- Remove or merge redundant storyboard objects introduced by the visual design pass when they do not carry distinct teaching, geometry, dependency, or continuity meaning.\n"
-                    + "- Prefer one reusable object plus actions/style changes over multiple near-duplicate labels, formula cards, highlights, helper objects, or repeated construction elements.\n"
+                    + "- Prefer one reusable object plus actions/style changes over multiple near-duplicate labels, highlights, helper objects, or repeated construction elements.\n"
                     + "- Preserve intentional scene-level placement, style, color, and visual hierarchy from the visual design pass unless they cause global consistency, overlap, or readability problems.\n"
                     + "- Once a color is assigned to a concept, it keeps that meaning across the entire storyboard. Record color-to-concept assignments in `global_visual_rules`.\n"
                     + "- Use a single typed `style` object per storyboard object, never a style array and never custom style keys.\n"
                     + "- Style describes the object itself only. Create separate storyboard objects for labels, badges, helper outlines, cards, or callouts that have their own identity.\n"
-                    + "- For text cards, put text/background fields on that text_card object's single `style`, such as `color`, `fill_color`, and `stroke_color`.\n"
+                    + "- Prefer `kind = text` or `kind = equation` over `kind = text_card` or `kind = formula_card`. Display text directly without a background box/card unless the card itself is teaching-essential (e.g. a titled result panel). Most formulas and labels are clearer without a surrounding box. Convert existing text_card/formula_card objects to text/equation when the card is not teaching-essential.\n"
                     + "- Only include `style` when it adds meaningful rendering properties; omit it for visually plain objects.\n"
                     + SystemPrompts.ASCII_TEXT_RULES;
 

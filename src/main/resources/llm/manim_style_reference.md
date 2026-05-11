@@ -43,9 +43,9 @@ Contrast requirements:
 * Ordinary non-text strokes, arrows, geometry, markers, and decorative elements
   must contrast against the default black background `#000000` at ratio >= 3.0.
 * Text, titles, formulas, labels, badges, and callouts must contrast at ratio
-  >= 4.5 against their own text-card or background-box color.
-* If a text element has no explicit text-card or background-box color, compare
-  its text color against `#000000`.
+  >= 4.5 against their own background color.
+* If a text element has no explicit background color, compare its text color
+  against `#000000`.
 
 ## 2. Safe Style Properties
 
@@ -114,8 +114,9 @@ Do not keep every object at full opacity.
   `JetBrains Mono`, `DejaVu Sans Mono`, or `Courier New`.
 * Keep `font_size >= 18` for readable supporting text.
 * Use larger sizes for scene titles, section headers, and key conclusions.
-* If text must overlap busy geometry, plan a background box or backstroke-style
-  readability treatment and ensure the text/background contrast is >= 4.5.
+* If text must overlap busy geometry, prefer adjusting placement or using
+  opacity to separate layers. Only add a background box when the text truly
+  cannot be read without one; ensure the text/background contrast is >= 4.5.
 
 ### Layout And Motion Vocabulary
 

@@ -74,8 +74,8 @@ class StoryboardValidationNodeTest {
         StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
         StoryboardObject label = scenePatch("label_l", boxPlacement("screen", -1.5, -1.0, 2.1, 2.4));
         Narrative.StoryboardStyle style = new Narrative.StoryboardStyle();
-        style.setTextColor("#60A5FA");
-        style.setBackgroundStrokeColor("#60A5FA");
+        style.setColor("#60A5FA");
+        style.setStrokeColor("#60A5FA");
         style.setFontSize(18.0);
         label.setStyle(style);
         Storyboard storyboard = buildSingleSceneStoryboard(
@@ -92,9 +92,9 @@ class StoryboardValidationNodeTest {
         StoryboardValidationNode node = prepareNode(WorkflowConfig.OUTPUT_TARGET_MANIM);
         StoryboardObject title = scenePatch("title", boxPlacement("screen", -1.5, 1.5, 2.1, 2.8));
         Narrative.StoryboardStyle style = new Narrative.StoryboardStyle();
-        style.setTextColor("#FFFFFF");
-        style.setBackgroundFillColor("#FFFFFF");
-        style.setBackgroundFillOpacity(0.9);
+        style.setColor("#FFFFFF");
+        style.setFillColor("#FFFFFF");
+        style.setFillOpacity(0.9);
         title.setStyle(style);
         Storyboard storyboard = buildSingleSceneStoryboard(
                 List.of(registryObject("title", "text", "Main title", null)),

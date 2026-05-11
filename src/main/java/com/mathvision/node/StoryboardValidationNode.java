@@ -1536,7 +1536,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             return false;
         }
         Narrative.StoryboardStyle style = object.getStyle();
-        return !isBlank(style.getTextColor()) || style.getFontSize() != null || !isBlank(style.getFontFamily());
+        return !isBlank(style.getColor()) || style.getFontSize() != null || !isBlank(style.getFontFamily());
     }
 
     private boolean isAttachedLabelPair(StoryboardObject textObject,

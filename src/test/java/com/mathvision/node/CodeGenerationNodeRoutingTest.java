@@ -314,7 +314,7 @@ class CodeGenerationNodeRoutingTest {
         titlePlacement.setY(yAxis);
         title.setPlacement(titlePlacement);
         Narrative.StoryboardStyle titleStyle = new Narrative.StoryboardStyle();
-        titleStyle.setTextColor("#FFFFFF");
+        titleStyle.setColor("#FFFFFF");
         titleStyle.setFontSize(28.0);
         title.setStyle(titleStyle);
         title.setSourceNode("problem");

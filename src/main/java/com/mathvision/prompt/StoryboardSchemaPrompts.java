@@ -152,7 +152,7 @@ public final class StoryboardSchemaPrompts {
     public static final String OBJECT_DEFINITION_SCHEMA =
             "    {\n"
                     + "      \"id\": \"string, stable visual identity for continuity and transforms; keep ids concise and non-redundant since `kind` carries the type; follow only the active backend's naming rules\",\n"
-                    + "      \"kind\": \"string, concrete render/construction primitive such as point|line|ray|segment|vector|circle|arc|angle_marker|right_angle_marker|polygon|polyline|axes|number_line|function_curve|parametric_curve|implicit_curve|conic|region|brace|tick_marker|distance_marker|text|equation|text_card|image; semantic roles such as labels should be expressed with dependency_relation/behavior/anchor_id; avoid broad kinds like graph/helper when a concrete primitive fits; do not repeat this type inside `id`\",\n"
+                    + "      \"kind\": \"string, concrete render/construction primitive such as point|line|ray|segment|vector|circle|arc|angle_marker|right_angle_marker|polygon|polyline|axes|number_line|function_curve|parametric_curve|implicit_curve|conic|region|brace|tick_marker|distance_marker|text|equation|image; prefer text/equation over text_card/formula_card (cards should only be used when the box itself is teaching-essential); semantic roles such as labels should be expressed with dependency_relation/behavior/anchor_id; avoid broad kinds like graph/helper when a concrete primitive fits; do not repeat this type inside `id`\",\n"
                     + "      \"content\": \"string, mathematical or visual content shown by the object; if this text references other storyboard objects, mention those objects by id only and do not repeat their kind\",\n"
                     + "      \"source_node\": \"string, originating step or node when relevant\",\n"
                     + "      \"behavior\": \"string, dependency role such as static|follows_anchor|derived|fixed_overlay\",\n"
@@ -249,11 +249,11 @@ public final class StoryboardSchemaPrompts {
                     + "  }\n"
                     + "}\n";
 
-    /** Example object-registry entry: a fixed-overlay formula card. */
+    /** Example object-registry entry: a fixed-overlay formula. */
     public static final String EXAMPLE_FORMULA_CARD =
             "    {\n"
                     + "      \"id\": \"formulaCard\",\n"
-                    + "      \"kind\": \"text_card\",\n"
+                    + "      \"kind\": \"equation\",\n"
                     + "      \"content\": \"min = 2 for x in [1,3]\",\n"
                     + "      \"source_node\": \"minimum_reveal\",\n"
                     + "      \"behavior\": \"fixed_overlay\",\n"
@@ -432,7 +432,8 @@ public final class StoryboardSchemaPrompts {
     public static final String TEXT_STYLE_SEMANTICS =
             "Text object semantics are strict:\n"
                     + "- Use `kind = equation` for formulas, symbolic labels, Greek letters, angle notation, superscripts, subscripts, and any content that should render with `MathTex(...)` downstream.\n"
-                    + "- Use `kind = text` or `kind = text_card` for ordinary letters, names, short prose labels, and any content that should render with `Text(...)` downstream.\n"
+                    + "- Use `kind = text` for ordinary letters, names, short prose labels, and any content that should render with `Text(...)` downstream.\n"
+                    + "- Avoid `kind = text_card` and `kind = formula_card`; display text directly without a background box unless the card itself is teaching-essential (e.g. a titled result panel). Most formulas and labels are clearer as plain `text` or `equation` objects.\n"
                     + "- Do not encode text constructor choice in `style`; `style` only contains typed rendering properties.\n";
 
     private StoryboardSchemaPrompts() {}

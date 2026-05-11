@@ -53,9 +53,9 @@ Contrast requirements:
   must contrast against the default storyboard background `#000000` at ratio
   >= 3.0.
 * Text, titles, formulas, labels, badges, and callouts must contrast at ratio
-  >= 4.5 against their own text-card or background-box color.
-* If a text element has no explicit text-card or background-box color, compare
-  its text color against `#000000`.
+  >= 4.5 against their own background color.
+* If a text element has no explicit background color, compare its text color
+  against `#000000`.
 
 ## 2. Safe Style Properties
 
