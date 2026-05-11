@@ -271,10 +271,14 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             // Registry reflects state BEFORE this scene's changes
             String sceneRegistryBlock = enrichedRegistry != null
                     ? toRegistryBlock(formatRegistrySummary(enrichedRegistry, i)) : "";
+            // Constraint summary: explicit per-object and scene-level hard invariants
+            String constraintSummaryBlock = enrichedRegistry != null
+                    ? toConstraintBlock(buildSceneConstraintSummary(scene, enrichedRegistry)) : "";
             String scenePrompt = (isGeoGebra
                     ? CodeGenerationPrompts.geoGebraSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size())
                     : CodeGenerationPrompts.manimSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size()))
-                    + sceneRegistryBlock;
+                    + sceneRegistryBlock
+                    + constraintSummaryBlock;
             AiRequestUtils.ExtractedTextResult sceneResult = AiRequestUtils.requestExtractedTextResultAsync(
                     aiClient, log, sceneName, conversationContext,
                     scenePrompt, ToolSchemas.SCENE_CODE, () -> toolCalls++,
@@ -523,6 +527,10 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         return registrySummary.isBlank() ? "" : "\n\n" + registrySummary;
     }
 
+    private static String toConstraintBlock(String constraintSummary) {
+        return constraintSummary.isBlank() ? "" : "\n\n" + constraintSummary;
+    }
+
     /**
      * Builds a text summary of object_registry enriched with style/placement
      * accumulated from scene patches up to (but not beyond) {@code sceneLimit}.
@@ -602,7 +610,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                 sb.append(", dependency_relation=").append(truncate(obj.getDependencyRelation(), 80));
             }
             if (obj.getConstraints() != null && !obj.getConstraints().isEmpty()) {
-                sb.append(", constraints=").append(truncate(JsonUtils.toJson(obj.getConstraints()), 180));
+                sb.append(", constraints=").append(truncate(JsonUtils.toJson(obj.getConstraints()), 500));
             }
             if (!StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(obj)
                     && obj.getPlacement() != null && obj.getPlacement().hasData()) {
@@ -614,6 +622,132 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             sb.append("\n");
         }
         return sb.toString().trim();
+    }
+
+    /**
+     * Builds a clear constraint summary for all objects referenced in a scene.
+     * Collects constraints from both scene-level and object-registry-level,
+     * deduplicates them, and formats each as a human-readable line.
+     */
+    static String buildSceneConstraintSummary(StoryboardScene scene,
+                                               Map<String, StoryboardObject> enrichedRegistry) {
+        if (enrichedRegistry == null || enrichedRegistry.isEmpty()) {
+            return "";
+        }
+        // Collect all object IDs referenced in this scene
+        Map<String, String> objectIdToKind = new LinkedHashMap<>();
+        collectSceneObjectIds(scene, objectIdToKind, enrichedRegistry);
+
+        // Gather constraints per object
+        List<String> lines = new ArrayList<>();
+
+        // 1. Object-registry constraints for each referenced object
+        for (Map.Entry<String, String> entry : objectIdToKind.entrySet()) {
+            String objId = entry.getKey();
+            StoryboardObject obj = enrichedRegistry.get(objId);
+            if (obj == null || obj.getConstraints() == null || obj.getConstraints().isEmpty()) {
+                continue;
+            }
+            for (var c : obj.getConstraints()) {
+                if (c == null) continue;
+                String line = formatConstraintLine(objId, entry.getValue(), c);
+                if (line != null && !line.isBlank()) {
+                    lines.add(line);
+                }
+            }
+        }
+
+        // 2. Scene-level constraints (may override or supplement object-level)
+        if (scene.getConstraints() != null) {
+            for (var c : scene.getConstraints()) {
+                if (c == null) continue;
+                String targetId = extractConstraintTargetId(c);
+                String kind = targetId != null ? objectIdToKind.getOrDefault(targetId, "?") : "?";
+                String line = formatConstraintLine(targetId != null ? targetId : "scene", kind, c);
+                if (line != null && !line.isBlank()) {
+                    lines.add(line);
+                }
+            }
+        }
+
+        if (lines.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Constraint summary (HARD invariants for this scene):\n");
+        for (String line : lines) {
+            sb.append("- ").append(line).append("\n");
+        }
+        return sb.toString().trim();
+    }
+
+    private static void collectSceneObjectIds(StoryboardScene scene,
+                                               Map<String, String> objectIdToKind,
+                                               Map<String, StoryboardObject> enrichedRegistry) {
+        collectObjectIds(scene.getEnteringObjects(), objectIdToKind, enrichedRegistry);
+        collectObjectIds(scene.getPersistentObjects(), objectIdToKind, enrichedRegistry);
+        collectObjectIds(scene.getExitingObjects(), objectIdToKind, enrichedRegistry);
+        // Also collect targets from actions
+        if (scene.getActions() != null) {
+            for (var action : scene.getActions()) {
+                if (action.getTargets() != null) {
+                    for (String targetId : action.getTargets()) {
+                        StoryboardObject obj = enrichedRegistry.get(targetId);
+                        if (obj != null) {
+                            objectIdToKind.putIfAbsent(targetId, obj.getKind() != null ? obj.getKind() : "?");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void collectObjectIds(List<StoryboardObject> objects,
+                                          Map<String, String> objectIdToKind,
+                                          Map<String, StoryboardObject> enrichedRegistry) {
+        if (objects == null) return;
+        for (StoryboardObject obj : objects) {
+            if (obj == null || obj.getId() == null) continue;
+            String kind = obj.getKind();
+            if (kind == null || kind.isBlank()) {
+                StoryboardObject regObj = enrichedRegistry.get(obj.getId());
+                kind = regObj != null && regObj.getKind() != null ? regObj.getKind() : "?";
+            }
+            objectIdToKind.putIfAbsent(obj.getId(), kind);
+        }
+    }
+
+    private static String extractConstraintTargetId(Narrative.StoryboardConstraint c) {
+        if (c.getRefs() == null) return null;
+        // Most constraints identify a target point/object in refs
+        for (String key : new String[]{"point", "object", "source", "label", "segment"}) {
+            Object val = c.getRefs().get(key);
+            if (val instanceof String && !((String) val).isBlank()) {
+                return (String) val;
+            }
+        }
+        return null;
+    }
+
+    private static String formatConstraintLine(String objId, String kind,
+                                                Narrative.StoryboardConstraint c) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(objId).append("(").append(kind).append("): ");
+        sb.append(c.getDomain() != null ? c.getDomain() : "?").append("/");
+        sb.append(c.getRelation() != null ? c.getRelation() : "?");
+        // Key refs
+        if (c.getRefs() != null && !c.getRefs().isEmpty()) {
+            sb.append(" refs=").append(c.getRefs());
+        }
+        // Parameters (often contains range)
+        if (c.getParameters() != null && !c.getParameters().isEmpty()) {
+            sb.append(" params=").append(c.getParameters());
+        }
+        if (c.getReason() != null && !c.getReason().isBlank()) {
+            sb.append(" — ").append(c.getReason());
+        }
+        return sb.toString();
     }
 
     private static String formatPlacementSummary(StoryboardPlacement placement) {

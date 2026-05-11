@@ -303,6 +303,18 @@ public class MathEnrichmentNode extends PocketFlow.Node<KnowledgeGraph, Knowledg
             return;
         }
 
+        if (data.has("step")) {
+            String correctedStep = readOptionalText(data.get("step"));
+            if (correctedStep != null && !correctedStep.isBlank()) {
+                node.setStep(correctedStep);
+            }
+        }
+        if (data.has("reason")) {
+            String correctedReason = readOptionalText(data.get("reason"));
+            if (correctedReason != null && !correctedReason.isBlank()) {
+                node.setReason(correctedReason);
+            }
+        }
         if (data.has("equations")) {
             node.setEquations(readTrimmedStringList(data.get("equations")));
         }

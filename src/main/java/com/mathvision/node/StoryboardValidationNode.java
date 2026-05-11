@@ -406,11 +406,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                         objectId,
                         Scope.OBJECT,
                         issues);
-                if (isDependencyDriven(object)
-                        && (object.getConstraints() == null || object.getConstraints().isEmpty())) {
-                    issues.add("object_registry: dependency-driven object '" + objectId
-                            + "' must define structured constraints");
-                }
+
             }
         }
 

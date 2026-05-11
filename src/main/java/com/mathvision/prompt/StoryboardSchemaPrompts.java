@@ -169,7 +169,7 @@ public final class StoryboardSchemaPrompts {
                     + "          \"relation\": \"string, one of " + StoryboardConstraintCatalog.relationList() + "\",\n"
                     + "          \"refs\": { \"role_name\": \"object id, object id list, or nested object-id map; role names must match the selected relation catalog\" },\n"
                     + "          \"parameters\": { \"parameter_name\": \"structured non-object value allowed by the selected relation; never put object ids here\" },\n"
-                    + "          \"strength\": \"hard|repair_hard|soft\",\n"
+                    + "          \"strength\": \"hard (mathematical/semantic invariant) | repair_hard (required during cleanup) | soft (preference)\",\n"
                     + "          \"reason\": \"string, short human-readable explanation\"\n"
                     + "        }\n"
                     + "      ]\n"
