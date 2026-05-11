@@ -18,19 +18,12 @@ public final class RenderFixPrompts {
                     + "Keep implemented mathematical constructions internally consistent while fixing render issues.\n"
                     + "Mandatory rules:\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
-                    + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
-                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + "Naming rules:\n"
-                    + SystemPrompts.MANIM_NAMING_RULES
-                    + "Color rules:\n"
-                    + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS
-                    + SystemPrompts.MANIM_COLOR_RULES_BULLETS
-                    + SystemPrompts.MANIM_ANGLE_MARKER_RULES
-                    + "Do not store mobjects across scene methods via `self`, do not hardcode MathTex numeric indexing, and keep layout inside x[-7,7], y[-4,4].\n\n"
+                    + "Do not store mobjects across scene methods via `self`, do not hardcode MathTex numeric indexing.\n\n"
                     + "Fix strategy:\n"
                     + "Use root-cause-first repair: identify the first causal traceback error, fix it, then sweep structurally similar code paths in the same file.\n"
-                    + "Fix the reported root cause systematically, and also correct nearby Python/Manim runtime mistakes.\n\n"
+                    + "Fix the reported root cause systematically, and also correct nearby Python/Manim runtime mistakes.\n"
+
                     + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_SYSTEM =
@@ -41,12 +34,6 @@ public final class RenderFixPrompts {
                     + "Keep implemented geometric relationships internally consistent while fixing command failures.\n"
                     + "Use English GeoGebra command names.\n"
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
-                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + "Naming rules:\n"
-                    + SystemPrompts.GEOGEBRA_NAMING_RULES
-                    + "Color rules:\n"
-                    + SystemPrompts.HIGH_CONTRAST_COLOR_RULES_BULLETS
-                    + SystemPrompts.GEOGEBRA_COLOR_RULES_BULLETS
                     + "If you must rename an identifier or introduce a new one, update the commented `SCENE_BUTTONS` script consistently so it still references the final object names.\n"
                     + "Do not output Python, JavaScript, or explanations.\n"
                     + "If a command currently returns false, correct the root cause and also proactively repair nearby dependent commands.\n"

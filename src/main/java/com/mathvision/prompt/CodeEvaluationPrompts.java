@@ -109,12 +109,7 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM + "\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
-                    + SystemPrompts.COMPOSITION_RULES
-                    + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
-                    + SystemPrompts.MANIM_CODE_HYGIENE_RULES
                     + SystemPrompts.COMMON_RENDER_FAILURE_GUARDRAILS
-                    + SystemPrompts.MANIM_ANGLE_MARKER_RULES
-                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String REVISION_SYSTEM_GEOGEBRA =
@@ -124,11 +119,7 @@ public final class CodeEvaluationPrompts {
                     + "Preserve runtime validity, construction coherence, object identities where useful, scene visibility progression, and teaching intent.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
-                    + SystemPrompts.OBJECT_LIFECYCLE_RULES
-                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
-                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + SystemPrompts.COMPOSITION_RULES
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
 
     private CodeEvaluationPrompts() {}

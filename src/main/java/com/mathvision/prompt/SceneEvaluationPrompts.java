@@ -13,17 +13,10 @@ public final class SceneEvaluationPrompts {
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + "Use the rendered geometry report as authority for observed layout problems, and use storyboard object_registry dependency facts as semantic authority for how affected geometry must be constructed.\n"
                     + SystemPrompts.MANIM_MANUAL_ONLY_RULES
-                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + SystemPrompts.COMPOSITION_RULES
-                    + SystemPrompts.MANIM_TEXT_AND_READABILITY_RULES
-                    + SystemPrompts.OBJECT_LIFECYCLE_RULES
-                    + "Naming rules:\n"
-                    + SystemPrompts.MANIM_NAMING_RULES
                     + "Prefer adjusting positioning, scaling, grouping, and spacing over deleting explanatory content.\n"
                     + "For frame repair, use translation/recentering and uniform scaling of independent overlays, source objects, or whole constrained groups as the default first-choice strategy before changing geometric constructions or attachment logic.\n"
                     + "If a reported element is dependency-driven or derived, do not fix it by assigning direct coordinates copied from rendered bounds or storyboard placement; adjust upstream dependency objects, the whole constrained group, camera/layout, or the attachment expression so the dependency remains true.\n"
-                    + "Also correct semantically wrong geometric attachments you notice, especially angle markers that are drawn on the wrong side or detached from their true vertex.\n"
-                    + "Do not reintroduce banned dynamic patterns during layout fixes, especially conditionally empty redraw targets that will be animated directly later.\n\n"
+                    + "Also correct semantically wrong geometric attachments you notice, especially angle markers that are drawn on the wrong side or detached from their true vertex.\n\n"
                     + "Scene evaluation repair requirements:\n"
                     + "1. First identify the affected code scene(s), reported elements, and any storyboard_dependency_context supplied in the evaluation report.\n"
                     + "2. For overlap and offscreen repair, first try translation/recentering and uniform scaling of the affected overlay, upstream source objects, or constrained group before changing geometry or redefining attachments.\n"
@@ -34,7 +27,6 @@ public final class SceneEvaluationPrompts {
                     + "7. Preserve a readable empty zone for overlays and key conclusions.\n"
                     + "Audit the entire file for similar layout issues, not just the reported elements. The reported issues indicate structural patterns that may appear elsewhere.\n"
                     + "Also proactively check for common Python and Manim runtime mistakes.\n\n"
-                    + "Maintain a clean final-frame impression: leave breathing room, avoid overlay-on-geometry collisions, and remove temporary annotations once they have taught their point.\n\n"
                     + SystemPrompts.MANIM_CODE_OUTPUT_FORMAT;
 
     private static final String GEOGEBRA_SYSTEM =
@@ -42,18 +34,12 @@ public final class SceneEvaluationPrompts {
                     + "Preserve the teaching goal, visual intent, and construction meaning.\n"
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + "Use the rendered geometry report as authority for observed layout problems, and use storyboard object_registry dependency facts as semantic authority for how affected geometry must be constructed.\n"
-                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + "Prefer adjusting label placement, text positioning, coordinate spacing, and whole-construction scale over removing explanatory content.\n"
                     + "Initial-view readability is mandatory; fix offscreen, underfilled, clustered, text-on-text, and text-on-geometry issues without relying on user zooming.\n"
                     + "If a reported element is dependency-driven or derived, do not fix it by assigning direct coordinates copied from rendered bounds or storyboard placement; adjust upstream dependency objects, the whole constrained construction, viewport, or native construction command so the dependency remains true.\n"
                     + "Also correct semantically wrong geometric attachments you notice, especially angle markers that sweep the wrong sector.\n"
                     + "Use English GeoGebra command names.\n"
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
-                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
-                    + SystemPrompts.COMPOSITION_RULES
-                    + SystemPrompts.OBJECT_LIFECYCLE_RULES
-                    + "Naming rules:\n"
-                    + SystemPrompts.GEOGEBRA_NAMING_RULES
                     + "Do not output Python, JavaScript, or explanations.\n\n"
                     + "Scene evaluation repair requirements:\n"
                     + "1. First identify the affected command/script region, reported elements, and any storyboard_dependency_context supplied in the evaluation report.\n"

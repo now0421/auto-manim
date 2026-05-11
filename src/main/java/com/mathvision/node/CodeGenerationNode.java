@@ -37,9 +37,11 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -239,12 +241,9 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
 
         // 1. Build base registry map (shared across skeleton + all scenes)
         Map<String, StoryboardObject> enrichedRegistry = buildBaseEnrichedRegistry(storyboard);
-        String skeletonRegistryBlock = enrichedRegistry != null
-                ? toRegistryBlock(formatRegistrySummary(enrichedRegistry, 0)) : "";
-        String skeletonPrompt = (isGeoGebra
+        String skeletonPrompt = isGeoGebra
                 ? CodeGenerationPrompts.geoGebraSkeletonUserPrompt(storyboardJson, sceneNames)
-                : CodeGenerationPrompts.manimSkeletonUserPrompt(storyboardJson, sceneNames))
-                + skeletonRegistryBlock;
+                : CodeGenerationPrompts.manimSkeletonUserPrompt(storyboardJson, sceneNames);
         AiRequestUtils.ExtractedTextResult skeletonResult = AiRequestUtils.requestExtractedTextResultAsync(
                 aiClient, log, "skeleton", conversationContext,
                 skeletonPrompt, ToolSchemas.CODE_SKELETON, () -> toolCalls++,
@@ -268,16 +267,16 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                 sceneJson = "{}";
             }
 
-            // Registry reflects state BEFORE this scene's changes
-            String sceneRegistryBlock = enrichedRegistry != null
-                    ? toRegistryBlock(formatRegistrySummary(enrichedRegistry, i)) : "";
+            // Structured JSON for exact object semantics (kind, content, behavior, dependency, constraints)
+            String sceneRegistryJsonBlock = enrichedRegistry != null
+                    ? buildSceneRegistryJsonBlock(scene, enrichedRegistry) : "";
             // Constraint summary: explicit per-object and scene-level hard invariants
             String constraintSummaryBlock = enrichedRegistry != null
                     ? toConstraintBlock(buildSceneConstraintSummary(scene, enrichedRegistry)) : "";
             String scenePrompt = (isGeoGebra
                     ? CodeGenerationPrompts.geoGebraSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size())
                     : CodeGenerationPrompts.manimSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size()))
-                    + sceneRegistryBlock
+                    + (sceneRegistryJsonBlock.isBlank() ? "" : "\n\n" + sceneRegistryJsonBlock)
                     + constraintSummaryBlock;
             AiRequestUtils.ExtractedTextResult sceneResult = AiRequestUtils.requestExtractedTextResultAsync(
                     aiClient, log, sceneName, conversationContext,
@@ -523,12 +522,63 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         return new CodeDraft(generatedCode, artifactName);
     }
 
-    private static String toRegistryBlock(String registrySummary) {
-        return registrySummary.isBlank() ? "" : "\n\n" + registrySummary;
-    }
-
     private static String toConstraintBlock(String constraintSummary) {
         return constraintSummary.isBlank() ? "" : "\n\n" + constraintSummary;
+    }
+
+    /**
+     * Builds a compact structured JSON block for the object_registry entries
+     * referenced by a specific scene, so the LLM has exact semantic data
+     * (kind, content, behavior, dependency_objects, constraints, etc.)
+     * alongside the human-readable text summary.
+     */
+    static String buildSceneRegistryJsonBlock(StoryboardScene scene,
+                                               Map<String, StoryboardObject> enrichedRegistry) {
+        if (enrichedRegistry == null || enrichedRegistry.isEmpty()) {
+            return "";
+        }
+        // Collect all object IDs referenced in this scene
+        Map<String, String> objectIdToKind = new LinkedHashMap<>();
+        collectSceneObjectIds(scene, objectIdToKind, enrichedRegistry);
+
+        if (objectIdToKind.isEmpty()) {
+            return "";
+        }
+
+        // Also include objects that are dependencies of referenced objects
+        // (transitive closure one level deep)
+        Set<String> allIds = new LinkedHashSet<>(objectIdToKind.keySet());
+        for (String id : objectIdToKind.keySet()) {
+            StoryboardObject obj = enrichedRegistry.get(id);
+            if (obj != null && obj.getDependencyObjects() != null) {
+                for (String depId : obj.getDependencyObjects()) {
+                    if (enrichedRegistry.containsKey(depId)) {
+                        allIds.add(depId);
+                    }
+                }
+            }
+        }
+
+        // Build compact JSON array of the relevant objects
+        StringBuilder sb = new StringBuilder();
+        sb.append("Object registry (structured JSON for this scene's objects):\n```json\n[\n");
+        boolean first = true;
+        for (String id : allIds) {
+            StoryboardObject obj = enrichedRegistry.get(id);
+            if (obj == null) continue;
+            if (!first) sb.append(",\n");
+            first = false;
+            sb.append("  ");
+            try {
+                String objJson = JsonUtils.mapper().writeValueAsString(obj);
+                // Indent for readability
+                sb.append(objJson);
+            } catch (Exception e) {
+                sb.append("{\"id\":\"").append(id).append("\"}");
+            }
+        }
+        sb.append("\n]\n```");
+        return sb.toString();
     }
 
     /**

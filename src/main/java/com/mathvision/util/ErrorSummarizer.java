@@ -23,6 +23,13 @@ public final class ErrorSummarizer {
     private static final int LATEX_LOG_CONTEXT_RADIUS = 3;
     private static final String TRACEBACK_MARKER = "Traceback (most recent call last)";
 
+    /** Patterns for detecting user-code frames in Manim Rich tracebacks. */
+    private static final List<Pattern> USER_CODE_FRAME_PATTERNS = List.of(
+            Pattern.compile("scene_render\\.py", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("mathvision_geometry_export\\.py", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("[\\\\/]output[\\\\/]", Pattern.CASE_INSENSITIVE)
+    );
+
     private static final Pattern ERROR_SIGNATURE_PATTERN = Pattern.compile(
             "\\b(?:[A-Za-z_][A-Za-z0-9_]*Error|[A-Za-z_][A-Za-z0-9_]*Exception)\\s*:\\s*.+");
     private static final Pattern WINDOWS_LOG_PATH_PATTERN = Pattern.compile(
@@ -85,7 +92,9 @@ public final class ErrorSummarizer {
             new ClassificationRule(ErrorCategory.INDEX_KEY, compile(
                     "(?i)indexerror", "(?i)keyerror")),
             new ClassificationRule(ErrorCategory.IMPORT, compile(
-                    "(?i)importerror", "(?i)modulenotfounderror"))
+                    "(?i)importerror", "(?i)modulenotfounderror")),
+            new ClassificationRule(ErrorCategory.NOT_IMPLEMENTED, compile(
+                    "(?i)notimplementederror"))
     );
 
     private static List<Pattern> compile(String... regexes) {
@@ -126,6 +135,10 @@ public final class ErrorSummarizer {
 
     /**
      * Summarizes a traceback, keeping the most relevant lines.
+     *
+     * <p>Prioritises user-code frames (scene_render.py, files under output/)
+     * over library frames so that the LLM can see the actual call site that
+     * triggered the error, not just the Manim-internal frames near the bottom.
      */
     public static String summarizeTraceback(String stderr) {
         if (stderr == null || stderr.isBlank()) {
@@ -144,7 +157,8 @@ public final class ErrorSummarizer {
             return tracebackSection.trim();
         }
 
-        List<String> result = new ArrayList<>();
+        // --- Phase 1: identify important line ranges ---
+        // 1a) The error-signature line(s) at the bottom
         int lastErrorIndex = -1;
         for (int i = lines.length - 1; i >= 0; i--) {
             if (ERROR_SIGNATURE_PATTERN.matcher(lines[i]).find()) {
@@ -152,33 +166,84 @@ public final class ErrorSummarizer {
                 break;
             }
         }
-
         if (lastErrorIndex < 0) {
             lastErrorIndex = lines.length - 1;
         }
 
-        result.add(lines[0]);
-
-        int contextStart = Math.max(1, lastErrorIndex - TRACEBACK_CONTEXT_RADIUS);
-        int contextEnd = Math.min(lines.length - 1, lastErrorIndex + TRACEBACK_CONTEXT_RADIUS);
-
-        if (contextStart > 1) {
-            result.add("  ... (" + (contextStart - 1) + " lines omitted) ...");
+        // 1b) User-code frame ranges (file header + context lines)
+        //     A "frame header" in Manim Rich traceback looks like:
+        //       │ D:\project\...\scene_render.py:182 in ...  │
+        //     followed by blank + source lines.  We record the header and
+        //     the > marker line as the essential user-code context.
+        List<int[]> userFrameRanges = new ArrayList<>();
+        for (int i = 0; i < lines.length; i++) {
+            if (isUserCodeFrameLine(lines[i])) {
+                // include the header line itself and up to
+                // TRACEBACK_CONTEXT_RADIUS lines after it (the source
+                // context with the ">" marker)
+                int end = Math.min(lines.length - 1,
+                        i + TRACEBACK_CONTEXT_RADIUS + 1);
+                userFrameRanges.add(new int[]{i, end});
+            }
         }
 
-        for (int i = contextStart; i <= contextEnd; i++) {
+        // --- Phase 2: build the result ---
+        List<String> result = new ArrayList<>();
+        result.add(lines[0]); // "Traceback ..." header
+
+        // Add user-code frame ranges first (these are the most actionable)
+        int lastIncludedEnd = 0;
+        for (int[] range : userFrameRanges) {
+            int start = range[0];
+            int end = range[1];
+            if (start <= lastIncludedEnd) {
+                // overlap with previously included range – extend it
+                continue;
+            }
+            if (start > lastIncludedEnd + 1) {
+                result.add("  ... (" + (start - lastIncludedEnd - 1) + " lines omitted) ...");
+            }
+            for (int i = start; i <= end; i++) {
+                result.add(lines[i]);
+            }
+            lastIncludedEnd = end;
+        }
+
+        // Add context around the final error-signature line
+        int ctxStart = Math.max(1, lastErrorIndex - TRACEBACK_CONTEXT_RADIUS);
+        int ctxEnd = Math.min(lines.length - 1, lastErrorIndex + TRACEBACK_CONTEXT_RADIUS);
+        if (ctxStart > lastIncludedEnd + 1) {
+            result.add("  ... (" + (ctxStart - lastIncludedEnd - 1) + " lines omitted) ...");
+        }
+        for (int i = Math.max(ctxStart, lastIncludedEnd + 1); i <= ctxEnd; i++) {
             result.add(lines[i]);
         }
 
-        if (contextEnd < lines.length - 1) {
-            for (int i = contextEnd + 1; i < lines.length; i++) {
-                if (ERROR_SIGNATURE_PATTERN.matcher(lines[i]).find()) {
-                    result.add(lines[i]);
-                }
+        // Catch any remaining error-signature lines after the context window
+        for (int i = ctxEnd + 1; i < lines.length; i++) {
+            if (ERROR_SIGNATURE_PATTERN.matcher(lines[i]).find()) {
+                result.add(lines[i]);
             }
         }
 
         return String.join("\n", result);
+    }
+
+    /**
+     * Returns true if the line looks like a Manim Rich traceback frame
+     * header that references user code (scene_render.py, files under
+     * the output/ directory, etc.).
+     */
+    private static boolean isUserCodeFrameLine(String line) {
+        if (line == null || line.isEmpty()) {
+            return false;
+        }
+        for (Pattern pattern : USER_CODE_FRAME_PATTERNS) {
+            if (pattern.matcher(line).find()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -315,10 +380,11 @@ public final class ErrorSummarizer {
         ErrorCategory category = classifyError(focusedError);
         String signature = summarizeSignature(focusedError);
         if (category == ErrorCategory.FALLBACK) {
-            // For unknown errors, include raw error context so the LLM can reason about it
-            String context = tailLines(focusedError, 5);
-            if (!context.isBlank()) {
-                return ErrorCategory.FALLBACK.name() + ": " + context.replaceAll("\\s+", " ").trim();
+            // For unknown/unclassified errors, pass through the full focusedError
+            // (already condensed by summarizeTraceback) so the LLM can see user-code
+            // frames, not just library frames near the bottom of the stack.
+            if (focusedError != null && !focusedError.isBlank()) {
+                return ErrorCategory.FALLBACK.name() + ":\n" + focusedError.trim();
             }
             return ErrorCategory.FALLBACK.name();
         }
@@ -413,6 +479,7 @@ public final class ErrorSummarizer {
         TYPE_VALUE,
         INDEX_KEY,
         IMPORT,
+        NOT_IMPLEMENTED,
         FALLBACK,
         ENVIRONMENT,
         UNKNOWN
