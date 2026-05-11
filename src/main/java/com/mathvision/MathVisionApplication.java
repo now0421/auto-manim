@@ -69,6 +69,9 @@ public class MathVisionApplication {
         String fromGraphPath = null;
         String fromCodePath = null;
         String problemFilePath = null;
+        boolean explorationOnly = false;
+        boolean toStoryboardValidation = false;
+        boolean toVisualDesign = false;
 
         // Parse CLI flags
         for (int i = startIndex; i < args.length; i++) {
@@ -90,6 +93,15 @@ public class MathVisionApplication {
                     break;
                 case "--problem-file":
                     problemFilePath = requireOptionValue(args, ++i, "--problem-file");
+                    break;
+                case "--exploration-only":
+                    explorationOnly = true;
+                    break;
+                case "--to-storyboard-validation":
+                    toStoryboardValidation = true;
+                    break;
+                case "--to-visual-design":
+                    toVisualDesign = true;
                     break;
                 default:
                     log.warn("Unknown option: {}", args[i]);
@@ -216,7 +228,13 @@ public class MathVisionApplication {
 
         // Create and run workflow
         PocketFlow.Flow<?> flow;
-        if (preloadedGraph != null) {
+        if (explorationOnly) {
+            flow = WorkflowFlow.createExplorationOnly();
+        } else if (toStoryboardValidation) {
+            flow = WorkflowFlow.createToStoryboardValidation();
+        } else if (toVisualDesign) {
+            flow = WorkflowFlow.createToVisualDesign();
+        } else if (preloadedGraph != null) {
             flow = config.isRenderEnabled()
                     ? WorkflowFlow.createFromGraph()
                     : WorkflowFlow.createFromGraphWithoutRender();
@@ -593,6 +611,9 @@ public class MathVisionApplication {
                 + "                             (accepts 4_manim_code.py, 4_geogebra_commands.txt,\n"
                 + "                             or their parent directory).\n"
                 + "                             Outputs are written to the same directory as the code.\n"
+                + "  --exploration-only         Run only stage 0 (Exploration), stop after generating knowledge graph\n"
+                + "  --to-visual-design          Run stages 0-2 (Exploration to VisualDesign), stop after visual design\n"
+                + "  --to-storyboard-validation Run stages 0-3 (Exploration to StoryboardValidation), stop after storyboard validation\n"
                 + "  --workflow-config FILE     Workflow JSON config path\n"
                 + "  --model-config FILE        Model JSON config path\n"
                 + "  --output DIR               Output directory"

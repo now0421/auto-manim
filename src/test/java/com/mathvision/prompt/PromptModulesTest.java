@@ -317,7 +317,7 @@ class PromptModulesTest {
     }
 
     private String codeGenerationSystemPrompt(String targetConcept, String targetDescription, String outputTarget) {
-        return CodeGenerationPrompts.buildFixedContextPrompt(targetConcept, targetDescription, outputTarget)
+        return CodeGenerationPrompts.buildFixedContextPrompt(targetConcept, targetDescription, outputTarget, null)
                 + CodeGenerationPrompts.buildRulesPrompt(outputTarget);
     }
 

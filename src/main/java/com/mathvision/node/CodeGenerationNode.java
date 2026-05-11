@@ -122,11 +122,26 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                 : input.existingCodeResult().getTargetConcept();
         String targetDescription = narrative != null ? narrative.getTargetDescription()
                 : input.existingCodeResult().getTargetDescription();
+
+        // Build object registry JSON for fixed context (shared across all scene generations)
+        String objectRegistryJson = "";
+        if (narrative != null && narrative.hasStoryboard()
+                && narrative.getStoryboard().getObjectRegistry() != null
+                && !narrative.getStoryboard().getObjectRegistry().isEmpty()) {
+            try {
+                objectRegistryJson = JsonUtils.mapper().writeValueAsString(
+                        narrative.getStoryboard().getObjectRegistry());
+            } catch (Exception e) {
+                log.warn("Failed to serialize object registry: {}", e.getMessage());
+            }
+        }
+
         this.conversationContext.setSystemMessage(
                 CodeGenerationPrompts.buildRulesPrompt(NodeSupport.resolveOutputTarget(workflowConfig)));
         this.conversationContext.setFixedContextMessage(
                 CodeGenerationPrompts.buildFixedContextPrompt(
-                        targetConcept, targetDescription, NodeSupport.resolveOutputTarget(workflowConfig)));
+                        targetConcept, targetDescription,
+                        NodeSupport.resolveOutputTarget(workflowConfig), objectRegistryJson));
 
         String generatedCode;
         String artifactName = defaultArtifactName();
@@ -267,16 +282,12 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
                 sceneJson = "{}";
             }
 
-            // Structured JSON for exact object semantics (kind, content, behavior, dependency, constraints)
-            String sceneRegistryJsonBlock = enrichedRegistry != null
-                    ? buildSceneRegistryJsonBlock(scene, enrichedRegistry) : "";
             // Constraint summary: explicit per-object and scene-level hard invariants
             String constraintSummaryBlock = enrichedRegistry != null
                     ? toConstraintBlock(buildSceneConstraintSummary(scene, enrichedRegistry)) : "";
             String scenePrompt = (isGeoGebra
                     ? CodeGenerationPrompts.geoGebraSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size())
                     : CodeGenerationPrompts.manimSceneCodeUserPrompt(sceneJson, sceneName, i, scenes.size()))
-                    + (sceneRegistryJsonBlock.isBlank() ? "" : "\n\n" + sceneRegistryJsonBlock)
                     + constraintSummaryBlock;
             AiRequestUtils.ExtractedTextResult sceneResult = AiRequestUtils.requestExtractedTextResultAsync(
                     aiClient, log, sceneName, conversationContext,

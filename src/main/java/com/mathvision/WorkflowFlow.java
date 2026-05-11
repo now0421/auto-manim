@@ -198,4 +198,51 @@ public class WorkflowFlow {
         log.info("Workflow assembled (from code, no render): CodeEvaluation with routed CodeFixNode");
         return flow;
     }
+
+    /**
+     * Creates a workflow that only runs the Exploration stage (Stage 0).
+     * Stops after generating the knowledge graph.
+     */
+    public static PocketFlow.Flow<?> createExplorationOnly() {
+        ExplorationNode exploration = new ExplorationNode();
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(exploration);
+        log.info("Workflow assembled (exploration only): Exploration stage only");
+        return flow;
+    }
+
+    /**
+     * Creates a workflow that runs from Exploration to StoryboardValidation (Stages 0-3).
+     * Stops after storyboard validation.
+     */
+    public static PocketFlow.Flow<?> createToStoryboardValidation() {
+        ExplorationNode exploration = new ExplorationNode();
+        MathEnrichmentNode mathEnrich = new MathEnrichmentNode();
+        VisualDesignNode visualDesign = new VisualDesignNode();
+        StoryboardValidationNode storyboardValidation = new StoryboardValidationNode();
+
+        exploration.next(mathEnrich);
+        mathEnrich.next(visualDesign);
+        visualDesign.next(storyboardValidation);
+
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(exploration);
+        log.info("Workflow assembled (to storyboard validation): Exploration -> MathEnrichment -> VisualDesign -> StoryboardValidation");
+        return flow;
+    }
+
+    /**
+     * Creates a workflow that runs from Exploration to VisualDesign (Stages 0-2).
+     * Stops after visual design.
+     */
+    public static PocketFlow.Flow<?> createToVisualDesign() {
+        ExplorationNode exploration = new ExplorationNode();
+        MathEnrichmentNode mathEnrich = new MathEnrichmentNode();
+        VisualDesignNode visualDesign = new VisualDesignNode();
+
+        exploration.next(mathEnrich);
+        mathEnrich.next(visualDesign);
+
+        PocketFlow.Flow<?> flow = new PocketFlow.Flow<>(exploration);
+        log.info("Workflow assembled (to visual design): Exploration -> MathEnrichment -> VisualDesign");
+        return flow;
+    }
 }

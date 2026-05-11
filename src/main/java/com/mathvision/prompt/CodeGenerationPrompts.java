@@ -155,14 +155,20 @@ public final class CodeGenerationPrompts {
 
     public static String buildFixedContextPrompt(String targetConcept,
                                                  String targetDescription,
-                                                 String outputTarget) {
+                                                 String outputTarget,
+                                                 String objectRegistryJson) {
+        String registrySection = "";
+        if (objectRegistryJson != null && !objectRegistryJson.isBlank()) {
+            registrySection = "\n\nObject registry (complete JSON — semantic authority for object identity, geometry meaning, and dependency relationships):\n```json\n"
+                    + objectRegistryJson + "\n```";
+        }
         return SystemPrompts.buildFixedContextSection(SystemPrompts.buildWorkflowPrefix(
                 "Stage 2 / Code Generation",
                 "Generate executable " + ("geogebra".equalsIgnoreCase(outputTarget) ? "GeoGebra code" : "Manim code"),
                 targetConcept,
                 targetDescription,
                 outputTarget
-        ));
+        ) + registrySection);
     }
 
     public static String buildManimValidationFixRulesPrompt() {
@@ -292,7 +298,7 @@ public final class CodeGenerationPrompts {
                         + "- Follow the storyboard's semantic intent; select from storyboard-declared objects, and preserve necessary lifecycle and continuity without rendering every candidate object mechanically.\n"
                         + "- Do not create learner-visible elements outside the storyboard. Backend-only invisible helpers are allowed only when required for calculation or documented API usage.\n"
                         + "- Treat `notes_for_codegen` as mandatory for this scene: implement concrete ranges, endpoints, durations, visibility/lifecycle instructions, transforms, palette notes, and layout constraints exactly when present.\n"
-                        + "- Treat structured `constraints` as hard invariants. The 'Constraint summary' block after the object registry lists per-object constraints for this scene. You MUST respect them:\n"
+                        + "- Treat structured `constraints` as hard invariants. The 'Constraint summary' block in the current request lists per-object constraints for this scene. You MUST respect them:\n"
                         + "  * `lies_on` / `point_on_object`: the point must stay on the referenced object at all times; instantiate it as a point-on-line/curve, not as a free coordinate.\n"
                         + "  * `moves_on_object` with `range`: the point may slide along the referenced object but must NEVER leave it or exceed the specified range; clamp or parameterize the motion accordingly.\n"
                         + "  * `same_side_of`: the object must stay on the specified side of the line.\n"
