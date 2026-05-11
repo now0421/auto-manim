@@ -18,22 +18,16 @@ public final class ToolSchemas {
                     + "  \"type\": \"object\","
                     + "  \"properties\": {"
                     + "    \"color\": { \"type\": \"string\" },"
-                    + "    \"text_color\": { \"type\": \"string\" },"
                     + "    \"fill_color\": { \"type\": \"string\" },"
                     + "    \"stroke_color\": { \"type\": \"string\" },"
-                    + "    \"background_fill_color\": { \"type\": \"string\" },"
-                    + "    \"background_stroke_color\": { \"type\": \"string\" },"
                     + "    \"highlight_color\": { \"type\": \"string\" },"
                     + "    \"font_family\": { \"type\": \"string\" },"
                     + "    \"font_weight\": { \"type\": \"string\" },"
                     + "    \"font_style\": { \"type\": \"string\" },"
-                    + "    \"line_style\": { \"type\": \"string\", \"enum\": [\"solid\", \"dashed\", \"dotted\"] },"
+                    + "    \"line_style\": { \"type\": \"string\", \"enum\": [\"solid\", \"dashed\", \"dotted\", \"dash_dot\"] },"
                     + "    \"opacity\": { \"type\": \"number\" },"
                     + "    \"fill_opacity\": { \"type\": \"number\" },"
                     + "    \"stroke_opacity\": { \"type\": \"number\" },"
-                    + "    \"background_fill_opacity\": { \"type\": \"number\" },"
-                    + "    \"background_stroke_opacity\": { \"type\": \"number\" },"
-                    + "    \"highlight_opacity\": { \"type\": \"number\" },"
                     + "    \"stroke_width\": { \"type\": \"number\" },"
                     + "    \"font_size\": { \"type\": \"number\" },"
                     + "    \"padding\": { \"type\": \"number\" },"
@@ -42,6 +36,8 @@ public final class ToolSchemas {
                     + "    \"point_size\": { \"type\": \"number\" },"
                     + "    \"radius\": { \"type\": \"number\" },"
                     + "    \"marker_size\": { \"type\": \"number\" },"
+                    + "    \"point_style\": { \"type\": \"number\" },"
+                    + "    \"decoration\": { \"type\": \"number\" },"
                     + "    \"label_visible\": { \"type\": \"boolean\" }"
                     + "  },"
                     + "  \"additionalProperties\": false"
@@ -84,8 +80,12 @@ public final class ToolSchemas {
         }
         return schema.replace(
                 "\"marker_size\": { \"type\": \"number\" },"
+                        + "    \"point_style\": { \"type\": \"number\" },"
+                        + "    \"decoration\": { \"type\": \"number\" },"
                         + "    \"label_visible\": { \"type\": \"boolean\" }",
-                "\"marker_size\": { \"type\": \"number\" }");
+                "\"marker_size\": { \"type\": \"number\" },"
+                        + "    \"point_style\": { \"type\": \"number\" },"
+                        + "    \"decoration\": { \"type\": \"number\" }");
     }
 
     // ========================================================================

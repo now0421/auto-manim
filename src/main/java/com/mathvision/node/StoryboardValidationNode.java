@@ -872,12 +872,11 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             return colors;
         }
         Narrative.StoryboardStyle style = object.getStyle();
-        collectColorValue("color", style.getColor(), false, false, colors);
-        collectColorValue("text_color", style.getTextColor(), true, false, colors);
-        collectColorValue("fill_color", style.getFillColor(), false, false, colors);
-        collectColorValue("stroke_color", style.getStrokeColor(), false, false, colors);
-        collectColorValue("background_fill_color", style.getBackgroundFillColor(), false, true, colors);
-        collectColorValue("background_stroke_color", style.getBackgroundStrokeColor(), false, true, colors);
+        boolean isTextKind = isTextual(object);
+        boolean isTextCard = containsAny(normalizeForSemanticCheck(object.getKind()), " text_card ", " formula_card ");
+        collectColorValue("color", style.getColor(), isTextKind, false, colors);
+        collectColorValue("fill_color", style.getFillColor(), false, isTextCard, colors);
+        collectColorValue("stroke_color", style.getStrokeColor(), false, isTextCard, colors);
         collectColorValue("highlight_color", style.getHighlightColor(), false, false, colors);
         return colors;
     }
@@ -1963,7 +1962,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
         }
 
         private boolean isTextBackgroundFill() {
-            return "background_fill_color".equals(propertyPath);
+            return "fill_color".equals(propertyPath) && explicitBackground;
         }
     }
 

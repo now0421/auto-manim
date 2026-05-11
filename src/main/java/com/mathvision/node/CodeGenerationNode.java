@@ -841,11 +841,8 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
     private static String formatStyleSummary(StoryboardStyle style) {
         List<String> parts = new ArrayList<>();
         appendStylePart(parts, "color", style.getColor());
-        appendStylePart(parts, "text_color", style.getTextColor());
         appendStylePart(parts, "fill_color", style.getFillColor());
         appendStylePart(parts, "stroke_color", style.getStrokeColor());
-        appendStylePart(parts, "background_fill_color", style.getBackgroundFillColor());
-        appendStylePart(parts, "background_stroke_color", style.getBackgroundStrokeColor());
         appendStylePart(parts, "highlight_color", style.getHighlightColor());
         appendStylePart(parts, "font_family", style.getFontFamily());
         appendStylePart(parts, "font_weight", style.getFontWeight());
@@ -854,9 +851,6 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         appendStylePart(parts, "opacity", style.getOpacity());
         appendStylePart(parts, "fill_opacity", style.getFillOpacity());
         appendStylePart(parts, "stroke_opacity", style.getStrokeOpacity());
-        appendStylePart(parts, "background_fill_opacity", style.getBackgroundFillOpacity());
-        appendStylePart(parts, "background_stroke_opacity", style.getBackgroundStrokeOpacity());
-        appendStylePart(parts, "highlight_opacity", style.getHighlightOpacity());
         appendStylePart(parts, "stroke_width", style.getStrokeWidth());
         appendStylePart(parts, "font_size", style.getFontSize());
         appendStylePart(parts, "padding", style.getPadding());
@@ -865,6 +859,8 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
         appendStylePart(parts, "point_size", style.getPointSize());
         appendStylePart(parts, "radius", style.getRadius());
         appendStylePart(parts, "marker_size", style.getMarkerSize());
+        appendStylePart(parts, "point_style", style.getPointStyle());
+        appendStylePart(parts, "decoration", style.getDecoration());
         appendStylePart(parts, "label_visible", style.getLabelVisible());
         return "{" + String.join(", ", parts) + "}";
     }

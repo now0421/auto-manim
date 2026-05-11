@@ -148,14 +148,14 @@ class ToolSchemasTest {
         assertTrue(ToolSchemas.STORYBOARD.contains("\"additionalProperties\": false"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"static\", \"follows_anchor\", \"derived\", \"fixed_overlay\"]"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"create\", \"write\", \"transform\", \"highlight\", \"move\", \"fade_out\", \"camera\", \"restyle\"]"));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"solid\", \"dashed\", \"dotted\"]"));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"enum\": [\"solid\", \"dashed\", \"dotted\", \"dash_dot\"]"));
     }
 
     @Test
     void storyboardSchemaAddsTypedStylePropertiesGuardrails() {
         assertFalse(ToolSchemas.STORYBOARD.contains("\"patternProperties\""));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"text_color\": { \"type\": \"string\""));
-        assertTrue(ToolSchemas.STORYBOARD.contains("\"background_fill_color\": { \"type\": \"string\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"highlight_color\": { \"type\": \"string\""));
+        assertTrue(ToolSchemas.STORYBOARD.contains("\"point_style\": { \"type\": \"number\""));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"font_size\": { \"type\": \"number\" }"));
         assertTrue(ToolSchemas.STORYBOARD.contains("\"label_visible\": { \"type\": \"boolean\" }"));
     }

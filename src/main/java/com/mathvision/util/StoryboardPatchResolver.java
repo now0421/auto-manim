@@ -268,11 +268,8 @@ public final class StoryboardPatchResolver {
         }
         StoryboardStyle copy = new StoryboardStyle();
         copy.setColor(style.getColor());
-        copy.setTextColor(style.getTextColor());
         copy.setFillColor(style.getFillColor());
         copy.setStrokeColor(style.getStrokeColor());
-        copy.setBackgroundFillColor(style.getBackgroundFillColor());
-        copy.setBackgroundStrokeColor(style.getBackgroundStrokeColor());
         copy.setHighlightColor(style.getHighlightColor());
         copy.setFontFamily(style.getFontFamily());
         copy.setFontWeight(style.getFontWeight());
@@ -281,9 +278,6 @@ public final class StoryboardPatchResolver {
         copy.setOpacity(style.getOpacity());
         copy.setFillOpacity(style.getFillOpacity());
         copy.setStrokeOpacity(style.getStrokeOpacity());
-        copy.setBackgroundFillOpacity(style.getBackgroundFillOpacity());
-        copy.setBackgroundStrokeOpacity(style.getBackgroundStrokeOpacity());
-        copy.setHighlightOpacity(style.getHighlightOpacity());
         copy.setStrokeWidth(style.getStrokeWidth());
         copy.setFontSize(style.getFontSize());
         copy.setPadding(style.getPadding());
@@ -292,6 +286,8 @@ public final class StoryboardPatchResolver {
         copy.setPointSize(style.getPointSize());
         copy.setRadius(style.getRadius());
         copy.setMarkerSize(style.getMarkerSize());
+        copy.setPointStyle(style.getPointStyle());
+        copy.setDecoration(style.getDecoration());
         copy.setLabelVisible(style.getLabelVisible());
         return copy.hasData() ? copy : null;
     }

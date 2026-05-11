@@ -52,25 +52,27 @@ Contrast requirements:
 Use concise key-value properties that can later map to Manim styling code.
 
 ```text
-color            // 6-digit hex color, #RRGGBB
-text_color       // 6-digit hex text color, #RRGGBB
-fill_color       // 6-digit hex color, #RRGGBB
-fill_opacity     // 0..1
-stroke_color     // 6-digit hex color, #RRGGBB
+color            // 6-digit hex primary color, #RRGGBB (text color for text/equation; dot color for point; stroke fallback for lines)
+fill_color       // 6-digit hex fill color, #RRGGBB (shape interior fill; text_card background box fill)
+fill_opacity     // 0..1 (shape fill transparency; text_card background box fill transparency)
+stroke_color     // 6-digit hex stroke/border color, #RRGGBB (line color; shape border; text_card background box border)
 stroke_width     // numeric stroke width
-stroke_opacity   // 0..1
-background_fill_color    // text-card/background fill color, #RRGGBB
-background_stroke_color  // text-card/background border color, #RRGGBB
+stroke_opacity   // 0..1 (line transparency; text_card background box border transparency)
+highlight_color  // 6-digit hex emphasis color, #RRGGBB
 opacity          // overall opacity, 0..1
 font_size        // text size when needed
 font_family      // text font family
-line_style       // solid | dashed | dotted
+font_weight      // normal | bold
+font_style       // normal | italic
+line_style       // solid | dashed | dotted | dash_dot
 point_size       // point or dot size
-radius           // circle/dot radius when needed
+radius           // circle/dot/arc radius when needed
 marker_size      // angle/tick/marker size
 z_index          // rendering order
-padding          // text-card padding
+padding          // text-card inner padding
 corner_radius    // text-card corner radius
+point_style      // GeoGebra: SetPointStyle code
+decoration       // GeoGebra: SetDecoration code
 label_visible    // true | false
 ```
 
@@ -133,8 +135,8 @@ When writing storyboard JSON:
   raw code.
 * Object `style` must be a single typed object, not an array and not a free-form
   map.
-* Use only the allowed style keys such as `color`, `text_color`, `fill_color`,
-  `stroke_color`, `background_fill_color`, `opacity`, `fill_opacity`,
+* Use only the allowed style keys such as `color`, `fill_color`,
+  `stroke_color`, `opacity`, `fill_opacity`,
   `stroke_width`, and `stroke_opacity`.
 * Create separate storyboard objects for labels, badges, helper outlines,
   cards, or callouts instead of encoding sidecar layers inside another

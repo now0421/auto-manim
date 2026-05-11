@@ -63,17 +63,17 @@ Use concise key-value properties that can later map to GeoGebra styling
 commands.
 
 ```text
-color               // 6-digit hex color, #RRGGBB
-text_color          // 6-digit hex text color, #RRGGBB
-fill_color          // 6-digit hex fill color, #RRGGBB
-stroke_color        // 6-digit hex line or border color, #RRGGBB
-background_fill_color    // text-card/background fill color, #RRGGBB
-background_stroke_color  // text-card/background border color, #RRGGBB
+color               // 6-digit hex primary color, #RRGGBB (text color for text/equation; dot color for point; stroke fallback for lines)
+fill_color          // 6-digit hex fill color, #RRGGBB (shape interior fill; text_card background box fill)
+stroke_color        // 6-digit hex stroke/border color, #RRGGBB (line color; shape border; text_card background box border)
+highlight_color     // 6-digit hex emphasis color, #RRGGBB
 stroke_width        // stronger or lighter stroke emphasis
-line_style          // solid | dashed | dotted
-point_size          // numeric point size
-fill_opacity        // 0..1
-stroke_opacity      // 0..1
+line_style          // solid | dashed | dotted | dash_dot
+point_size          // numeric point size (GeoGebra: SetPointSize)
+point_style         // GeoGebra: SetPointStyle code
+decoration          // GeoGebra: SetDecoration code
+fill_opacity        // 0..1 (shape fill transparency; text_card background box fill transparency)
+stroke_opacity      // 0..1 (line transparency; text_card background box border transparency)
 opacity             // 0..1
 font_size           // text size hint
 padding             // text-card padding
@@ -90,7 +90,7 @@ When writing storyboard JSON:
 * `color_scheme` should describe semantic mapping, not implementation details.
 * Object `style` must be a single typed object, not an array and not a free-form
   map.
-* Use only the allowed style keys such as `color`, `text_color`, `fill_color`,
+* Use only the allowed style keys such as `color`, `fill_color`,
   `stroke_color`, `stroke_width`, `line_style`, `fill_opacity`, and
   `label_visible`.
 * Create separate storyboard objects for labels, badges, helper outlines,

@@ -94,7 +94,7 @@ public final class VisualDesignPrompts {
                     + "- Plan per-scene variation: vary the dominant color, spatial layout, animation entry style, and visual density across scenes. Never use identical visual config for every scene.\n"
                     + "- Use a single typed `style` object per storyboard object, never a style array and never custom style keys.\n"
                     + "- Style describes the object itself only. Create separate storyboard objects for labels, badges, helper outlines, cards, or callouts that have their own identity.\n"
-                    + "- For text cards, put text/background fields on that text_card object's single `style`, such as `text_color`, `background_fill_color`, and `background_stroke_color`.\n"
+                    + "- For text cards, put text/background fields on that text_card object's single `style`, such as `color`, `fill_color`, and `stroke_color`.\n"
                     + "- Only include `style` when it adds meaningful rendering properties; omit it for visually plain objects.\n";
 
     private static final String MANIM_SYSTEM =

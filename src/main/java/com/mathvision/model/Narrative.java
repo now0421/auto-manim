@@ -436,81 +436,134 @@ public class Narrative {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class StoryboardStyle {
 
+        // ── Color ────────────────────────────────────────
+
+        /** Primary foreground / accent color (#RRGGBB).
+         *  For text/equation: text color.
+         *  For point: dot color.
+         *  For line/segment/ray: stroke color when stroke_color is absent. */
         @JsonProperty("color")
         private String color;
 
-        @JsonProperty("text_color")
-        private String textColor;
-
+        /** Shape fill color (#RRGGBB).
+         *  For circle/polygon/region: interior fill.
+         *  For text_card: background box fill color. */
         @JsonProperty("fill_color")
         private String fillColor;
 
+        /** Stroke / border / outline color (#RRGGBB).
+         *  For line/segment/ray: line color.
+         *  For circle/polygon: border color.
+         *  For text_card: background box border color.
+         *  For angle_marker: arc color. */
         @JsonProperty("stroke_color")
         private String strokeColor;
 
-        @JsonProperty("background_fill_color")
-        private String backgroundFillColor;
-
-        @JsonProperty("background_stroke_color")
-        private String backgroundStrokeColor;
-
+        /** Emphasis / highlight color (#RRGGBB), used for highlight actions. */
         @JsonProperty("highlight_color")
         private String highlightColor;
 
-        @JsonProperty("font_family")
-        private String fontFamily;
+        // ── Opacity ────────────────────────────────────────
 
-        @JsonProperty("font_weight")
-        private String fontWeight;
-
-        @JsonProperty("font_style")
-        private String fontStyle;
-
-        @JsonProperty("line_style")
-        private String lineStyle;
-
+        /** Overall opacity (0..1). Overrides fill_opacity and stroke_opacity when set. */
         @JsonProperty("opacity")
         private Double opacity;
 
+        /** Fill opacity (0..1).
+         *  For shapes: interior transparency.
+         *  For text_card: background box fill transparency. */
         @JsonProperty("fill_opacity")
         private Double fillOpacity;
 
+        /** Stroke opacity (0..1).
+         *  For line/segment: line transparency.
+         *  For text_card: background box border transparency. */
         @JsonProperty("stroke_opacity")
         private Double strokeOpacity;
 
-        @JsonProperty("background_fill_opacity")
-        private Double backgroundFillOpacity;
+        // ── Stroke / line width ────────────────────────────────────
 
-        @JsonProperty("background_stroke_opacity")
-        private Double backgroundStrokeOpacity;
-
-        @JsonProperty("highlight_opacity")
-        private Double highlightOpacity;
-
+        /** Stroke / line width (in Mobject units for Manim, or thickness index for GeoGebra). */
         @JsonProperty("stroke_width")
         private Double strokeWidth;
 
+        // ── Line style ────────────────────────────────────────
+
+        /** Line dash style: solid | dashed | dotted | dash_dot.
+         *  Manim: DashedLine / DashedVMobject.
+         *  GeoGebra: SetLineStyle (0=solid, 1=long dash, 2=short dash, 3=dotted, 4=dash-dot). */
+        @JsonProperty("line_style")
+        private String lineStyle;
+
+        // ── Font / text ────────────────────────────────────
+
+        /** Font size in points (Manim: font_size; GeoGebra: no direct command, default size). */
         @JsonProperty("font_size")
         private Double fontSize;
 
-        @JsonProperty("padding")
-        private Double padding;
+        /** Font family name (Manim: font parameter; GeoGebra: not supported, ignored). */
+        @JsonProperty("font_family")
+        private String fontFamily;
 
-        @JsonProperty("corner_radius")
-        private Double cornerRadius;
+        /** Font weight: normal | bold (Manim: t2w; GeoGebra: not supported, ignored). */
+        @JsonProperty("font_weight")
+        private String fontWeight;
 
-        @JsonProperty("z_index")
-        private Double zIndex;
+        /** Font style: normal | italic (Manim: t2s; GeoGebra: not supported, ignored). */
+        @JsonProperty("font_style")
+        private String fontStyle;
 
-        @JsonProperty("point_size")
-        private Double pointSize;
+        // ── Geometry size ────────────────────────────────────────
 
+        /** Point dot radius (Manim: Dot radius; GeoGebra: SetPointSize). */
         @JsonProperty("radius")
         private Double radius;
 
+        /** Point size (GeoGebra: SetPointSize; Manim: use radius instead). */
+        @JsonProperty("point_size")
+        private Double pointSize;
+
+        /** Angle marker / arc radius. */
         @JsonProperty("marker_size")
         private Double markerSize;
 
+        // ── Text card specific ────────────────────────────────────
+
+        /** Inner padding between text and background box edge (text_card only).
+         *  Manim: BackgroundRectangle buff.
+         *  GeoGebra: manual offset between text and polygon boundary. */
+        @JsonProperty("padding")
+        private Double padding;
+
+        /** Corner radius of the background box (text_card only).
+         *  Manim: SurroundingRectangle corner_radius.
+         *  GeoGebra: not natively supported, polygon has sharp corners. */
+        @JsonProperty("corner_radius")
+        private Double cornerRadius;
+
+        // ── Layer / layout ────────────────────────────────────
+
+        /** Z-index / layer for draw order.
+         *  Manim: set_z_index.
+         *  GeoGebra: SetLayer (0-9). */
+        @JsonProperty("z_index")
+        private Double zIndex;
+
+        // ── GeoGebra specific ────────────────────────────────────
+
+        /** Point style code (GeoGebra only: 0=dot, 1=cross, 2=empty dot, 3=plus, ...).
+         *  Manim: not applicable, use radius. */
+        @JsonProperty("point_style")
+        private Double pointStyle;
+
+        /** Decoration code (GeoGebra only: segment/tick decorations). */
+        @JsonProperty("decoration")
+        private Double decoration;
+
+        // ── Label visibility ────────────────────────────────────
+
+        /** Whether the native object label should be visible
+         *  (GeoGebra: ShowLabel; Manim: use explicit text objects). */
         @JsonProperty("label_visible")
         private Boolean labelVisible;
 
@@ -519,35 +572,14 @@ public class Narrative {
         public String getColor() { return color; }
         public void setColor(String color) { this.color = color; }
 
-        public String getTextColor() { return textColor; }
-        public void setTextColor(String textColor) { this.textColor = textColor; }
-
         public String getFillColor() { return fillColor; }
         public void setFillColor(String fillColor) { this.fillColor = fillColor; }
 
         public String getStrokeColor() { return strokeColor; }
         public void setStrokeColor(String strokeColor) { this.strokeColor = strokeColor; }
 
-        public String getBackgroundFillColor() { return backgroundFillColor; }
-        public void setBackgroundFillColor(String backgroundFillColor) { this.backgroundFillColor = backgroundFillColor; }
-
-        public String getBackgroundStrokeColor() { return backgroundStrokeColor; }
-        public void setBackgroundStrokeColor(String backgroundStrokeColor) { this.backgroundStrokeColor = backgroundStrokeColor; }
-
         public String getHighlightColor() { return highlightColor; }
         public void setHighlightColor(String highlightColor) { this.highlightColor = highlightColor; }
-
-        public String getFontFamily() { return fontFamily; }
-        public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; }
-
-        public String getFontWeight() { return fontWeight; }
-        public void setFontWeight(String fontWeight) { this.fontWeight = fontWeight; }
-
-        public String getFontStyle() { return fontStyle; }
-        public void setFontStyle(String fontStyle) { this.fontStyle = fontStyle; }
-
-        public String getLineStyle() { return lineStyle; }
-        public void setLineStyle(String lineStyle) { this.lineStyle = lineStyle; }
 
         public Double getOpacity() { return opacity; }
         public void setOpacity(Double opacity) { this.opacity = opacity; }
@@ -558,20 +590,32 @@ public class Narrative {
         public Double getStrokeOpacity() { return strokeOpacity; }
         public void setStrokeOpacity(Double strokeOpacity) { this.strokeOpacity = strokeOpacity; }
 
-        public Double getBackgroundFillOpacity() { return backgroundFillOpacity; }
-        public void setBackgroundFillOpacity(Double backgroundFillOpacity) { this.backgroundFillOpacity = backgroundFillOpacity; }
-
-        public Double getBackgroundStrokeOpacity() { return backgroundStrokeOpacity; }
-        public void setBackgroundStrokeOpacity(Double backgroundStrokeOpacity) { this.backgroundStrokeOpacity = backgroundStrokeOpacity; }
-
-        public Double getHighlightOpacity() { return highlightOpacity; }
-        public void setHighlightOpacity(Double highlightOpacity) { this.highlightOpacity = highlightOpacity; }
-
         public Double getStrokeWidth() { return strokeWidth; }
         public void setStrokeWidth(Double strokeWidth) { this.strokeWidth = strokeWidth; }
 
+        public String getLineStyle() { return lineStyle; }
+        public void setLineStyle(String lineStyle) { this.lineStyle = lineStyle; }
+
         public Double getFontSize() { return fontSize; }
         public void setFontSize(Double fontSize) { this.fontSize = fontSize; }
+
+        public String getFontFamily() { return fontFamily; }
+        public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; }
+
+        public String getFontWeight() { return fontWeight; }
+        public void setFontWeight(String fontWeight) { this.fontWeight = fontWeight; }
+
+        public String getFontStyle() { return fontStyle; }
+        public void setFontStyle(String fontStyle) { this.fontStyle = fontStyle; }
+
+        public Double getRadius() { return radius; }
+        public void setRadius(Double radius) { this.radius = radius; }
+
+        public Double getPointSize() { return pointSize; }
+        public void setPointSize(Double pointSize) { this.pointSize = pointSize; }
+
+        public Double getMarkerSize() { return markerSize; }
+        public void setMarkerSize(Double markerSize) { this.markerSize = markerSize; }
 
         public Double getPadding() { return padding; }
         public void setPadding(Double padding) { this.padding = padding; }
@@ -582,44 +626,37 @@ public class Narrative {
         public Double getZIndex() { return zIndex; }
         public void setZIndex(Double zIndex) { this.zIndex = zIndex; }
 
-        public Double getPointSize() { return pointSize; }
-        public void setPointSize(Double pointSize) { this.pointSize = pointSize; }
+        public Double getPointStyle() { return pointStyle; }
+        public void setPointStyle(Double pointStyle) { this.pointStyle = pointStyle; }
 
-        public Double getRadius() { return radius; }
-        public void setRadius(Double radius) { this.radius = radius; }
-
-        public Double getMarkerSize() { return markerSize; }
-        public void setMarkerSize(Double markerSize) { this.markerSize = markerSize; }
+        public Double getDecoration() { return decoration; }
+        public void setDecoration(Double decoration) { this.decoration = decoration; }
 
         public Boolean getLabelVisible() { return labelVisible; }
         public void setLabelVisible(Boolean labelVisible) { this.labelVisible = labelVisible; }
 
         public boolean hasData() {
             return color != null
-                    || textColor != null
                     || fillColor != null
                     || strokeColor != null
-                    || backgroundFillColor != null
-                    || backgroundStrokeColor != null
                     || highlightColor != null
-                    || fontFamily != null
-                    || fontWeight != null
-                    || fontStyle != null
-                    || lineStyle != null
                     || opacity != null
                     || fillOpacity != null
                     || strokeOpacity != null
-                    || backgroundFillOpacity != null
-                    || backgroundStrokeOpacity != null
-                    || highlightOpacity != null
                     || strokeWidth != null
+                    || lineStyle != null
                     || fontSize != null
+                    || fontFamily != null
+                    || fontWeight != null
+                    || fontStyle != null
+                    || radius != null
+                    || pointSize != null
+                    || markerSize != null
                     || padding != null
                     || cornerRadius != null
                     || zIndex != null
-                    || pointSize != null
-                    || radius != null
-                    || markerSize != null
+                    || pointStyle != null
+                    || decoration != null
                     || labelVisible != null;
         }
     }
