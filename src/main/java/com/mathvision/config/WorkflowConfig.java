@@ -20,8 +20,6 @@ public class WorkflowConfig {
     public static final String OUTPUT_TARGET_MANIM = "manim";
     public static final String OUTPUT_TARGET_GEOGEBRA = "geogebra";
 
-    private int maxDepth;
-    private int minDepth;
     private boolean parallelMathEnrichment;
     private boolean parallelVisualDesign;
     private int maxConcurrent;
@@ -81,10 +79,6 @@ public class WorkflowConfig {
         return this;
     }
 
-    public int getMaxDepth() { return maxDepth; }
-    public void setMaxDepth(int maxDepth) { this.maxDepth = maxDepth; }
-    public int getMinDepth() { return minDepth; }
-    public void setMinDepth(int minDepth) { this.minDepth = minDepth; }
     public boolean isParallelMathEnrichment() { return parallelMathEnrichment; }
     public void setParallelMathEnrichment(boolean parallelMathEnrichment) {
         this.parallelMathEnrichment = parallelMathEnrichment;

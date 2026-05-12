@@ -167,8 +167,6 @@ class ExplorationNodeTest {
         WorkflowConfig config = new WorkflowConfig();
         config.setInputMode(inputMode);
         config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_MANIM);
-        config.setMaxDepth(4);
-        config.setMinDepth(2);
         return config;
     }
 

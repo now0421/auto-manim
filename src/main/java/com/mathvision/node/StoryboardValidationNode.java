@@ -55,7 +55,14 @@ import java.util.concurrent.CompletionException;
 public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrative, String> {
 
     private static final Logger log = LoggerFactory.getLogger(StoryboardValidationNode.class);
-    private static final String DEFAULT_STORYBOARD_BACKGROUND = "#000000";
+    private static final String DEFAULT_STORYBOARD_BACKGROUND_DARK = "#000000";
+    private static final String DEFAULT_STORYBOARD_BACKGROUND_LIGHT = "#FFFFFF";
+
+    private String defaultStoryboardBackground() {
+        return WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equalsIgnoreCase(outputTarget)
+                ? DEFAULT_STORYBOARD_BACKGROUND_LIGHT
+                : DEFAULT_STORYBOARD_BACKGROUND_DARK;
+    }
     private static final double NON_TEXT_CONTRAST_THRESHOLD = 3.0;
     private static final double TEXT_CONTRAST_THRESHOLD = 4.5;
     private static final double FRAME_MIN_X = -7.111111;
@@ -280,19 +287,41 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             issues.add("Storyboard has no scenes");
             return issues;
         }
+
+        // Enrich placements via LLM for layout validation only.
+        // Objects without placement (derived objects) are otherwise invisible
+        // to offscreen / overlap checks. The enriched storyboard is used
+        // exclusively for validateSceneLayout and is discarded afterward.
+        Storyboard placementEnrichedStoryboard = resolvePlacementEnrichedStoryboard(storyboard);
+
         Storyboard mergedStoryboard = StoryboardPatchResolver.buildMergedStoryboard(storyboard);
+        Storyboard mergedEnrichedStoryboard = placementEnrichedStoryboard != null
+                ? StoryboardPatchResolver.buildMergedStoryboard(placementEnrichedStoryboard)
+                : null;
 
         for (int i = 0; i < storyboard.getScenes().size(); i++) {
             StoryboardScene scene = storyboard.getScenes().get(i);
             String label = "scene " + (i + 1) + " (" + scene.getSceneId() + ")";
-            StoryboardScene mergedScene = mergedStoryboard != null
-                    && mergedStoryboard.getScenes() != null
-                    && i < mergedStoryboard.getScenes().size()
-                    ? mergedStoryboard.getScenes().get(i)
-                    : null;
-            validateSceneLayout(label, mergedScene, issues);
 
-            // Check required fields
+            // Use enriched storyboard for layout checks (offscreen / overlap)
+            StoryboardScene mergedEnrichedScene = mergedEnrichedStoryboard != null
+                    && mergedEnrichedStoryboard.getScenes() != null
+                    && i < mergedEnrichedStoryboard.getScenes().size()
+                    ? mergedEnrichedStoryboard.getScenes().get(i)
+                    : null;
+            if (mergedEnrichedScene != null) {
+                validateSceneLayout(label, mergedEnrichedScene, issues);
+            } else {
+                // Fallback to original merged storyboard if enrichment failed
+                StoryboardScene mergedScene = mergedStoryboard != null
+                        && mergedStoryboard.getScenes() != null
+                        && i < mergedStoryboard.getScenes().size()
+                        ? mergedStoryboard.getScenes().get(i)
+                        : null;
+                validateSceneLayout(label, mergedScene, issues);
+            }
+
+            // Check required fields (using original storyboard)
             if (scene.getTitle() == null || scene.getTitle().isBlank()) {
                 issues.add(label + ": missing title");
             }
@@ -301,6 +330,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             }
         }
 
+        // All remaining checks use the original storyboard
         issues.addAll(validateAsciiText(storyboard));
         issues.addAll(validateStoryboardColors(storyboard));
         issues.addAll(validateDependencyFields(storyboard));
@@ -914,7 +944,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 return;
             }
             ColorReference background = selectTextBackground(validColors);
-            String backgroundColor = background != null ? background.value : DEFAULT_STORYBOARD_BACKGROUND;
+            String backgroundColor = background != null ? background.value : defaultStoryboardBackground();
             validateContrast(context, objectId, foreground.value, backgroundColor,
                     TEXT_CONTRAST_THRESHOLD, "text", issues);
             return;
@@ -924,7 +954,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             if (foreground.isExplicitBackground()) {
                 continue;
             }
-            validateContrast(context, objectId, foreground.value, DEFAULT_STORYBOARD_BACKGROUND,
+            validateContrast(context, objectId, foreground.value, defaultStoryboardBackground(),
                     NON_TEXT_CONTRAST_THRESHOLD, "non-text", issues);
         }
     }
@@ -1707,6 +1737,120 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                 : 0;
     }
 
+    // ---- Placement enrichment for layout validation ----
+
+    /**
+     * Asks the LLM to compute placements for objects that lack coordinates,
+     * so that layout validation (offscreen / overlap checks) can cover derived
+     * objects whose positions are determined by dependency_relations rather
+     * than explicit placement fields.
+     *
+     * <p>The returned storyboard is <strong>only</strong> used for
+     * {@code validateSceneLayout}; the original storyboard is retained for
+     * all other checks and for the final output.
+     */
+    private Storyboard resolvePlacementEnrichedStoryboard(Storyboard storyboard) {
+        if (aiClient == null) {
+            log.debug("No AI client available for placement enrichment; skipping");
+            return null;
+        }
+        try {
+            boolean hasObjectsNeedingPlacement = false;
+            if (storyboard.getObjectRegistry() != null) {
+                for (StoryboardObject object : storyboard.getObjectRegistry()) {
+                    if (object != null && (object.getPlacement() == null || !object.getPlacement().hasData())) {
+                        hasObjectsNeedingPlacement = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasObjectsNeedingPlacement) {
+                return null;
+            }
+
+            String storyboardJson = JsonUtils.mapper().writeValueAsString(storyboard);
+
+            NodeConversationContext conversationContext = new NodeConversationContext(Integer.MAX_VALUE);
+            conversationContext.setSystemMessage(NarrativePrompts.PLACEMENT_ENRICHMENT_SYSTEM_PROMPT);
+
+            String userPrompt = NarrativePrompts.buildPlacementEnrichmentUserPrompt(storyboardJson);
+
+            JsonNode enrichedData = AiRequestUtils.requestJsonObjectAsync(
+                            aiClient,
+                            log,
+                            "placement-enrichment",
+                            conversationContext.getPinnedMessages(),
+                            conversationContext.getMaxInputTokens(),
+                            SystemPrompts.buildCurrentRequestSection(userPrompt),
+                            ToolSchemas.storyboard(outputTarget),
+                            () -> toolCalls++)
+                    .join();
+
+            if (enrichedData == null) {
+                log.debug("Placement enrichment returned no data");
+                return null;
+            }
+
+            JsonNode storyboardNode = enrichedData.has("storyboard")
+                    ? enrichedData.get("storyboard") : enrichedData;
+            if (storyboardNode == null || !storyboardNode.has("scenes")) {
+                log.debug("Placement enrichment returned invalid storyboard structure");
+                return null;
+            }
+
+            Storyboard enrichedStoryboard = JsonUtils.mapper().treeToValue(storyboardNode, Storyboard.class);
+            enrichedStoryboard = StoryboardNormalizer.normalize(enrichedStoryboard);
+
+            // Verify existing placements are preserved: compare object counts with placements
+            int originalWithPlacement = countObjectsWithPlacement(storyboard);
+            int enrichedWithPlacement = countObjectsWithPlacement(enrichedStoryboard);
+            log.info("Placement enrichment: objects with placement {} -> {}",
+                    originalWithPlacement, enrichedWithPlacement);
+
+            return enrichedStoryboard;
+        } catch (CompletionException e) {
+            log.warn("Placement enrichment call failed: {}", e.getMessage());
+            return null;
+        } catch (Exception e) {
+            log.warn("Placement enrichment failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private int countObjectsWithPlacement(Storyboard storyboard) {
+        int count = 0;
+        if (storyboard == null) {
+            return count;
+        }
+        if (storyboard.getObjectRegistry() != null) {
+            for (StoryboardObject object : storyboard.getObjectRegistry()) {
+                if (object != null && object.getPlacement() != null && object.getPlacement().hasData()) {
+                    count++;
+                }
+            }
+        }
+        if (storyboard.getScenes() != null) {
+            for (StoryboardScene scene : storyboard.getScenes()) {
+                count += countObjectsWithPlacementInList(scene != null ? scene.getEnteringObjects() : null);
+                count += countObjectsWithPlacementInList(scene != null ? scene.getPersistentObjects() : null);
+            }
+        }
+        return count;
+    }
+
+    private int countObjectsWithPlacementInList(List<StoryboardObject> objects) {
+        int count = 0;
+        if (objects == null) {
+            return count;
+        }
+        for (StoryboardObject object : objects) {
+            if (object != null && object.getPlacement() != null && object.getPlacement().hasData()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     // ---- LLM fix pass ----
 
     private Narrative attemptLlmFix(Narrative narrative, List<String> issues) {
@@ -1718,18 +1862,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
             String storyboardJson = JsonUtils.mapper().writeValueAsString(narrative.getStoryboard());
             NodeConversationContext conversationContext = new NodeConversationContext(Integer.MAX_VALUE);
             String systemPrompt = NarrativePrompts.buildRulesPrompt(outputTarget)
-                    + "\n\nStoryboard validation repair rules:\n"
-                    + "- Use dependency_objects as the authoritative dependency graph.\n"
-                    + "- Use a single typed `style` object only. Do not return style arrays, nested `properties`, role/type layer entries, or custom style keys.\n"
-                    + "- Rewrite storyboard colors as 6-digit hex strings (`#RRGGBB`) only; do not use named colors or 8-digit hex.\n"
-                    + "- Keep opacity in separate `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
-                    + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to #000000 when no text background is present.\n"
-                    + "- For non-text objects, ensure foreground colors contrast with #000000 at ratio >= 3.0.\n"
-                    + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or structured constraints.\n"
-                    + "- Every dependency-driven object must define dependency_objects as object ids, dependency_relation as a concise construction relation, and structured constraints for hard geometric invariants.\n"
-                    + "- ASCII repair is mandatory: rewrite every JSON string value so it contains only characters with code <= 0x7F.\n"
-                    + "- Apply this normalization map wherever needed: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
-                    + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.";
+                    + "\n\n" + NarrativePrompts.buildRepairRules(outputTarget);
             conversationContext.setSystemMessage(systemPrompt);
             conversationContext.setFixedContextMessage(NarrativePrompts.buildFixedContextPrompt(
                     narrative.getTargetConcept(),
@@ -1737,26 +1870,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                     outputTarget,
                     buildDagChainSummary(narrative.getStoryboard())));
 
-            StringBuilder userPrompt = new StringBuilder();
-            userPrompt.append("Please clean up this storyboard so it is coherent, and ensure that all coordinate-based elements stay within bounds and do not visibly overlap.\n");
-            userPrompt.append("Preserve the original narrative order, object identity, and teaching intent as much as possible; only adjust the layout and wording where necessary.\n");
-            userPrompt.append("Replace every non-ASCII text token reported below with an ASCII equivalent across the full storyboard.\n");
-            userPrompt.append("For each reported token, locate every occurrence in the current storyboard and rewrite the surrounding sentence if needed so the whole string is ASCII-only. For example, replace curly apostrophes with straight apostrophes, em/en dashes with ` - ` or `-`, and mathematical comparison glyphs with ASCII operators such as `!=`, `<=`, or `>=`.\n");
-            userPrompt.append("Before returning, perform a final character-by-character pass over every JSON string value and ensure no character code is greater than 0x7F.\n");
-            userPrompt.append("If you find issues, fix them directly. If there are no issues, still perform a full cleanup to make the storyboard more stable and readable.\n");
-            if (issues != null && !issues.isEmpty()) {
-                userPrompt.append("Static validation findings:\n");
-                for (String issue : issues) {
-                    if (issue.startsWith("Issue:")) {
-                        userPrompt.append(issue).append("\n");
-                    } else {
-                        userPrompt.append("- ").append(issue).append("\n");
-                    }
-                }
-                userPrompt.append("\n");
-            }
-            userPrompt.append("Current storyboard:\n```json\n").append(storyboardJson).append("\n```\n\n");
-            userPrompt.append("Return the full corrected storyboard JSON with all scenes, object_registry, and metadata.");
+            String userPrompt = NarrativePrompts.buildCleanupUserPrompt(storyboardJson, issues);
 
             JsonNode fixedData = AiRequestUtils.requestJsonObjectAsync(
                             aiClient,
@@ -1764,7 +1878,7 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                             "storyboard-fix",
                             conversationContext.getPinnedMessages(),
                             conversationContext.getMaxInputTokens(),
-                            SystemPrompts.buildCurrentRequestSection(userPrompt.toString()),
+                            SystemPrompts.buildCurrentRequestSection(userPrompt),
                             ToolSchemas.storyboard(outputTarget),
                             () -> toolCalls++)
                     .join();

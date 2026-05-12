@@ -23,7 +23,6 @@ import com.mathvision.prompt.StoryboardJsonBuilder;
 import com.mathvision.util.ErrorSummarizer;
 import com.mathvision.util.GeoGebraCodeUtils;
 import com.mathvision.service.FileOutputService;
-import com.mathvision.util.StoryboardCodegenSemantics;
 import com.mathvision.util.StoryboardPatchResolver;
 import com.mathvision.util.TextUtils;
 import com.mathvision.util.TimeUtils;
@@ -1385,9 +1384,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (!chain.isEmpty()) {
             context.put("full_dependency_chain", chain);
         }
-        if (StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
-            context.put("derived_placement_omitted", true);
-        }
         return context;
     }
 
@@ -1426,13 +1422,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (object.getConstraints() != null && !object.getConstraints().isEmpty()) {
             map.put("constraints", object.getConstraints());
         }
-        if (StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(object)) {
-            map.put("placement", "omitted_for_dependency_driven_object");
-        } else {
-            String placementSummary = formatPlacementSummary(object);
-            if (!placementSummary.isBlank()) {
-                map.put("placement", placementSummary);
-            }
+        String placementSummary = formatPlacementSummary(object);
+        if (!placementSummary.isBlank()) {
+            map.put("placement", placementSummary);
         }
         return map;
     }

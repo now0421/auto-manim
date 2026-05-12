@@ -95,6 +95,7 @@ public final class VisualDesignPrompts {
                     + "- Use a single typed `style` object per storyboard object, never a style array and never custom style keys.\n"
                     + "- Style describes the object itself only. Create separate storyboard objects for labels, badges, helper outlines, cards, or callouts that have their own identity.\n"
                     + "- Prefer `kind = text` or `kind = equation` over `kind = text_card` or `kind = formula_card`. Display text directly without a background box/card unless the card itself is teaching-essential (e.g. a titled result panel). Most formulas and labels are clearer without a surrounding box.\n"
+                    + "- Objects whose coordinates can be computed from other elements (e.g. intersections, midpoints, perpendicular feet) do not need `placement`; only objects that require an initial or free position (e.g. a moving point on a line) should carry `placement`.\n"
                     + "- Only include `style` when it adds meaningful rendering properties; omit it for visually plain objects.\n";
 
     private static final String MANIM_SYSTEM =

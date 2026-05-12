@@ -238,7 +238,7 @@ class CodeGenerationNodeRoutingTest {
     }
 
     @Test
-    void enrichedRegistrySummaryDoesNotExposePlacementForDerivedObjects() {
+    void enrichedRegistrySummaryExposesPlacementForAllObjects() {
         StoryboardObject fixedPoint = new StoryboardObject();
         fixedPoint.setId("A");
         fixedPoint.setKind("point");
@@ -264,8 +264,7 @@ class CodeGenerationNodeRoutingTest {
         assertTrue(summary.contains("id=A, kind=point, content=, behavior=static, dependency_relation=independent, placement=world x=-3.0 y=1.0"));
         assertTrue(summary.contains("id=Pmin"));
         assertTrue(summary.contains("dependency_relation=intersection"));
-        assertFalse(summary.contains("id=Pmin, kind=point, content=, behavior=derived, dependency_objects=[ABprime, l], dependency_relation=intersection, placement="));
-        assertFalse(summary.contains("x=0.6 y=-1.0"));
+        assertTrue(summary.contains("id=Pmin, kind=point, content=, behavior=derived, dependency_objects=[ABprime, l], dependency_relation=intersection, placement=world x=0.6 y=-1.0"));
     }
 
     private static Narrative buildNarrative() {

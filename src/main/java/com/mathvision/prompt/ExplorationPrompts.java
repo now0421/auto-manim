@@ -99,8 +99,8 @@ public final class ExplorationPrompts {
         ));
     }
 
-    public static String buildConceptGraphRulesPrompt(int maxDepth, int minDepth) {
-        return SystemPrompts.buildRulesSection(CONCEPT_GRAPH_SYSTEM + depthBudgetInstruction(maxDepth, minDepth));
+    public static String buildConceptGraphRulesPrompt() {
+        return SystemPrompts.buildRulesSection(CONCEPT_GRAPH_SYSTEM);
     }
 
     public static String buildConceptGraphFixedContextPrompt(String targetDescription) {
@@ -113,8 +113,8 @@ public final class ExplorationPrompts {
         ));
     }
 
-    public static String buildProblemGraphRulesPrompt(int maxDepth, int minDepth) {
-        return SystemPrompts.buildRulesSection(PROBLEM_GRAPH_SYSTEM + depthBudgetInstruction(maxDepth, minDepth));
+    public static String buildProblemGraphRulesPrompt() {
+        return SystemPrompts.buildRulesSection(PROBLEM_GRAPH_SYSTEM);
     }
 
     public static String buildProblemGraphFixedContextPrompt(String targetDescription) {
@@ -127,9 +127,4 @@ public final class ExplorationPrompts {
         ));
     }
 
-    private static String depthBudgetInstruction(int maxDepth, int minDepth) {
-        return "Try to stay within the recommended maximum depth of " + Math.max(1, maxDepth)
-                + " levels when possible. Additionally, try to make the graph at least " + Math.max(0, minDepth)
-                + " levels deep when the teaching flow naturally supports it.\n";
-    }
 }

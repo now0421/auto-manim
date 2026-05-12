@@ -34,7 +34,7 @@ class PromptModulesTest {
     @Test
     void conceptGraphPromptFramesCompactTypedTeachingDag() {
         String prompt = ExplorationPrompts.buildConceptGraphFixedContextPrompt("Demo")
-                + ExplorationPrompts.buildConceptGraphRulesPrompt(4, 1);
+                + ExplorationPrompts.buildConceptGraphRulesPrompt();
 
         assertTrue(prompt.contains("compact teaching DAG"));
         assertTrue(prompt.contains("5 to 9 strong beats"));
@@ -43,8 +43,8 @@ class PromptModulesTest {
 
     @Test
     void stageZeroAsciiRulesDoNotPolluteTheirOwnPrompts() {
-        String conceptPrompt = ExplorationPrompts.buildConceptGraphRulesPrompt(4, 1);
-        String problemPrompt = ExplorationPrompts.buildProblemGraphRulesPrompt(4, 1);
+        String conceptPrompt = ExplorationPrompts.buildConceptGraphRulesPrompt();
+        String problemPrompt = ExplorationPrompts.buildProblemGraphRulesPrompt();
 
         assertTrue(isAscii(SystemPrompts.ASCII_TEXT_RULES));
         assertTrue(SystemPrompts.ASCII_TEXT_RULES.contains("U+2019 -> `'`"));

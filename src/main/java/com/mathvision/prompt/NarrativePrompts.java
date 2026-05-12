@@ -1,5 +1,6 @@
 package com.mathvision.prompt;
 
+import com.mathvision.config.WorkflowConfig;
 import com.mathvision.model.Narrative.Storyboard;
 
 /**
@@ -120,6 +121,101 @@ public final class NarrativePrompts {
                     + EXAMPLE_OUTPUT
                     + SystemPrompts.TOOL_CALL_HINT
                     + SystemPrompts.JSON_ONLY_OUTPUT + " Do not wrap it in markdown.";
+
+    // ========================================================================
+    // Placement enrichment prompts (for layout validation of derived objects)
+    // ========================================================================
+
+    /** System prompt for the placement-enrichment LLM pass. */
+    public static final String PLACEMENT_ENRICHMENT_SYSTEM_PROMPT =
+            "You are a coordinate computation assistant for a math visualization storyboard.\n"
+                    + "Your only task is to compute placement coordinates for objects that do not have them.\n"
+                    + "Rules:\n"
+                    + "- Do NOT modify any existing placement that already has data.\n"
+                    + "- For objects without placement, compute a reasonable world-space coordinate "
+                    + "based on their dependency_objects, dependency_relation, constraints, kind, and content.\n"
+                    + "- Use coordinate_space = \"world\" for all computed placements.\n"
+                    + "- Return the complete storyboard JSON with placements added for objects that lacked them. "
+                    + "Every other field must remain identical to the input.\n"
+                    + "- Frame bounds: x in [-7.11, 7.11], y in [-4, 4]. Keep objects within these bounds.";
+
+    /**
+     * Build the user prompt for the placement-enrichment pass.
+     *
+     * @param storyboardJson serialized storyboard JSON
+     * @return user prompt string
+     */
+    public static String buildPlacementEnrichmentUserPrompt(String storyboardJson) {
+        return "Compute placement coordinates for all storyboard objects that lack a `placement` field.\n"
+                + "Preserve every existing placement exactly as-is; only add new placements where none exists.\n"
+                + "Use the object's dependency_objects, dependency_relation, constraints, kind, and content to infer its position.\n\n"
+                + "Storyboard:\n```json\n" + storyboardJson + "\n```\n\n"
+                + "Return the full storyboard JSON with the missing placements filled in.";
+    }
+
+    // ========================================================================
+    // Repair rules (appended to buildRulesPrompt for the LLM cleanup pass)
+    // ========================================================================
+
+    /**
+     * Build repair-specific rules that are appended to the base rules prompt
+     * during the LLM cleanup pass.
+     *
+     * @param outputTarget the output target backend (manim / geogebra)
+     * @return repair rules string
+     */
+    public static String buildRepairRules(String outputTarget) {
+        String defaultBackground = WorkflowConfig.OUTPUT_TARGET_GEOGEBRA.equalsIgnoreCase(outputTarget)
+                ? "#FFFFFF" : "#000000";
+        return "Storyboard validation repair rules:\n"
+                + "Constraint relation catalog for reference:\n"
+                + com.mathvision.util.StoryboardConstraintCatalog.detailedCatalogSummary()
+                + "\n"
+                + "- Use dependency_objects as the authoritative dependency graph.\n"
+                + "- Use a single typed `style` object only. Do not return style arrays, nested `properties`, role/type layer entries, or custom style keys.\n"
+                + "- Rewrite storyboard colors as 6-digit hex strings (`#RRGGBB`) only; do not use named colors or 8-digit hex.\n"
+                + "- Keep opacity in separate `opacity`, `fill_opacity`, or `stroke_opacity` fields.\n"
+                + "- For text objects, ensure text color contrasts with the text box/background color at ratio >= 4.5, falling back to "
+                + defaultBackground + " when no text background is present.\n"
+                + "- For non-text objects, ensure foreground colors contrast with " + defaultBackground
+                + " at ratio >= 3.0.\n"
+                + "- If a derived object is out of bounds, adjust upstream dependency_objects, the whole constrained group, or the camera/layout; do not repair by directly moving that derived object when it would contradict dependency_relation or structured constraints.\n"
+                + "- Every dependency-driven object must define dependency_objects as object ids, dependency_relation as a concise construction relation, and structured constraints for hard geometric invariants.\n"
+                + "- ASCII repair is mandatory: rewrite every JSON string value so it contains only characters with code <= 0x7F.\n"
+                + "- Apply this normalization map wherever needed: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
+                + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.";
+    }
+
+    /**
+     * Build the user prompt for the LLM cleanup/repair pass.
+     *
+     * @param storyboardJson serialized storyboard JSON
+     * @param issues         list of static validation issues (may be null or empty)
+     * @return user prompt string
+     */
+    public static String buildCleanupUserPrompt(String storyboardJson, java.util.List<String> issues) {
+        StringBuilder userPrompt = new StringBuilder();
+        userPrompt.append("Please clean up this storyboard so it is coherent, and ensure that all coordinate-based elements stay within bounds and do not visibly overlap.\n");
+        userPrompt.append("Preserve the original narrative order, object identity, and teaching intent as much as possible; only adjust the layout and wording where necessary.\n");
+        userPrompt.append("Replace every non-ASCII text token reported below with an ASCII equivalent across the full storyboard.\n");
+        userPrompt.append("For each reported token, locate every occurrence in the current storyboard and rewrite the surrounding sentence if needed so the whole string is ASCII-only. For example, replace curly apostrophes with straight apostrophes, em/en dashes with ` - ` or `-`, and mathematical comparison glyphs with ASCII operators such as `!=`, `<=`, or `>=`.\n");
+        userPrompt.append("Before returning, perform a final character-by-character pass over every JSON string value and ensure no character code is greater than 0x7F.\n");
+        userPrompt.append("If you find issues, fix them directly. If there are no issues, still perform a full cleanup to make the storyboard more stable and readable.\n");
+        if (issues != null && !issues.isEmpty()) {
+            userPrompt.append("Static validation findings:\n");
+            for (String issue : issues) {
+                if (issue.startsWith("Issue:")) {
+                    userPrompt.append(issue).append("\n");
+                } else {
+                    userPrompt.append("- ").append(issue).append("\n");
+                }
+            }
+            userPrompt.append("\n");
+        }
+        userPrompt.append("Current storyboard:\n```json\n").append(storyboardJson).append("\n```\n\n");
+        userPrompt.append("Return the full corrected storyboard JSON with all scenes, object_registry, and metadata.");
+        return userPrompt.toString();
+    }
 
     private NarrativePrompts() {}
 

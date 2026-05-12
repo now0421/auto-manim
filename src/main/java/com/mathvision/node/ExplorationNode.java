@@ -43,8 +43,7 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
     private AiClient aiClient;
     private WorkflowConfig workflowConfig;
     private String targetInput;
-    private int maxDepth = 4;
-    private int minDepth = 0;
+
     private String inputMode = WorkflowConfig.INPUT_MODE_AUTO;
     private String outputTarget = WorkflowConfig.OUTPUT_TARGET_MANIM;
 
@@ -63,8 +62,6 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
         this.aiClient = (AiClient) ctx.get(WorkflowKeys.AI_CLIENT);
         this.workflowConfig = (WorkflowConfig) ctx.get(WorkflowKeys.CONFIG);
         if (workflowConfig != null) {
-            this.maxDepth = workflowConfig.getMaxDepth();
-            this.minDepth = workflowConfig.getMinDepth();
             this.inputMode = workflowConfig.getInputMode();
             this.outputTarget = workflowConfig.getOutputTarget();
         }
@@ -85,8 +82,8 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
 
         log.info("=== Stage 0: {} Graph Planning ===",
                 WorkflowConfig.INPUT_MODE_PROBLEM.equals(resolvedMode) ? "Problem" : "Concept");
-        log.info("Target input: {}, mode: {}, output_target: {}, max depth: {}, min depth: {}",
-                targetInput, resolvedMode, outputTarget, maxDepth, minDepth);
+        log.info("Target input: {}, mode: {}, output_target: {}",
+                targetInput, resolvedMode, outputTarget);
 
         KnowledgeGraph graph = WorkflowConfig.INPUT_MODE_PROBLEM.equals(resolvedMode)
                 ? buildProblemGraph(targetInput)
@@ -503,19 +500,14 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
 
     private void validateGraph(KnowledgeGraph graph) {
         int nodeCount = graph.countNodes();
-        int maxGraphDepth = graph.getMaxDepth();
 
         if (nodeCount < 3) {
             log.warn("Graph validation: only {} nodes for '{}' - graph may be too shallow.",
                     nodeCount, targetInput);
         }
-        if (maxGraphDepth < minDepth) {
-            log.warn("Graph validation: max depth {} < minDepth {} for '{}'",
-                    maxGraphDepth, minDepth, targetInput);
-        }
 
-        log.info("Graph validation: {} nodes, {} edges, max depth {}, minDepth requirement {}",
-                nodeCount, graph.countEdges(), maxGraphDepth, minDepth);
+        log.info("Graph validation: {} nodes, {} edges, max depth {}",
+                nodeCount, graph.countEdges(), graph.getMaxDepth());
     }
 
     private String resolveInputMode(String input) {
@@ -603,13 +595,13 @@ public class ExplorationNode extends PocketFlow.Node<String, KnowledgeGraph, Str
 
         conceptGraphContext = new NodeConversationContext(maxInputTokens);
         conceptGraphContext.setSystemMessage(
-                ExplorationPrompts.buildConceptGraphRulesPrompt(maxDepth, minDepth));
+                ExplorationPrompts.buildConceptGraphRulesPrompt());
         conceptGraphContext.setFixedContextMessage(
                 ExplorationPrompts.buildConceptGraphFixedContextPrompt(targetDescription));
 
         problemGraphContext = new NodeConversationContext(maxInputTokens);
         problemGraphContext.setSystemMessage(
-                ExplorationPrompts.buildProblemGraphRulesPrompt(maxDepth, minDepth));
+                ExplorationPrompts.buildProblemGraphRulesPrompt());
         problemGraphContext.setFixedContextMessage(
                 ExplorationPrompts.buildProblemGraphFixedContextPrompt(targetDescription));
     }

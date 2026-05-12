@@ -26,7 +26,6 @@ import com.mathvision.util.JsonUtils;
 import com.mathvision.util.TimeUtils;
 import com.mathvision.util.ManimCodeUtils;
 import com.mathvision.util.NodeConversationContext;
-import com.mathvision.util.StoryboardCodegenSemantics;
 import com.mathvision.util.StoryboardPatchResolver;
 import com.mathvision.util.TargetDescriptionBuilder;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -673,8 +672,7 @@ public class CodeGenerationNode extends PocketFlow.Node<CodeGenerationNode.CodeG
             if (obj.getConstraints() != null && !obj.getConstraints().isEmpty()) {
                 sb.append(", constraints=").append(truncate(JsonUtils.toJson(obj.getConstraints()), 500));
             }
-            if (!StoryboardCodegenSemantics.shouldSuppressPlacementForCodegen(obj)
-                    && obj.getPlacement() != null && obj.getPlacement().hasData()) {
+            if (obj.getPlacement() != null && obj.getPlacement().hasData()) {
                 sb.append(", placement=").append(formatPlacementSummary(obj.getPlacement()));
             }
             if (obj.getStyle() != null && obj.getStyle().hasData()) {

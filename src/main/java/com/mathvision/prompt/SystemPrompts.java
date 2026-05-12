@@ -47,7 +47,7 @@ public final class SystemPrompts {
                     + "- `dependency_relation`: concise construction relation such as independent, follows_anchor, connects_points, reflection_across_line, intersection, midpoint, angle_between, or label_for.\n"
                     + "- `constraints`: machine-readable object-level invariants. Each entry has `domain`, `relation`, `refs`, optional `parameters`, `strength`, and `reason`; use this as the primary semantic contract for codegen, validation, and repair.\n"
                     + "- `anchor_id`: id of the object this one should stay attached to.\n"
-                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition. For `derived` objects the placement value is only a preview hint - at render time the object will be recomputed from its source objects via `dependency_objects`, `dependency_relation`, and `constraints`, so editing a derived object's placement directly will have no lasting effect; fix out-of-bounds derived objects by adjusting their source objects instead.\n"
+                    + "- `placement`: structured scene-level placement patch with `coordinate_space` plus optional x/y/z `value` or `min/max`; use it for coordinates or allowed ranges, not the full geometric definition.\n"
                     + "- `style`: optional single typed object of visual properties such as color, fill_color, stroke_color, opacity, stroke_width, line_style, font_size, padding, and z_index. Do not invent custom style keys. Style describes this object only; create separate objects for labels, badges, helper outlines, cards, or callouts.\n"
                     + "- `source_node`: knowledge-graph node id that produced this object; informational only.\n";
 
@@ -143,7 +143,7 @@ public final class SystemPrompts {
                     + "- Treat scene `entering_objects`, `persistent_objects`, and `exiting_objects` as per-scene state patches: their `placement`, `style`, and visibility describe the momentary visual state for that scene, not the object's full semantic definition.\n"
                     + "- Treat structured `constraints`, `notes_for_codegen`, `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation` as hard semantic requirements.\n"
                     + "- Do not treat scene-level `placement.x/y/z.value`, `min`, or `max` as a hard geometric constraint unless structured `constraints` or `notes_for_codegen` explicitly says the coordinate itself is fixed.\n"
-                    + "- For `behavior = derived` or dependency-driven objects, compute or attach them from their source objects according to object-registry `dependency_objects`, `dependency_relation`, and structured `constraints`; scene placement is only an initial/preview visual state.\n"
+                    + "- For `behavior = derived` or dependency-driven objects, compute or attach them from their source objects according to object-registry `dependency_objects`, `dependency_relation`, and structured `constraints`.\n"
                     + "- Treat scene order, action order, narration, layout_goal, safe_area_plan, screen_overlay_plan, and camera_plan as planning guidance for presentation, continuity, and readability; adapt them when runtime correctness or a clearer implementation requires it. Do not adapt away explicit `notes_for_codegen` constraints unless they are unsupported or contradictory.\n"
                     + STORYBOARD_ELEMENT_SELECTION_RULES
                     + "- Do not treat backend-specific notes, unsupported API names, undocumented commands, or purely decorative effects as hard requirements when they conflict with the active backend manual or runtime correctness.\n"
@@ -190,7 +190,14 @@ public final class SystemPrompts {
                     + "- If an object is movable but constrained, keep `behavior` for dependency semantics and encode the motion/path/range constraint explicitly in structured `constraints`, `dependency_objects`, `dependency_relation`, structured `placement`, or `notes_for_codegen`.\n"
                     + "- When an object depends on another object's position, encode that dependency explicitly with `behavior`, `anchor_id`, `dependency_objects`, and `dependency_relation`.\n"
                     + "- When a geometric relationship must survive later layout fixes, record it explicitly in scene/object `constraints`.\n"
-                    + "- Use the structured constraint relation catalog instead of inventing relation, refs, or parameter keys. " + StoryboardConstraintCatalog.promptSummary() + "\n"
+                    + "- CRITICAL: Each constraint MUST use the exact domain, relation name, ref roles, and parameter names from the catalog below. Do NOT invent your own role names (no seg1/seg2, line1/line2, ray/support, markers, phase, etc.).\n"
+                    + "- For ref groups with alternatives shown as 'one of a/b/c', always use the FIRST listed name (the canonical form).\n"
+                    + "- OBJECT-level constraints must include the owner object id in refs.\n"
+                    + "- Parameters must contain only non-object values (strings, numbers, booleans); put object references in refs, NEVER in parameters.\n"
+                    + "- Refs values: use a single string for one object id, or an array of strings for multiple ids (e.g. {\"members\": [\"segAB\", \"segCD\"]}).\n"
+                    + "\n"
+                    + StoryboardConstraintCatalog.detailedCatalogSummary()
+                    + "\n"
                     + "- Treat geometric relationships such as symmetry, reflection, equal length, equal angle, collinearity, intersection, perpendicularity, and shared-center motion as hard constraints, not optional style notes.\n"
                     + "- If a layout risks overflow, prefer planning a smaller or recentered whole construction rather than placing mathematically linked points independently near the edges.\n";
 
@@ -199,7 +206,7 @@ public final class SystemPrompts {
             "Geometric marker authoring rules:\n"
                     + "- For angle markers, arcs, right-angle marks, braces, ticks, and similar derived annotations, the storyboard must define the geometry they measure, not just their visual placement.\n"
                     + "- For any angle or arc that represents an angle, `dependency_objects` must include the vertex/anchor plus the ordered start boundary and end boundary source objects, and `dependency_relation` should describe the measured angle or arc relation.\n"
-                    + "- Also add a structured `constraints` entry with `domain=measurement`, `relation=angle_between_rays` or `arc_sweep`, `refs` naming marker/vertex/start_boundary/end_boundary, and `parameters` naming sector, direction, and side_of_reference when relevant.\n"
+                    + "- Also add a structured `constraints` entry with `domain=measurement`, `relation=angle_between` or `arc_sweep`, `refs` naming marker/vertex/start_boundary/end_boundary, and `parameters` naming sector, direction, and side_of_reference when relevant.\n"
                     + "- For any visual arc drawn from one point/ray to another, say explicitly where the arc starts and where it ends, for example `arc at P from ray P->A to normal ray P->N` or `arc from point U to point V on circle c`.\n"
                     + "- `constraints[].parameters` must say whether the displayed sector is the smaller/interior angle, a reflex/exterior angle, a directed angle, clockwise/counterclockwise sweep, or a specific side of a reference line or normal.\n"
                     + "- Label clearance and visibility are layout constraints only; never replace sector geometry with vague wording such as `quadrant chosen to stay in view` unless the measured sector is also defined.\n"

@@ -146,7 +146,7 @@ class SceneEvaluationNodeTest {
         assertTrue(sceneEvaluationJson.contains("\"point_Bprime\""));
         assertTrue(sceneEvaluationJson.contains("\"point_B\""));
         assertTrue(sceneEvaluationJson.contains("\"line_l\""));
-        assertTrue(sceneEvaluationJson.contains("\"derived_placement_omitted\""));
+        assertFalse(sceneEvaluationJson.contains("\"derived_placement_omitted\""));
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.mathvision.prompt;
 
+import com.mathvision.util.StoryboardConstraintCatalog;
+
 /**
  * Central registry of all tool JSON schemas used for structured LLM output.
  *
@@ -50,10 +52,28 @@ public final class ToolSchemas {
                     + "    \"type\": \"object\","
                     + "    \"properties\": {"
                     + "      \"id\": { \"type\": \"string\" },"
-                    + "      \"domain\": { \"type\": \"string\" },"
-                    + "      \"relation\": { \"type\": \"string\" },"
-                    + "      \"refs\": { \"type\": \"object\", \"additionalProperties\": true },"
-                    + "      \"parameters\": { \"type\": \"object\", \"additionalProperties\": true },"
+                    + "      \"domain\": { \"type\": \"string\", \"enum\": " + StoryboardConstraintCatalog.domainEnumJson() + " },"
+                    + "      \"relation\": { \"type\": \"string\", \"enum\": " + StoryboardConstraintCatalog.relationEnumJson() + " },"
+                    + "      \"refs\": {"
+                    + "        \"type\": \"object\","
+                    + "        \"minProperties\": 1,"
+                    + "        \"additionalProperties\": {"
+                    + "          \"oneOf\": ["
+                    + "            { \"type\": \"string\" },"
+                    + "            { \"type\": \"array\", \"items\": { \"type\": \"string\" } }"
+                    + "          ]"
+                    + "        }"
+                    + "      },"
+                    + "      \"parameters\": {"
+                    + "        \"type\": \"object\","
+                    + "        \"additionalProperties\": {"
+                    + "          \"oneOf\": ["
+                    + "            { \"type\": \"string\" },"
+                    + "            { \"type\": \"number\" },"
+                    + "            { \"type\": \"boolean\" }"
+                    + "          ]"
+                    + "        }"
+                    + "      },"
                     + "      \"strength\": { \"type\": \"string\", \"enum\": [\"hard\", \"repair_hard\", \"soft\"] },"
                     + "      \"reason\": { \"type\": \"string\" }"
                     + "    },"
