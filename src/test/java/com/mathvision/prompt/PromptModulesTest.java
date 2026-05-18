@@ -294,6 +294,24 @@ class PromptModulesTest {
     }
 
     @Test
+    void geogebraPromptsUseGeogebraRepairAndViewportRules() {
+        String geogebraNarrative = narrativeSystemPrompt("Triangle", "Demo", "geogebra");
+        String manimNarrative = narrativeSystemPrompt("Triangle", "Demo", "manim");
+        String geogebraVisual = VisualDesignPrompts.buildFixedContextPrompt("Triangle", "Demo", "geogebra", null)
+                + VisualDesignPrompts.buildRulesPrompt("geogebra");
+        String geogebraRevision = CodeEvaluationPrompts.buildRevisionRulesPrompt("geogebra");
+        String geogebraRenderFix = RenderFixPrompts.buildRulesPrompt("geogebra");
+
+        assertTrue(geogebraNarrative.contains("Storyboard field guide for this GeoGebra repair pass"));
+        assertFalse(geogebraNarrative.contains("Storyboard field guide for this repair pass"));
+        assertTrue(manimNarrative.contains("Storyboard field guide for this repair pass"));
+        assertTrue(geogebraVisual.contains("GeoGebra viewport rules"));
+        assertTrue(geogebraRevision.contains("GeoGebra angle marker rules"));
+        assertTrue(geogebraRevision.contains("Minimize auxiliary helper objects in generated code"));
+        assertTrue(geogebraRenderFix.contains("Audit the ENTIRE command script"));
+    }
+
+    @Test
     void renderFixUserPromptStartsWithErrorTypeBeforeCodeContext() {
         String prompt = RenderFixPrompts.manimUserPrompt(
                 "from manim import *\n\nclass Demo(Scene):\n    pass",

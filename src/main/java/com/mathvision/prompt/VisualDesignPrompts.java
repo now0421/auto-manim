@@ -164,6 +164,7 @@ public final class VisualDesignPrompts {
                     + "- If a reasoning step is not naturally visible, design a faithful construction-based proxy.\n"
                     + "GeoGebra planning constraints:\n"
                     + "- " + SystemPrompts.LAYOUT_FRAME_RULES.replace("\n", "\n- ").trim() + "\n"
+                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
                     + "- Use `scene_mode = 3d` only when depth is genuinely needed.\n"
                     + "- Keep the visual plan implementable without hidden assumptions.\n"
                     + "- Prefer readable construction layout and clear label placement over animation-like staging language.\n"

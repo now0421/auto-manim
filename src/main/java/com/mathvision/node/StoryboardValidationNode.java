@@ -409,7 +409,119 @@ public class StoryboardValidationNode extends PocketFlow.Node<Narrative, Narrati
                         + "' must define the intended displayed sector with a structured measurement constraint");
             }
         }
+
+        // Check that angle boundary lines pass through the angle vertex
+        issues.addAll(validateAngleBoundaryVertexConsistency(storyboard));
+
         return issues;
+    }
+
+    /**
+     * Validates that for every angle_between constraint, each boundary line
+     * referenced in the constraint passes through (or has the vertex as an
+     * endpoint in) its dependency_objects. This catches cases where a line
+     * at a different location is incorrectly used as an angle boundary,
+     * e.g. using a perpendicular from a different point as the normal at
+     * the vertex.
+     */
+    private List<String> validateAngleBoundaryVertexConsistency(Storyboard storyboard) {
+        List<String> issues = new ArrayList<>();
+        if (storyboard == null || storyboard.getObjectRegistry() == null) {
+            return issues;
+        }
+
+        Map<String, StoryboardObject> registry = new LinkedHashMap<>();
+        for (StoryboardObject obj : storyboard.getObjectRegistry()) {
+            String id = StoryboardPatchResolver.objectId(obj);
+            if (id != null) {
+                registry.put(id, obj);
+            }
+        }
+
+        for (StoryboardObject object : storyboard.getObjectRegistry()) {
+            if (object == null || object.getConstraints() == null) {
+                continue;
+            }
+            for (StoryboardConstraint constraint : object.getConstraints()) {
+                if (constraint == null || constraint.getRefs() == null) {
+                    continue;
+                }
+                String relation = constraint.getRelation();
+                if (relation == null || !normalizeForSemanticCheck(relation).contains(" angle_between ")) {
+                    continue;
+                }
+
+                Map<String, Object> refs = constraint.getRefs();
+                String vertexId = resolveRefId(refs.get("vertex"));
+                if (vertexId == null || vertexId.isBlank()) {
+                    continue;
+                }
+
+                // Collect boundary line refs
+                List<String> boundaryRefKeys = List.of("line_a", "line_b", "start_boundary", "end_boundary", "ray_a", "ray_b");
+                for (String refKey : boundaryRefKeys) {
+                    String boundaryId = resolveRefId(refs.get(refKey));
+                    if (boundaryId == null || boundaryId.isBlank()) {
+                        continue;
+                    }
+
+                    StoryboardObject boundaryObj = registry.get(boundaryId);
+                    if (boundaryObj == null) {
+                        continue;
+                    }
+
+                    List<String> boundaryDeps = cleanDependencyObjects(boundaryObj);
+                    if (boundaryDeps.contains(vertexId)) {
+                        // Vertex is a dependency of the boundary line — the line passes through the vertex
+                        continue;
+                    }
+
+                    // Check if the boundary object's own constraints reference the vertex
+                    // (e.g. a line defined as intersection may not list the vertex in dependency_objects
+                    // but is still geometrically valid). Only flag if the boundary is a simple
+                    // segment/line that should have endpoints in dependency_objects.
+                    String boundaryKind = normalizeForSemanticCheck(boundaryObj.getKind());
+                    String boundaryRelation = normalizeForSemanticCheck(boundaryObj.getDependencyRelation());
+                    boolean isSimpleSegmentOrLine = containsAny(boundaryKind, " segment ", " line ")
+                            || containsAny(boundaryRelation, " connects_points ", " perpendicular_bisector ");
+                    boolean isPerpendicularHelper = containsAny(boundaryRelation, " perpendicular_bisector ")
+                            || containsAny(normalizeForSemanticCheck(boundaryObj.getContent()), " perpendicular ", " normal ");
+
+                    if (isSimpleSegmentOrLine && !isPerpendicularHelper) {
+                        String objectId = StoryboardPatchResolver.objectId(object);
+                        issues.add("object_registry: angle marker '" + objectId + "' constraint references '"
+                                + boundaryId + "' as " + refKey + ", but '" + boundaryId
+                                + "' does not include vertex '" + vertexId + "' in its dependency_objects; "
+                                + "the boundary line may not pass through the angle vertex");
+                    } else if (isPerpendicularHelper && !boundaryDeps.contains(vertexId)) {
+                        // Perpendicular / normal helper that doesn't reference the vertex
+                        // is almost certainly the wrong perpendicular (e.g. from a different point)
+                        String objectId = StoryboardPatchResolver.objectId(object);
+                        issues.add("object_registry: angle marker '" + objectId + "' constraint references '"
+                                + boundaryId + "' as " + refKey + ", but '" + boundaryId
+                                + "' is a perpendicular/normal from " + boundaryDeps + " and does not pass through vertex '"
+                                + vertexId + "'; use a normal at the vertex instead");
+                    }
+                }
+            }
+        }
+        return issues;
+    }
+
+    /**
+     * Resolves a ref value to a string id. Handles both String values and
+     * nested structures that might appear in constraint refs.
+     */
+    private String resolveRefId(Object refValue) {
+        if (refValue == null) {
+            return null;
+        }
+        if (refValue instanceof String) {
+            String s = ((String) refValue).trim();
+            return s.isBlank() ? null : s;
+        }
+        // Nested maps or lists are not simple id refs
+        return null;
     }
 
     private List<String> validateStructuredConstraints(Storyboard storyboard) {

@@ -16,6 +16,7 @@ public class CodeFixRequest {
     private String targetDescription;
     private String sceneName;
     private String expectedSceneName;
+    private String outputTarget;
     private String storyboardJson;
     private String staticAnalysisJson;
     private String reviewJson;
@@ -49,6 +50,9 @@ public class CodeFixRequest {
 
     public String getExpectedSceneName() { return expectedSceneName; }
     public void setExpectedSceneName(String expectedSceneName) { this.expectedSceneName = expectedSceneName; }
+
+    public String getOutputTarget() { return outputTarget; }
+    public void setOutputTarget(String outputTarget) { this.outputTarget = outputTarget; }
 
     public String getStoryboardJson() { return storyboardJson; }
     public void setStoryboardJson(String storyboardJson) { this.storyboardJson = storyboardJson; }

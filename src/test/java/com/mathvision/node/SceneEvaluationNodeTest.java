@@ -104,6 +104,29 @@ class SceneEvaluationNodeTest {
     }
 
     @Test
+    void readsGeoGebraEvaluationShapeWithoutRectangleOnlyOverlap() throws IOException {
+        Path geometryPath = tempDir.resolve("5_geogebra_geometry.json");
+        Files.writeString(geometryPath, geoGebraStructuredGeometryJson());
+
+        Map<String, Object> ctx = buildContext(geometryPath);
+        CodeResult codeResult = (CodeResult) ctx.get(WorkflowKeys.CODE_RESULT);
+        codeResult.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);
+        RenderResult renderResult = (RenderResult) ctx.get(WorkflowKeys.RENDER_RESULT);
+        renderResult.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);
+        renderResult.setArtifactType("geogebra_preview_html");
+        SceneEvaluationNode node = new SceneEvaluationNode();
+
+        SceneEvaluationNode.SceneEvaluationInput input = node.prep(ctx);
+        SceneEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertTrue(result.isEvaluated());
+        assertTrue(result.isApproved());
+        assertEquals(0, result.getOverlapIssueCount());
+        assertNull(action);
+    }
+
+    @Test
     void sceneEvaluationFixRequestUsesDetailedStoryboardJson() throws IOException {
         Path geometryPath = tempDir.resolve("5_mobject_geometry.json");
         Files.writeString(geometryPath, problematicGeometryJson());
@@ -171,6 +194,24 @@ class SceneEvaluationNodeTest {
     void ignoresArcBBoxOverlapWhenSampledPathMissesText() throws IOException {
         Path geometryPath = tempDir.resolve("5_mobject_geometry.json");
         Files.writeString(geometryPath, arcBBoxFalsePositiveGeometryJson());
+
+        Map<String, Object> ctx = buildContext(geometryPath);
+        SceneEvaluationNode node = new SceneEvaluationNode();
+
+        SceneEvaluationNode.SceneEvaluationInput input = node.prep(ctx);
+        SceneEvaluationResult result = node.exec(input);
+        String action = node.post(ctx, input, result);
+
+        assertTrue(result.isEvaluated());
+        assertTrue(result.isApproved());
+        assertEquals(0, result.getOverlapIssueCount());
+        assertNull(action);
+    }
+
+    @Test
+    void ignoresLineSegmentIntersectionsForBothBackends() throws IOException {
+        Path geometryPath = tempDir.resolve("5_mobject_geometry.json");
+        Files.writeString(geometryPath, intersectingSegmentsGeometryJson());
 
         Map<String, Object> ctx = buildContext(geometryPath);
         SceneEvaluationNode node = new SceneEvaluationNode();
@@ -340,6 +381,47 @@ class SceneEvaluationNodeTest {
         constraint.setStrength(strength);
         constraint.setReason(reason);
         return constraint;
+    }
+
+    private String geoGebraStructuredGeometryJson() {
+        return String.join("\n",
+                "{",
+                "  \"scene_name\": \"GeoGebraFigure\",",
+                "  \"report_type\": \"geogebra_element_report\",",
+                "  \"frame_bounds\": {",
+                "    \"min\": [-7.0, -4.0, 0.0],",
+                "    \"max\": [7.0, 4.0, 0.0]",
+                "  },",
+                "  \"samples\": [",
+                "    {",
+                "      \"sample_id\": \"geogebra-initial\",",
+                "      \"sample_role\": \"geogebra_construction\",",
+                "      \"elements\": [",
+                "        {",
+                "          \"stable_id\": \"ggb-AB\",",
+                "          \"semantic_name\": \"AB\",",
+                "          \"class_name\": \"segment\",",
+                "          \"semantic_class\": \"line\",",
+                "          \"visible\": true,",
+                "          \"geometry_type\": \"segment\",",
+                "          \"geometry_points\": [[-2.0, 0.0, 0.0], [2.0, 0.0, 0.0]],",
+                "          \"evaluation_shape\": {\"type\": \"segment\", \"points\": [[-2.0, 0.0, 0.0], [2.0, 0.0, 0.0]]},",
+                "          \"bounds\": {\"min\": [-2.0, -0.05, 0.0], \"max\": [2.0, 0.05, 0.0]}",
+                "        },",
+                "        {",
+                "          \"stable_id\": \"ggb-c\",",
+                "          \"semantic_name\": \"c\",",
+                "          \"class_name\": \"circle\",",
+                "          \"semantic_class\": \"shape\",",
+                "          \"visible\": true,",
+                "          \"geometry_type\": \"circle\",",
+                "          \"evaluation_shape\": {\"type\": \"circle\", \"center\": [0.0, 0.0, 0.0], \"radius\": 2.0},",
+                "          \"bounds\": {\"min\": [-2.0, -2.0, 0.0], \"max\": [2.0, 2.0, 0.0]}",
+                "        }",
+                "      ]",
+                "    }",
+                "  ]",
+                "}");
     }
 
     private String cleanGeometryJson() {
@@ -534,6 +616,43 @@ class SceneEvaluationNodeTest {
                 "            \"min\": [4.0, 0.1, 0.0],",
                 "            \"max\": [5.2, 1.1, 0.0]",
                 "          }",
+                "        }",
+                "      ]",
+                "    }",
+                "  ]",
+                "}");
+    }
+
+    private String intersectingSegmentsGeometryJson() {
+        return String.join("\n",
+                "{",
+                "  \"scene_name\": \"MainScene\",",
+                "  \"frame_bounds\": {",
+                "    \"min\": [-7.111111, -4.0, 0.0],",
+                "    \"max\": [7.111111, 4.0, 0.0]",
+                "  },",
+                "  \"samples\": [",
+                "    {",
+                "      \"sample_id\": \"sample-0001\",",
+                "      \"sample_role\": \"scene_final\",",
+                "      \"elements\": [",
+                "        {",
+                "          \"stable_id\": \"line_a\",",
+                "          \"semantic_name\": \"line_a\",",
+                "          \"class_name\": \"Line\",",
+                "          \"semantic_class\": \"line\",",
+                "          \"visible\": true,",
+                "          \"bounds\": {\"min\": [-1.0, -1.0, 0.0], \"max\": [1.0, 1.0, 0.0]},",
+                "          \"shape_hints\": {\"start\": [-1.0, -1.0, 0.0], \"end\": [1.0, 1.0, 0.0]} ",
+                "        },",
+                "        {",
+                "          \"stable_id\": \"line_b\",",
+                "          \"semantic_name\": \"line_b\",",
+                "          \"class_name\": \"Line\",",
+                "          \"semantic_class\": \"line\",",
+                "          \"visible\": true,",
+                "          \"bounds\": {\"min\": [-1.0, -1.0, 0.0], \"max\": [1.0, 1.0, 0.0]},",
+                "          \"shape_hints\": {\"start\": [-1.0, 1.0, 0.0], \"end\": [1.0, -1.0, 0.0]} ",
                 "        }",
                 "      ]",
                 "    }",

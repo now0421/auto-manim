@@ -170,14 +170,13 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             int totalIssues = 0;
             int issueSamples = 0;
 
-            boolean geoGebraTarget = input.config() != null && input.config().isGeoGebraTarget();
             boolean skipOffscreen = false;
 
             JsonNode samplesNode = root.path("samples");
             if (samplesNode.isArray()) {
                 for (JsonNode sampleNode : samplesNode) {
                     SampleEvaluation sampleEvaluation = evaluateSample(
-                            sampleNode, frameMin, frameMax, skipOffscreen, geoGebraTarget);
+                            sampleNode, frameMin, frameMax, skipOffscreen);
                     sampleEvaluations.add(sampleEvaluation);
                     if (sampleEvaluation.isHasIssues()) {
                         issueSamples++;
@@ -288,6 +287,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         request.setSceneName(codeResult.getSceneName());
         // For GeoGebra, the expected scene name is typically GeoGebraCodeUtils.EXPECTED_FIGURE_NAME
         boolean isGeoGebra = renderResult != null && renderResult.isGeoGebraTarget();
+        request.setOutputTarget(isGeoGebra
+                ? WorkflowConfig.OUTPUT_TARGET_GEOGEBRA
+                : WorkflowConfig.OUTPUT_TARGET_MANIM);
         request.setExpectedSceneName(isGeoGebra ? GeoGebraCodeUtils.EXPECTED_FIGURE_NAME : "MainScene");
         request.setStoryboardJson(storyboard != null
                 ? StoryboardJsonBuilder.buildForSceneEvaluationFix(storyboard)
@@ -311,7 +313,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     }
 
     private SampleEvaluation evaluateSample(JsonNode sampleNode, double[] frameMin, double[] frameMax,
-                                              boolean skipOffscreen, boolean geoGebraTarget) {
+                                            boolean skipOffscreen) {
         SampleEvaluation sample = new SampleEvaluation();
         sample.setSampleId(readText(sampleNode, "sample_id", ""));
         sample.setPlayIndex(sampleNode.hasNonNull("play_index") ? sampleNode.get("play_index").asInt() : null);
@@ -353,12 +355,10 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             }
         }
 
-        if (geoGebraTarget) {
-            LayoutIssue underfilledIssue = evaluateUnderfilledGeoGebraView(elements, frameMin, frameMax, sample.getSampleRole());
-            if (underfilledIssue != null) {
-                issues.add(underfilledIssue);
-                blockingCount++;
-            }
+        LayoutIssue underfilledIssue = evaluateUnderfilledView(elements, frameMin, frameMax, sample.getSampleRole());
+        if (underfilledIssue != null) {
+            issues.add(underfilledIssue);
+            blockingCount++;
         }
 
         List<LayoutIssue> overlapIssues = evaluateOverlapIssues(elements, sample.getSampleRole());
@@ -375,10 +375,10 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         return sample;
     }
 
-    private LayoutIssue evaluateUnderfilledGeoGebraView(List<ElementGeometry> elements,
-                                                        double[] frameMin,
-                                                        double[] frameMax,
-                                                        String sampleRole) {
+    private LayoutIssue evaluateUnderfilledView(List<ElementGeometry> elements,
+                                                double[] frameMin,
+                                                double[] frameMax,
+                                                String sampleRole) {
         if (elements == null || elements.size() < 3 || frameMin == null || frameMax == null) {
             return null;
         }
@@ -389,13 +389,14 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         double maxY = Double.NEGATIVE_INFINITY;
         int boundedCount = 0;
         for (ElementGeometry element : elements) {
-            if (element == null || !element.visible || element.min == null || element.max == null) {
+            BoundsPair bounds = evaluationBounds(element);
+            if (element == null || !element.visible || bounds == null) {
                 continue;
             }
-            minX = Math.min(minX, element.min[0]);
-            minY = Math.min(minY, element.min[1]);
-            maxX = Math.max(maxX, element.max[0]);
-            maxY = Math.max(maxY, element.max[1]);
+            minX = Math.min(minX, bounds.min[0]);
+            minY = Math.min(minY, bounds.min[1]);
+            maxX = Math.max(maxX, bounds.max[0]);
+            maxY = Math.max(maxY, bounds.max[1]);
             boundedCount++;
         }
         if (boundedCount < 3 || !Double.isFinite(minX) || !Double.isFinite(maxX)
@@ -418,16 +419,16 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         LayoutIssue issue = new LayoutIssue();
         issue.setType("underfilled_view");
         issue.setMessage(String.format(
-                "Visible GeoGebra objects occupy only %.0f%% of view width and %.0f%% of view height",
+                "Visible objects occupy only %.0f%% of frame width and %.0f%% of frame height",
                 utilizationX * 100.0,
                 utilizationY * 100.0));
         issue.setSeverity("blocking");
         issue.setReasonCode("UNDERFILLED_VIEW");
         issue.setLikelyFalsePositive(false);
-        issue.setRecommendedAction("scale_or_spread_construction_inside_fixed_view");
+        issue.setRecommendedAction("scale_or_spread_construction_inside_frame");
         ElementGeometry aggregate = new ElementGeometry();
-        aggregate.stableId = "ggb-visible-bounds";
-        aggregate.semanticName = "visible GeoGebra construction";
+        aggregate.stableId = "visible-bounds";
+        aggregate.semanticName = "visible construction";
         aggregate.className = "aggregate";
         aggregate.visible = true;
         aggregate.min = new double[] {minX, minY, 0};
@@ -450,6 +451,46 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             JsonNode boundsNode = preferredBoundsNode(elementNode);
             double[] min = readPoint(boundsNode.path("min"), null);
             double[] max = readPoint(boundsNode.path("max"), null);
+            JsonNode shapeHints = elementNode.path("shape_hints");
+            JsonNode evaluationShape = elementNode.path("evaluation_shape");
+            String evaluationShapeType = readNullableText(evaluationShape, "type");
+            List<double[]> geometryPoints = readPointList(elementNode.path("geometry_points"));
+            List<double[]> evaluationPoints = readEvaluationShapePoints(evaluationShape);
+            double[] start = readPoint(shapeHints.path("start"), null);
+            double[] end = readPoint(shapeHints.path("end"), null);
+            List<double[]> pathPoints = readPointList(shapeHints.path("path_points"));
+            if (pathPoints.isEmpty() && !evaluationPoints.isEmpty()) {
+                pathPoints = evaluationPoints;
+            }
+            if (pathPoints.isEmpty() && !geometryPoints.isEmpty()) {
+                pathPoints = geometryPoints;
+            }
+            if ((start == null || end == null) && pathPoints.size() >= 2) {
+                start = pathPoints.get(0);
+                end = pathPoints.get(pathPoints.size() - 1);
+            }
+            Double radius = readDouble(shapeHints.path("radius"), null);
+            if (radius == null) {
+                radius = readDouble(evaluationShape.path("radius"), null);
+            }
+            double[] arcCenter = readPoint(shapeHints.path("arc_center"), null);
+            if (arcCenter == null) {
+                arcCenter = readPoint(evaluationShape.path("center"), null);
+            }
+            if ((min == null || max == null) && !evaluationShape.isMissingNode()) {
+                BoundsPair shapeBounds = boundsFromEvaluationShape(evaluationShape, pathPoints, radius);
+                if (shapeBounds != null) {
+                    min = shapeBounds.min;
+                    max = shapeBounds.max;
+                }
+            }
+            if ((min == null || max == null) && !pathPoints.isEmpty()) {
+                BoundsPair pointBounds = boundsFromPoints(pathPoints, shapePadding(evaluationShapeType));
+                if (pointBounds != null) {
+                    min = pointBounds.min;
+                    max = pointBounds.max;
+                }
+            }
             if (min == null || max == null) {
                 continue;
             }
@@ -464,16 +505,15 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
             element.displayText = readNullableText(elementNode, "display_text");
             element.topLevelStableId = readNullableText(elementNode, "top_level_stable_id");
             element.visible = visible;
-            element.sampleRole = sampleRole;
             element.center = readPoint(preferredCenterNode(elementNode), centerFromBounds(min, max));
             element.width = round(Math.max(max[0] - min[0], 0.0));
             element.height = round(Math.max(max[1] - min[1], 0.0));
-            JsonNode shapeHints = elementNode.path("shape_hints");
-            element.start = readPoint(shapeHints.path("start"), null);
-            element.end = readPoint(shapeHints.path("end"), null);
-            element.arcCenter = readPoint(shapeHints.path("arc_center"), null);
-            element.radius = shapeHints.hasNonNull("radius") ? round(shapeHints.get("radius").asDouble()) : null;
-            element.pathPoints = readPointList(shapeHints.path("path_points"));
+            element.start = start;
+            element.end = end;
+            element.arcCenter = arcCenter;
+            element.radius = radius;
+            element.pathPoints = pathPoints;
+            element.geometryType = TextUtils.firstNonBlank(evaluationShapeType, readNullableText(elementNode, "geometry_type"));
             element.min = min;
             element.max = max;
             elements.add(element);
@@ -510,15 +550,130 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         return MAPPER.createArrayNode();
     }
 
+    private List<double[]> readEvaluationShapePoints(JsonNode evaluationShape) {
+        if (evaluationShape == null || evaluationShape.isMissingNode() || evaluationShape.isNull()) {
+            return new ArrayList<>();
+        }
+        List<double[]> points = readPointList(evaluationShape.path("points"));
+        if (points.isEmpty()) {
+            points = readPointList(evaluationShape.path("sample_points"));
+        }
+        double[] center = readPoint(evaluationShape.path("center"), null);
+        if (center != null && points.isEmpty()) {
+            points.add(center);
+        }
+        return points;
+    }
+
+    private BoundsPair boundsFromEvaluationShape(JsonNode evaluationShape,
+                                                 List<double[]> points,
+                                                 Double radius) {
+        if (evaluationShape == null || evaluationShape.isMissingNode() || evaluationShape.isNull()) {
+            return null;
+        }
+        double[] min = readPoint(evaluationShape.path("min"), null);
+        double[] max = readPoint(evaluationShape.path("max"), null);
+        if (min != null && max != null) {
+            return new BoundsPair(min, max);
+        }
+        double[] center = readPoint(evaluationShape.path("center"), null);
+        if (center != null && radius != null && Double.isFinite(radius) && radius > 0) {
+            return new BoundsPair(
+                    new double[] {round(center[0] - radius), round(center[1] - radius), 0.0},
+                    new double[] {round(center[0] + radius), round(center[1] + radius), 0.0});
+        }
+        return boundsFromPoints(points, shapePadding(readNullableText(evaluationShape, "type")));
+    }
+
+    private BoundsPair boundsFromPoints(List<double[]> points, double padding) {
+        if (points == null || points.isEmpty()) {
+            return null;
+        }
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        int count = 0;
+        for (double[] point : points) {
+            if (point == null || point.length < 2) {
+                continue;
+            }
+            minX = Math.min(minX, point[0]);
+            minY = Math.min(minY, point[1]);
+            maxX = Math.max(maxX, point[0]);
+            maxY = Math.max(maxY, point[1]);
+            count++;
+        }
+        if (count == 0 || !Double.isFinite(minX) || !Double.isFinite(maxX)
+                || !Double.isFinite(minY) || !Double.isFinite(maxY)) {
+            return null;
+        }
+        return new BoundsPair(
+                new double[] {round(minX - padding), round(minY - padding), 0.0},
+                new double[] {round(maxX + padding), round(maxY + padding), 0.0});
+    }
+
+    private double shapePadding(String shapeType) {
+        if (shapeType == null || shapeType.isBlank()) {
+            return 0.05;
+        }
+        String type = shapeType.toLowerCase(Locale.ROOT);
+        if (type.contains("point")) {
+            return 0.15;
+        }
+        if (type.contains("segment") || type.contains("line") || type.contains("ray")) {
+            return 0.05;
+        }
+        return 0.0;
+    }
+
+    private Double readDouble(JsonNode node, Double fallback) {
+        if (node == null || node.isMissingNode() || node.isNull() || !node.isNumber()) {
+            return fallback;
+        }
+        return round(node.asDouble());
+    }
+
     private OverflowMetrics frameOverflow(ElementGeometry element, double[] frameMin, double[] frameMax) {
-        double left = Math.max(frameMin[0] - element.min[0], 0.0);
-        double right = Math.max(element.max[0] - frameMax[0], 0.0);
-        double bottom = Math.max(frameMin[1] - element.min[1], 0.0);
-        double top = Math.max(element.max[1] - frameMax[1], 0.0);
+        BoundsPair evaluationBounds = evaluationBounds(element);
+        if (evaluationBounds == null) {
+            return null;
+        }
+        double left = Math.max(frameMin[0] - evaluationBounds.min[0], 0.0);
+        double right = Math.max(evaluationBounds.max[0] - frameMax[0], 0.0);
+        double bottom = Math.max(frameMin[1] - evaluationBounds.min[1], 0.0);
+        double top = Math.max(evaluationBounds.max[1] - frameMax[1], 0.0);
         if (Math.max(Math.max(left, right), Math.max(bottom, top)) <= OFFSCREEN_TOLERANCE) {
             return null;
         }
         return new OverflowMetrics(left, right, top, bottom);
+    }
+
+    private BoundsPair evaluationBounds(ElementGeometry element) {
+        if (element == null) {
+            return null;
+        }
+        if (element.radius != null && element.radius > 0 && element.arcCenter != null
+                && (isCircleLike(element) || "circle".equalsIgnoreCase(element.geometryType))) {
+            return new BoundsPair(
+                    new double[] {round(element.arcCenter[0] - element.radius), round(element.arcCenter[1] - element.radius), 0.0},
+                    new double[] {round(element.arcCenter[0] + element.radius), round(element.arcCenter[1] + element.radius), 0.0});
+        }
+        if (element.hasPathPoints()) {
+            return boundsFromPoints(element.pathPoints, shapePadding(element.geometryType));
+        }
+        if (element.min == null || element.max == null) {
+            return null;
+        }
+        return new BoundsPair(element.min, element.max);
+    }
+
+    private BoundsPair bucketBounds(ElementGeometry element) {
+        BoundsPair bounds = evaluationBounds(element);
+        if (bounds != null) {
+            return bounds;
+        }
+        return new BoundsPair(element.min, element.max);
     }
 
     private List<LayoutIssue> evaluateOverlapIssues(List<ElementGeometry> elements, String sampleRole) {
@@ -600,11 +755,12 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     }
 
     private BucketRange bucketRange(ElementGeometry element) {
+        BoundsPair bounds = bucketBounds(element);
         return new BucketRange(
-                bucketIndex(element.min[0]),
-                bucketIndex(element.max[0]),
-                bucketIndex(element.min[1]),
-                bucketIndex(element.max[1]));
+                bucketIndex(bounds.min[0]),
+                bucketIndex(bounds.max[0]),
+                bucketIndex(bounds.min[1]),
+                bucketIndex(bounds.max[1]));
     }
 
     private int bucketIndex(double value) {
@@ -642,10 +798,15 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
     }
 
     private OverlapMetrics overlap(ElementGeometry left, ElementGeometry right) {
-        double overlapMinX = Math.max(left.min[0], right.min[0]);
-        double overlapMaxX = Math.min(left.max[0], right.max[0]);
-        double overlapMinY = Math.max(left.min[1], right.min[1]);
-        double overlapMaxY = Math.min(left.max[1], right.max[1]);
+        BoundsPair leftBounds = evaluationBounds(left);
+        BoundsPair rightBounds = evaluationBounds(right);
+        if (leftBounds == null || rightBounds == null) {
+            return null;
+        }
+        double overlapMinX = Math.max(leftBounds.min[0], rightBounds.min[0]);
+        double overlapMaxX = Math.min(leftBounds.max[0], rightBounds.max[0]);
+        double overlapMinY = Math.max(leftBounds.min[1], rightBounds.min[1]);
+        double overlapMaxY = Math.min(leftBounds.max[1], rightBounds.max[1]);
         double overlapWidth = overlapMaxX - overlapMinX;
         double overlapHeight = overlapMaxY - overlapMinY;
         if (overlapWidth <= 1e-9 || overlapHeight <= 1e-9) {
@@ -653,8 +814,8 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         }
 
         double area = overlapWidth * overlapHeight;
-        double leftArea = Math.max((left.max[0] - left.min[0]) * (left.max[1] - left.min[1]), 1e-9);
-        double rightArea = Math.max((right.max[0] - right.min[0]) * (right.max[1] - right.min[1]), 1e-9);
+        double leftArea = Math.max((leftBounds.max[0] - leftBounds.min[0]) * (leftBounds.max[1] - leftBounds.min[1]), 1e-9);
+        double rightArea = Math.max((rightBounds.max[0] - rightBounds.min[0]) * (rightBounds.max[1] - rightBounds.min[1]), 1e-9);
         double minAreaRatio = area / Math.min(leftArea, rightArea);
         if (area < MIN_OVERLAP_AREA || minAreaRatio < MIN_OVERLAP_RATIO) {
             return null;
@@ -898,6 +1059,16 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         return element != null && element.width <= 1e-9 && element.height <= 1e-9;
     }
 
+    private boolean isCircleLike(ElementGeometry element) {
+        if (element == null) {
+            return false;
+        }
+        return "circle".equalsIgnoreCase(element.geometryType)
+                || "Circle".equals(element.className)
+                || "Arc".equals(element.className)
+                || "AnnularSector".equals(element.className);
+    }
+
     private double[] bestPointCenter(ElementGeometry element) {
         if (element == null) {
             return null;
@@ -937,6 +1108,9 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (geometry.hasPathPoints()) {
             return pathIntersectsBounds(geometry.pathPoints, boundsMin, boundsMax, tolerance);
         }
+        if (isCircleLike(geometry) && geometry.arcCenter != null && geometry.radius != null) {
+            return circleIntersectsBounds(geometry.arcCenter, geometry.radius, boundsMin, boundsMax, tolerance);
+        }
         if (geometry.isLineLike()) {
             return lineIntersectsBounds(geometry, boundsMin, boundsMax, tolerance);
         }
@@ -962,6 +1136,26 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
                 || segmentsIntersect(line.start, line.end, bottomRight, topRight, tolerance)
                 || segmentsIntersect(line.start, line.end, topRight, topLeft, tolerance)
                 || segmentsIntersect(line.start, line.end, topLeft, bottomLeft, tolerance);
+    }
+
+    private boolean circleIntersectsBounds(double[] center,
+                                           double radius,
+                                           double[] boundsMin,
+                                           double[] boundsMax,
+                                           double tolerance) {
+        if (center == null || boundsMin == null || boundsMax == null || radius <= 0) {
+            return false;
+        }
+        double closestX = Math.max(boundsMin[0], Math.min(center[0], boundsMax[0]));
+        double closestY = Math.max(boundsMin[1], Math.min(center[1], boundsMax[1]));
+        double distance = Math.hypot(center[0] - closestX, center[1] - closestY);
+        if (distance <= radius + tolerance && distance >= Math.max(radius - tolerance, 0.0)) {
+            return true;
+        }
+        return pointInsideBounds(new double[] {center[0] + radius, center[1], 0.0}, boundsMin, boundsMax, tolerance)
+                || pointInsideBounds(new double[] {center[0] - radius, center[1], 0.0}, boundsMin, boundsMax, tolerance)
+                || pointInsideBounds(new double[] {center[0], center[1] + radius, 0.0}, boundsMin, boundsMax, tolerance)
+                || pointInsideBounds(new double[] {center[0], center[1] - radius, 0.0}, boundsMin, boundsMax, tolerance);
     }
 
     private boolean pathIntersectsBounds(List<double[]> pathPoints,
@@ -1610,7 +1804,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         if (value == null || value.isNull()) {
             return null;
         }
-        String text = value.asText(null);
+        String text = value.asText();
         return text != null && !text.isBlank() ? text.trim() : null;
     }
 
@@ -1663,7 +1857,6 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         private String semanticClass;
         private String displayText;
         private String topLevelStableId;
-        private String sampleRole;
         private boolean visible;
         private double[] center;
         private double width;
@@ -1672,6 +1865,7 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
         private double[] end;
         private double[] arcCenter;
         private Double radius;
+        private String geometryType;
         private List<double[]> pathPoints;
         private double[] min;
         private double[] max;
@@ -1703,6 +1897,16 @@ public class SceneEvaluationNode extends PocketFlow.Node<SceneEvaluationNode.Sce
 
         private boolean hasPathPoints() {
             return pathPoints != null && pathPoints.size() >= 2;
+        }
+    }
+
+    private static final class BoundsPair {
+        private final double[] min;
+        private final double[] max;
+
+        private BoundsPair(double[] min, double[] max) {
+            this.min = min;
+            this.max = max;
         }
     }
 

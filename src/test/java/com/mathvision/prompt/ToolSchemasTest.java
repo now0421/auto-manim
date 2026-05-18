@@ -107,6 +107,15 @@ class ToolSchemasTest {
     }
 
     @Test
+    void codeReviewToolRequiresSeverityField() {
+        assertTrue(ToolSchemas.CODE_REVIEW.contains("\"severity\""));
+        assertTrue(ToolSchemas.CODE_REVIEW.contains("\"mandatory\""));
+        assertTrue(ToolSchemas.CODE_REVIEW.contains("\"recommended\""));
+        assertTrue(ToolSchemas.CODE_REVIEW.contains("\"advisory\""));
+        assertTrue(ToolSchemas.CODE_REVIEW.contains("\"status\", \"severity\", \"evidence\""));
+    }
+
+    @Test
     void storyboardTool_usesTypedStyleObjectWithoutInstructions() {
         assertTrue(ToolSchemas.STORYBOARD.contains("\"properties\""));
         assertTrue(ToolSchemas.STORYBOARD.contains("Do not invent keys"));

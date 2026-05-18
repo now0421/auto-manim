@@ -204,6 +204,44 @@ class RenderNodeCodeGateTest {
     }
 
     @Test
+    void geogebraPreflightRoutesToFixBeforeInvokingRenderer() {
+        WorkflowConfig config = new WorkflowConfig();
+        config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);
+        config.setRenderEnabled(true);
+        config.setRenderMaxRetries(1);
+
+        CodeResult codeResult = new CodeResult(
+                "A = (0, 0); B = (1, 0)",
+                GeoGebraCodeUtils.EXPECTED_FIGURE_NAME,
+                "demo",
+                "Demo concept",
+                "Demo description");
+        codeResult.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);
+        codeResult.setArtifactFormat("commands");
+
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        ctx.put(WorkflowKeys.CONFIG, config);
+        ctx.put(WorkflowKeys.CODE_RESULT, codeResult);
+        ctx.put(WorkflowKeys.OUTPUT_DIR, tempDir);
+
+        GeoGebraRenderService geoGebraRenderer = new GeoGebraRenderService() {
+            @Override
+            public RenderAttemptResult render(String commandScript, String figureName, Path outputDir) {
+                throw new AssertionError("GeoGebra renderer should not be called when preflight fails");
+            }
+        };
+
+        new RenderNode(new ManimRendererService(), geoGebraRenderer).run(ctx);
+
+        assertTrue(ctx.containsKey(WorkflowKeys.CODE_FIX_REQUEST));
+        com.mathvision.model.CodeFixRequest request =
+                (com.mathvision.model.CodeFixRequest) ctx.get(WorkflowKeys.CODE_FIX_REQUEST);
+        assertEquals(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA, request.getOutputTarget());
+        assertTrue(request.getStaticAuditIssueCount() > 0);
+        assertTrue(request.getStaticAuditSummary().contains("multiple commands on one line"));
+    }
+
+    @Test
     void geogebraTargetExportsPreviewHtml() throws Exception {
         WorkflowConfig config = new WorkflowConfig();
         config.setOutputTarget(WorkflowConfig.OUTPUT_TARGET_GEOGEBRA);

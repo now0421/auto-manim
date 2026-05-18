@@ -120,6 +120,9 @@ public final class CodeEvaluationPrompts {
                     + SystemPrompts.STORYBOARD_REPAIR_AUTHORITY_RULES
                     + SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA + "\n"
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
+                    + SystemPrompts.GEOGEBRA_ANGLE_MARKER_RULES
+                    + SystemPrompts.GEOGEBRA_VIEWPORT_RULES
+                    + SystemPrompts.MINIMIZE_HELPER_OBJECTS_CODEGEN_RULES
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
 
     private CodeEvaluationPrompts() {}

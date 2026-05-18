@@ -211,7 +211,9 @@ public final class SystemPrompts {
                     + "- `constraints[].parameters` must say whether the displayed sector is the smaller/interior angle, a reflex/exterior angle, a directed angle, clockwise/counterclockwise sweep, or a specific side of a reference line or normal.\n"
                     + "- Label clearance and visibility are layout constraints only; never replace sector geometry with vague wording such as `quadrant chosen to stay in view` unless the measured sector is also defined.\n"
                     + "- If an angle is measured against a normal or perpendicular, state which normal ray or side is used when the side matters for the teaching point.\n"
-                    + "- If equal angles are shown, define both angle markers symmetrically from their source rays so downstream code can preserve equality without guessing a quadrant.\n";
+                    + "- If equal angles are shown, define both angle markers symmetrically from their source rays so downstream code can preserve equality without guessing a quadrant.\n"
+                    + "- Every boundary line referenced in an angle constraint must pass through the angle vertex. A segment passes through the vertex when the vertex is one of its endpoints (listed in the segment's dependency_objects). A perpendicular or normal must be constructed at the vertex, not at some other point.\n"
+                    + "- Common error: referencing a perpendicular from a different point as the angle boundary. For example, a perpendicular from A to line l is NOT the normal at point P_min unless P_min lies on that perpendicular. When the angle vertex is P_min, use a normal at P_min instead.\n";
 
     // ========================================================================
     // Visual design rules (shared across output targets)

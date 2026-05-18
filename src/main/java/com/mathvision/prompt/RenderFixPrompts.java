@@ -36,6 +36,9 @@ public final class RenderFixPrompts {
                     + SystemPrompts.GEOGEBRA_MANUAL_ONLY_RULES
                     + "If you must rename an identifier or introduce a new one, update the commented `SCENE_BUTTONS` script consistently so it still references the final object names.\n"
                     + "Do not output Python, JavaScript, or explanations.\n"
+                    + "Fix strategy:\n"
+                    + "Use root-cause-first repair: identify the earliest invalid command, undefined dependency, unsupported syntax, or viewport-breaking construction, fix it, then sweep structurally similar command paths in the full script.\n"
+                    + "Audit the ENTIRE command script, including construction order, renamed identifiers, dependent commands, scene visibility directives, viewport readability, and helper-object clutter.\n"
                     + "If a command currently returns false, correct the root cause and also proactively repair nearby dependent commands.\n"
                     + "\n"
                     + SystemPrompts.GEOGEBRA_CODE_OUTPUT_FORMAT;
@@ -127,6 +130,9 @@ public final class RenderFixPrompts {
                 .append("Validation failure details collected from that full pass:\n```\n").append(error).append("\n```\n\n")
                 .append("The following GeoGebra command script failed runtime validation after one full replay pass through `evalCommand(...)`.\n\n")
                 .append("```geogebra\n").append(generatedCode).append("\n```\n\n")
+                .append("You MUST audit the ENTIRE command script. The error type and signature are routing hints only; the actual bug may be an earlier construction-order, naming, syntax, visibility, or viewport issue with the same structural pattern.\n")
+                .append("Prioritize the earliest root cause instead of patching downstream false-return symptoms.\n")
+                .append("Sweep dependent commands, renamed identifiers, and the commented `SCENE_BUTTONS` block after every fix so the full script remains consistent in one replay pass.\n")
                 .append("Please rewrite the FULL command script so all reported failures become valid in one pass and downstream dependent commands remain correct.\n")
                 .append("Use English GeoGebra command names and keep implemented geometric dependencies internally consistent; use storyboard details as reference context only.\n")
                 .append("If you rename an identifier or add a new one, also update the commented `SCENE_BUTTONS` script so it stays consistent with the final command script.\n")

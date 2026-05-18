@@ -18,6 +18,11 @@
     "gemini": {
       "api_key_env": "GEMINI_API_KEY",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/models"
+    },
+    "aliyun": {
+      "api_key_env": "ALIYUN_API_KEY",
+      "base_url_env": "ALIYUN_BASE_URL",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     }
   },
   "models": {
@@ -63,6 +68,22 @@
     "gemini-2.0-flash": {
       "model": "gemini-2.0-flash",
       "provider": "gemini",
+      "reasoning_content_fallback": false,
+      "temperature": 0.6,
+      "max_output_tokens": 8192,
+      "max_input_tokens": 131072
+    },
+    "qwen3.6-plus": {
+      "model": "qwen3.6-plus",
+      "provider": "aliyun",
+      "reasoning_content_fallback": true,
+      "temperature": 0.6,
+      "max_output_tokens": 65536,
+      "max_input_tokens": 991000
+    },
+    "qwen3.6-flash": {
+      "model": "qwen3.6-flash",
+      "provider": "aliyun",
       "reasoning_content_fallback": false,
       "temperature": 0.6,
       "max_output_tokens": 8192,

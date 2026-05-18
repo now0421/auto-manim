@@ -26,9 +26,11 @@ public final class StoryboardJsonBuilder {
 
     private static final class BuildOptions {
         private final boolean includeSceneFixFields;
+        private final boolean includePlacement;
 
-        private BuildOptions(boolean includeSceneFixFields) {
+        private BuildOptions(boolean includeSceneFixFields, boolean includePlacement) {
             this.includeSceneFixFields = includeSceneFixFields;
+            this.includePlacement = includePlacement;
         }
     }
 
@@ -38,7 +40,7 @@ public final class StoryboardJsonBuilder {
      * Builds a compact storyboard JSON string optimized for code generation.
      */
     public static String buildForCodegen(Storyboard storyboard) {
-        return build(storyboard, new BuildOptions(true));
+        return build(storyboard, new BuildOptions(true, true));
     }
 
     /**
@@ -47,7 +49,7 @@ public final class StoryboardJsonBuilder {
      * so the fixer can recover layout without breaking geometric constraints.
      */
     public static String buildForSceneEvaluationFix(Storyboard storyboard) {
-        return build(storyboard, new BuildOptions(true));
+        return build(storyboard, new BuildOptions(true, false));
     }
 
     private static String build(Storyboard storyboard, BuildOptions options) {
@@ -129,7 +131,9 @@ public final class StoryboardJsonBuilder {
             putNonBlank(objectNode, "id", object.getId());
             putNonBlank(objectNode, "kind", object.getKind());
             putNonBlank(objectNode, "content", object.getContent());
-            addPlacement(objectNode, object.getPlacement());
+            if (options.includePlacement) {
+                addPlacement(objectNode, object.getPlacement());
+            }
             addStyle(objectNode, object.getStyle());
             putNonBlank(objectNode, "source_node", object.getSourceNode());
             putNonBlank(objectNode, "behavior", object.getBehavior());

@@ -29,7 +29,6 @@ public final class NarrativePrompts {
                     .replace("How to interpret the storyboard fields:\n", "Field responsibilities: ").trim() + "\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_STRUCTURE.trim() + "\n"
                     + "- " + SystemPrompts.STORYBOARD_FIELD_GUIDE_SCENE_LAYOUT.trim() + "\n"
-                    + SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM_REPAIR
                     + SystemPrompts.GEOMETRY_CONSTRAINT_AUTHORING_RULES
                     + SystemPrompts.GEOMETRIC_MARKER_AUTHORING_RULES
                     + SystemPrompts.MINIMIZE_HELPER_OBJECTS_AUTHORING_RULES
@@ -183,7 +182,14 @@ public final class NarrativePrompts {
                 + "- Every dependency-driven object must define dependency_objects as object ids, dependency_relation as a concise construction relation, and structured constraints for hard geometric invariants.\n"
                 + "- ASCII repair is mandatory: rewrite every JSON string value so it contains only characters with code <= 0x7F.\n"
                 + "- Apply this normalization map wherever needed: U+2018 and U+2019 -> `'`; U+201C and U+201D -> `\"`; U+2013 and U+2014 -> `-`; U+2212 -> `-`; U+00D7 -> `x`; U+2260 -> `!=`; U+2264 -> `<=`; U+2265 -> `>=`.\n"
-                + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.";
+                + "- Repair examples: `hiker` + U+2019 + `s` becomes `hiker's`; `PB'` + U+2014 + `a` becomes `PB' - a`; `right` + U+2014 + `the` becomes `right - the`; `P_test ` + U+2260 + ` P_min` becomes `P_test != P_min`.\n"
+                + "Angle boundary-vertex consistency rules:\n"
+                + "- For every angle_between or angle_at_vertex constraint, each boundary line (line_a, line_b, start_boundary, end_boundary, ray_a, ray_b) must pass through the angle vertex.\n"
+                + "- A boundary line passes through the vertex when the vertex id appears in the boundary line's dependency_objects (e.g. a segment connecting two points lists both in dependency_objects; a line drawn from one point through another lists both).\n"
+                + "- If a boundary line's dependency_objects do not include the vertex, the line likely does not pass through the vertex, and the angle will be drawn at the wrong location.\n"
+                + "- Common mistake: using a perpendicular or normal from a different point as the angle boundary. For example, using a perpendicular from A to l as the normal at P_min is wrong if P_min is not on that perpendicular. Instead, create a normal at P_min (a line through P_min perpendicular to l).\n"
+                + "- When fixing, either: (a) replace the incorrect boundary reference with a line that passes through the vertex, or (b) create a new helper object (e.g. a normal at the vertex) and reference it instead.\n"
+                + "- Verify that equal-angle markers reference symmetrically constructed boundaries so downstream code can render them correctly.";
     }
 
     /**
@@ -222,8 +228,10 @@ public final class NarrativePrompts {
     public static String buildRulesPrompt(String outputTarget) {
         String prompt = COMMON_RULES;
         if ("geogebra".equalsIgnoreCase(outputTarget)) {
+            prompt += SystemPrompts.STORYBOARD_FIELD_GUIDE_GEOGEBRA_REPAIR;
             prompt += "\n" + GEOGEBRA_RULES;
         } else if ("manim".equalsIgnoreCase(outputTarget)) {
+            prompt += SystemPrompts.STORYBOARD_FIELD_GUIDE_MANIM_REPAIR;
             prompt += "\n" + MANIM_RULES;
         }
         prompt += "\n" + RESPONSE_RULES;

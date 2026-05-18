@@ -278,6 +278,7 @@ public class MathVisionApplication {
             case "moonshot":
             case "deepseek":
             case "zhipu":
+            case "aliyun":
             case "openai":
                 return new OpenAiCompatibleAiClient(modelConfig);
             default:
@@ -512,21 +513,21 @@ public class MathVisionApplication {
     private static Path resolveCodePath(String fromCodePath) {
         Path p = Path.of(fromCodePath);
         if (Files.isDirectory(p)) {
-            Path manim = p.resolve("4_manim_code.py");
-            if (Files.exists(manim)) {
-                return manim;
-            }
-            Path geogebra = p.resolve("4_geogebra_commands.txt");
-            if (Files.exists(geogebra)) {
-                return geogebra;
+            Path geogebraFinal = p.resolve("5_geogebra_commands_final.txt");
+            if (Files.exists(geogebraFinal)) {
+                return geogebraFinal;
             }
             Path manimFinal = p.resolve("5_manim_code_final.py");
             if (Files.exists(manimFinal)) {
                 return manimFinal;
             }
-            Path geogebraFinal = p.resolve("5_geogebra_commands_final.txt");
-            if (Files.exists(geogebraFinal)) {
-                return geogebraFinal;
+            Path geogebra = p.resolve("4_geogebra_commands.txt");
+            if (Files.exists(geogebra)) {
+                return geogebra;
+            }
+            Path manim = p.resolve("4_manim_code.py");
+            if (Files.exists(manim)) {
+                return manim;
             }
             return manim;
         }
